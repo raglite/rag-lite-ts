@@ -637,7 +637,7 @@ Global configuration object with current settings.
 Validates and merges user configuration with defaults.
 
 **Parameters:**
-- `userConfig` (Partial<Config>, optional): User configuration overrides
+- `userConfig` (Partial\<Config\>, optional): User configuration overrides
 
 **Returns:** `Config` - Validated configuration object
 

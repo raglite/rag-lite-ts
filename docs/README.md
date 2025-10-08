@@ -1,10 +1,10 @@
-# RAG-lite TS Documentation
+# Getting Started
 
 Welcome to the RAG-lite TS documentation hub. This directory contains comprehensive guides for all aspects of using RAG-lite TS.
 
 ## Quick Start
 
-New to RAG-lite TS? Start with the main [README](../README.md) for installation and basic usage, then explore the guides below.
+New to RAG-lite TS? Start with the [CLI Reference](cli-reference.md) for installation and basic usage, then explore the guides below.
 
 ## Documentation Guides
 
@@ -59,9 +59,9 @@ New to RAG-lite TS? Start with the main [README](../README.md) for installation 
 ### By User Type
 
 **New Users:**
-1. [Main README](../README.md) - Quick start and overview
-2. [CLI Reference](cli-reference.md) - Basic commands
-3. [Configuration Guide](configuration.md) - Setup options
+1. [CLI Reference](cli-reference.md) - Quick start and installation
+2. [Configuration Guide](configuration.md) - Setup options
+3. [API Reference](api-reference.md) - Programmatic usage
 
 **Developers:**
 1. [API Reference](api-reference.md) - Programmatic usage
@@ -76,7 +76,7 @@ New to RAG-lite TS? Start with the main [README](../README.md) for installation 
 ### By Use Case
 
 **Basic Document Search:**
-- [Main README](../README.md) → [CLI Reference](cli-reference.md)
+- [CLI Reference](cli-reference.md) → [Configuration Guide](configuration.md)
 
 **Technical Documentation:**
 - [Preprocessing Guide](preprocessing.md) → [Model Guide](model-guide.md)
@@ -96,7 +96,7 @@ New to RAG-lite TS? Start with the main [README](../README.md) for installation 
 
 | Task | Primary Guide | Supporting Guides |
 |------|---------------|-------------------|
-| Install and setup | [Main README](../README.md) | [CLI Reference](cli-reference.md) |
+| Install and setup | [CLI Reference](cli-reference.md) | [Configuration Guide](configuration.md) |
 | Ingest documents | [CLI Reference](cli-reference.md) | [Preprocessing](preprocessing.md) |
 | Search documents | [CLI Reference](cli-reference.md) | [Model Guide](model-guide.md) |
 | Choose embedding model | [Model Guide](model-guide.md) | [Configuration](configuration.md) |

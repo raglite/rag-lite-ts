@@ -263,7 +263,7 @@ rm -rf ~/.raglite/models/
 
 ### Offline Setup
 
-For offline environments, see [models/README.md](../models/README.md) for manual model setup instructions.
+For offline environments, see the [GitHub models directory](https://github.com/raglite/rag-lite-ts/tree/main/models) for manual model setup instructions.
 
 ## Troubleshooting
 

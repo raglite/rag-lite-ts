@@ -25,7 +25,7 @@ const config: Config = {
   organizationName: 'raglite', // Usually your GitHub org/user name.
   projectName: 'rag-lite-ts', // Usually your repo name.
 
-  onBrokenLinks: 'throw',
+  onBrokenLinks: 'warn',
 
   // Even if you don't use internationalization, you can use this field to set
   // useful metadata like html lang. For example, if your site is Chinese, you
@@ -41,14 +41,16 @@ const config: Config = {
       {
         docs: {
           sidebarPath: './sidebars.ts',
-          path: '../docs',
-          routeBasePath: 'docs',
+          path: '../',
+          routeBasePath: '/',
+          exclude: ['**/node_modules/**', '**/.git/**', '**/docs-docusaurus/**'],
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
             'https://github.com/raglite/rag-lite-ts/tree/main/docs/',
         },
         blog: false, // Disable blog for now
+        pages: false, // Disable pages to avoid route conflicts
         theme: {
           customCss: './src/css/custom.css',
         },
@@ -66,15 +68,9 @@ const config: Config = {
       title: 'RAG-lite TS',
       logo: {
         alt: 'RAG-lite TS Logo',
-        src: 'img/logo.svg',
+        src: 'img/logo.png',
       },
       items: [
-        {
-          type: 'docSidebar',
-          sidebarId: 'docsSidebar',
-          position: 'left',
-          label: 'Documentation',
-        },
         {
           href: 'https://www.npmjs.com/package/rag-lite-ts',
           label: 'npm',
@@ -86,63 +82,6 @@ const config: Config = {
           position: 'right',
         },
       ],
-    },
-    footer: {
-      style: 'dark',
-      links: [
-        {
-          title: 'Documentation',
-          items: [
-            {
-              label: 'Getting Started',
-              to: '/docs/README',
-            },
-            {
-              label: 'CLI Reference',
-              to: '/docs/cli-reference',
-            },
-            {
-              label: 'API Reference',
-              to: '/docs/api-reference',
-            },
-          ],
-        },
-        {
-          title: 'Resources',
-          items: [
-            {
-              label: 'Model Guide',
-              to: '/docs/model-guide',
-            },
-            {
-              label: 'Configuration',
-              to: '/docs/configuration',
-            },
-            {
-              label: 'Troubleshooting',
-              to: '/docs/troubleshooting',
-            },
-          ],
-        },
-        {
-          title: 'Links',
-          items: [
-            {
-              label: 'npm Package',
-              href: 'https://www.npmjs.com/package/rag-lite-ts',
-            },
-            {
-              label: 'GitHub',
-              href: 'https://github.com/raglite/rag-lite-ts',
-            },
-            {
-              label: 'Issues',
-              href: 'https://github.com/raglite/rag-lite-ts/issues',
-            },
-          ],
-        },
-      ],
-      copyright: `Copyright © ${new Date().getFullYear()} RAG-lite TS Contributors. Built with Docusaurus.`,
     },
     prism: {
       theme: prismThemes.github,

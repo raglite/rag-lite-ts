@@ -1,4 +1,4 @@
-import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
+import type { SidebarsConfig } from '@docusaurus/plugin-content-docs';
 
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
@@ -13,40 +13,17 @@ import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
  Create as many sidebars as you want.
  */
 const sidebars: SidebarsConfig = {
+  // Manual sidebar configuration for custom ordering
   docsSidebar: [
     'README',
-    {
-      type: 'category',
-      label: 'Getting Started',
-      items: [
-        'cli-reference',
-        'configuration',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Guides',
-      items: [
-        'model-guide',
-        'preprocessing',
-        'path-strategies',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Reference',
-      items: [
-        'api-reference',
-        'EMBEDDING_MODELS_COMPARISON',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Help',
-      items: [
-        'troubleshooting',
-      ],
-    },
+    'cli-reference',
+    'api-reference',
+    'configuration',
+    'model-guide',
+    'preprocessing',
+    'path-strategies',
+    'troubleshooting',
+    'EMBEDDING_MODELS_COMPARISON',
   ],
 };
 
