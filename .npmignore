@@ -1,0 +1,37 @@
+# Source files (only dist should be published)
+src/
+tsconfig.json
+tsconfig.test.json
+
+# Development files
+.kiro/
+*.test.ts
+*.test.js
+test-*
+integration.test.*
+
+# Runtime generated files
+*.sqlite
+*.sqlite3
+*.db
+models/
+*.bin
+vector-index.*
+
+# Development dependencies
+node_modules/
+.env*
+*.log
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Git files
+.git/
+.gitignore
+
+# Examples (for development/documentation only)
+examples/

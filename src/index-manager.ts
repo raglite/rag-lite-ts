@@ -1,0 +1,529 @@
+import { VectorIndex } from './vector-index.js';
+import { openDatabase, getModelVersion, setModelVersion, getStoredModelInfo, setStoredModelInfo, type DatabaseConnection } from './db.js';
+import type { EmbeddingResult } from './types.js';
+import { config, getModelDefaults } from './config.js';
+import { existsSync } from 'fs';
+
+export interface IndexStats {
+  totalVectors: number;
+  modelVersion: string;
+  lastUpdated: Date;
+}
+
+export class IndexManager {
+  private vectorIndex: VectorIndex;
+  private db: DatabaseConnection | null = null;
+  private indexPath: string;
+  private dbPath: string;
+  private isInitialized = false;
+  private hashToEmbeddingId: Map<number, string> = new Map();
+  private embeddingIdToHash: Map<string, number> = new Map();
+
+  constructor(indexPath: string, dbPath: string, dimensions: number, private modelName?: string) {
+    this.indexPath = indexPath;
+    this.dbPath = dbPath;
+
+    // Initialize with provided dimensions from config
+    this.vectorIndex = new VectorIndex(indexPath, {
+      dimensions: dimensions,
+      maxElements: 100000, // Start with 100k capacity
+      efConstruction: 200,
+      M: 16
+    });
+  }
+
+  /**
+   * Initialize the index manager and load existing index if available
+   * @param skipModelCheck - Skip model compatibility check (used for rebuilds)
+   */
+  async initialize(skipModelCheck: boolean = false): Promise<void> {
+    if (this.isInitialized) {
+      return;
+    }
+
+    try {
+      // Open database connection
+      this.db = await openDatabase(this.dbPath);
+
+      // Check model compatibility BEFORE trying to load the vector index
+      // This prevents WebAssembly exceptions when dimensions don't match
+      if (!skipModelCheck) {
+        await this.checkModelCompatibility();
+      }
+
+      if (this.vectorIndex.indexExists()) {
+        console.log('Loading existing vector index...');
+        await this.vectorIndex.loadIndex();
+      } else {
+        console.log('Creating new vector index...');
+        await this.vectorIndex.initialize();
+      }
+
+      // Always populate the embedding ID mapping from existing database entries
+      // This is needed both for new and existing indexes
+      const existingChunks = await this.db.all('SELECT embedding_id FROM chunks ORDER BY id');
+      for (const chunk of existingChunks) {
+        this.hashEmbeddingId(chunk.embedding_id); // This will populate the mapping
+      }
+
+      this.isInitialized = true;
+      console.log(`Index manager initialized with ${this.vectorIndex.getCurrentCount()} vectors`);
+    } catch (error) {
+      throw new Error(`Failed to initialize index manager: ${error}`);
+    }
+  }
+
+  /**
+   * Check model compatibility between stored and current configuration
+   * Requirements: 2.1, 2.2, 2.4, 5.1, 5.2, 5.3, 5.4
+   */
+  private async checkModelCompatibility(): Promise<void> {
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      // Get stored model information
+      const storedModel = await getStoredModelInfo(this.db);
+      const currentModel = this.modelName || config.embedding_model;
+      const currentDefaults = getModelDefaults(currentModel);
+
+      if (storedModel) {
+        // Check if models match
+        if (storedModel.modelName !== currentModel) {
+          throw new Error(
+            `Model mismatch detected!\n` +
+            `Current model: ${currentModel} (${currentDefaults.dimensions} dimensions)\n` +
+            `Index model: ${storedModel.modelName} (${storedModel.dimensions} dimensions)\n` +
+            `\n` +
+            `The embedding model has changed since the index was created.\n` +
+            `This requires a full index rebuild to maintain consistency.\n` +
+            `\n` +
+            `To fix this issue:\n` +
+            `1. Run: npm run rebuild\n` +
+            `2. Or run: node dist/cli.js rebuild\n` +
+            `\n` +
+            `This will regenerate all embeddings with the new model.`
+          );
+        }
+
+        // Check if dimensions match (additional safety check)
+        if (storedModel.dimensions !== currentDefaults.dimensions) {
+          throw new Error(
+            `Model dimension mismatch detected!\n` +
+            `Current model dimensions: ${currentDefaults.dimensions}\n` +
+            `Index model dimensions: ${storedModel.dimensions}\n` +
+            `\n` +
+            `This indicates a configuration inconsistency.\n` +
+            `Please run: npm run rebuild`
+          );
+        }
+
+        console.log(`Model compatibility verified: ${currentModel} (${currentDefaults.dimensions} dimensions)`);
+      } else {
+        // First run - store the model info
+        console.log(`No model info stored yet - storing current model info: ${currentModel}`);
+        await setStoredModelInfo(this.db, currentModel, currentDefaults.dimensions);
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error; // Re-throw our formatted errors
+      }
+      throw new Error(`Failed to check model compatibility: ${error}`);
+    }
+  }
+
+  /**
+   * Add vectors to the index with corresponding metadata (incremental addition)
+   * Requirements: 5.3 - When new documents are added THEN system SHALL append new chunks and vectors without rebuilding existing index
+   */
+  async addVectors(embeddings: EmbeddingResult[]): Promise<void> {
+    if (!this.isInitialized) {
+      throw new Error('Index manager not initialized');
+    }
+
+    if (embeddings.length === 0) {
+      return;
+    }
+
+    try {
+      // Convert embedding IDs to numeric IDs for hnswlib
+      const vectors = embeddings.map((embedding) => ({
+        id: this.hashEmbeddingId(embedding.embedding_id),
+        vector: embedding.vector
+      }));
+
+      // Check if we need to resize the index before adding
+      const currentCount = this.vectorIndex.getCurrentCount();
+      const newCount = currentCount + vectors.length;
+      const currentCapacity = 100000; // This should match the initial capacity
+
+      if (newCount > currentCapacity * 0.9) {
+        const newCapacity = Math.ceil(newCount * 1.5);
+        console.log(`Resizing index from ${currentCapacity} to ${newCapacity} to accommodate new vectors`);
+        this.vectorIndex.resizeIndex(newCapacity);
+      }
+
+      // Add vectors incrementally (this is the key requirement - no rebuild needed)
+      this.vectorIndex.addVectors(vectors);
+      console.log(`Incrementally added ${embeddings.length} vectors to index (total: ${this.vectorIndex.getCurrentCount()})`);
+
+      // Save the updated index
+      await this.saveIndex();
+    } catch (error) {
+      throw new Error(`Failed to add vectors to index: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Rebuild the entire index from scratch
+   * Requirements: 5.2, 5.4 - Create full index rebuild functionality for model changes or document deletions
+   */
+  async rebuildIndex(newModelVersion?: string): Promise<void> {
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+
+    console.log('Starting full index rebuild...');
+
+    try {
+      // Initialize new empty index (this will overwrite existing index)
+      await this.vectorIndex.initialize();
+
+      // Get all chunk embedding IDs from database (we'll need to regenerate embeddings)
+      const chunkData = await this.getAllChunksFromDB();
+
+      if (chunkData.length === 0) {
+        console.log('No chunks found in database - index rebuild complete with 0 vectors');
+
+        // Update model version if provided
+        if (newModelVersion) {
+          await this.updateModelVersion(newModelVersion);
+        }
+
+        await this.saveIndex();
+        return;
+      }
+
+      console.log(`Found ${chunkData.length} chunks in database that need re-embedding`);
+
+      // Note: In a complete implementation, we would need to:
+      // 1. Re-generate embeddings for all chunks using the new model
+      // 2. Add the new vectors to the index
+      // For now, we'll create a placeholder implementation that shows the structure
+
+      console.warn('WARNING: Full rebuild requires re-generating embeddings for all chunks.');
+      console.warn('This implementation requires integration with the EmbeddingEngine.');
+      console.warn('The index has been reset but vectors need to be regenerated.');
+
+      // Check if we need to resize index based on chunk count
+      const currentCapacity = 100000; // Default capacity
+      if (chunkData.length > currentCapacity * 0.8) {
+        const newCapacity = Math.ceil(chunkData.length * 1.5);
+        this.vectorIndex.resizeIndex(newCapacity);
+        console.log(`Resized index capacity to ${newCapacity} for ${chunkData.length} chunks`);
+      }
+
+      // Update model version if provided
+      if (newModelVersion) {
+        await this.updateModelVersion(newModelVersion);
+      }
+
+      // Save the (empty) rebuilt index structure
+      await this.saveIndex();
+      console.log(`Index rebuild structure complete. ${chunkData.length} chunks need re-embedding.`);
+
+    } catch (error) {
+      throw new Error(`Failed to rebuild index: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Trigger a full rebuild when documents are modified or deleted
+   * Requirements: 5.4 - When documents are modified or deleted THEN system SHALL trigger full index rebuild
+   */
+  async triggerRebuildForDocumentChanges(reason: string): Promise<void> {
+    console.log(`Triggering index rebuild due to: ${reason}`);
+    await this.rebuildIndex();
+  }
+
+  /**
+   * Complete rebuild workflow with embedding regeneration
+   * This method should be called by higher-level components that have access to the EmbeddingEngine
+   * Requirements: 5.2, 5.4 - Full index rebuild functionality
+   */
+  async rebuildWithEmbeddings(
+    embeddingEngine: { embedDocumentBatch: (texts: string[]) => Promise<EmbeddingResult[]>; getModelVersion: () => string }
+  ): Promise<void> {
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+
+    console.log('Starting complete index rebuild with embedding regeneration...');
+
+    try {
+      // Get all chunks that need re-embedding
+      const chunkData = await this.getAllChunksFromDB();
+
+      if (chunkData.length === 0) {
+        console.log('No chunks found - initializing empty index');
+        await this.vectorIndex.initialize();
+        await this.updateModelVersion(embeddingEngine.getModelVersion());
+
+        // Store model info for the new model
+        const currentModel = this.modelName || config.embedding_model;
+        const currentDefaults = getModelDefaults(currentModel);
+        await setStoredModelInfo(this.db, currentModel, currentDefaults.dimensions);
+
+        await this.saveIndex();
+        return;
+      }
+
+      // Initialize new empty index
+      await this.vectorIndex.initialize();
+
+      // Check if we need to resize index
+      const currentCapacity = 100000;
+      if (chunkData.length > currentCapacity * 0.8) {
+        const newCapacity = Math.ceil(chunkData.length * 1.5);
+        this.vectorIndex.resizeIndex(newCapacity);
+        console.log(`Resized index capacity to ${newCapacity}`);
+      }
+
+      // Re-generate embeddings for all chunks
+      console.log(`Re-generating embeddings for ${chunkData.length} chunks...`);
+      const texts = chunkData.map(chunk => chunk.text);
+      const newEmbeddings = await embeddingEngine.embedDocumentBatch(texts);
+
+      if (newEmbeddings.length === 0) {
+        throw new Error('Failed to generate any embeddings during rebuild');
+      }
+
+      // Add all vectors to the new index
+      const vectors = newEmbeddings.map((embedding) => ({
+        id: this.hashEmbeddingId(embedding.embedding_id),
+        vector: embedding.vector
+      }));
+
+      this.vectorIndex.addVectors(vectors);
+      console.log(`Added ${vectors.length} vectors to rebuilt index`);
+
+      // Update model version
+      await this.updateModelVersion(embeddingEngine.getModelVersion());
+
+      // Store model info for the new model
+      const currentModel = this.modelName || config.embedding_model;
+      const currentDefaults = getModelDefaults(currentModel);
+      await setStoredModelInfo(this.db, currentModel, currentDefaults.dimensions);
+
+      // Save the rebuilt index
+      await this.saveIndex();
+
+      console.log(`Index rebuild complete: ${vectors.length} vectors with new model version`);
+
+    } catch (error) {
+      throw new Error(`Failed to rebuild index with embeddings: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Check if the current model version matches stored version
+   * Requirements: 5.1, 5.2 - Compare current embedding model version with stored version
+   */
+  async checkModelVersion(currentVersion: string): Promise<boolean> {
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      const storedVersion = await getModelVersion(this.db);
+
+      if (!storedVersion || storedVersion === "") {
+        // No version stored yet, this is first run - store current version
+        await setModelVersion(this.db, currentVersion);
+        console.log(`Stored initial model version: ${currentVersion}`);
+        return true;
+      }
+
+      const matches = storedVersion === currentVersion;
+
+      if (!matches) {
+        console.error(`Model version mismatch detected!`);
+        console.error(`Stored version: ${storedVersion}`);
+        console.error(`Current version: ${currentVersion}`);
+        console.error(`A full index rebuild is required before the system can continue.`);
+      }
+
+      return matches;
+    } catch (error) {
+      throw new Error(`Failed to check model version: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Update the stored model version after successful rebuild
+   * Requirements: 5.5 - Save model name and hash in SQLite for version tracking
+   */
+  async updateModelVersion(version: string): Promise<void> {
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      await setModelVersion(this.db, version);
+      console.log(`Updated model version to: ${version}`);
+    } catch (error) {
+      throw new Error(`Failed to update model version: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Validate model version and exit if mismatch detected
+   * Requirements: 5.2 - System SHALL exit with error message until full index rebuild is completed
+   */
+  async validateModelVersionOrExit(currentVersion: string): Promise<void> {
+    const isValid = await this.checkModelVersion(currentVersion);
+
+    if (!isValid) {
+      console.error('\n=== MODEL VERSION MISMATCH ===');
+      console.error('The embedding model version has changed since the last index build.');
+      console.error('This requires a full index rebuild to maintain consistency.');
+      console.error('\nTo rebuild the index, run:');
+      console.error('  npm run rebuild-index');
+      console.error('  # or');
+      console.error('  node dist/cli.js rebuild');
+      console.error('\nThe system will now exit.');
+      process.exit(1);
+    }
+  }
+
+  /**
+   * Save the vector index to disk
+   */
+  async saveIndex(): Promise<void> {
+    if (!this.isInitialized) {
+      throw new Error('Index manager not initialized');
+    }
+
+    await this.vectorIndex.saveIndex();
+  }
+
+  /**
+   * Search for similar vectors
+   */
+  search(queryVector: Float32Array, k: number = 5): { embeddingIds: string[]; distances: number[] } {
+    if (!this.isInitialized) {
+      throw new Error('Index manager not initialized');
+    }
+
+    const results = this.vectorIndex.search(queryVector, k);
+
+    // Convert numeric IDs back to embedding IDs
+    const embeddingIds = results.neighbors.map(id => this.unhashEmbeddingId(id));
+
+    return {
+      embeddingIds,
+      distances: results.distances
+    };
+  }
+
+  /**
+   * Get index statistics
+   */
+  async getStats(): Promise<IndexStats> {
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+
+    const totalVectors = this.vectorIndex.getCurrentCount();
+
+    try {
+      const modelVersion = await getModelVersion(this.db);
+
+      return {
+        totalVectors,
+        modelVersion: modelVersion || 'unknown',
+        lastUpdated: new Date() // Could be enhanced to track actual last update time
+      };
+    } catch (error) {
+      throw new Error(`Failed to get stats: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Get all chunks from database for rebuild (returns chunk data, not embeddings)
+   * Note: Embeddings need to be regenerated during rebuild since we don't store vectors in DB
+   */
+  private async getAllChunksFromDB(): Promise<Array<{ embedding_id: string; text: string; document_id: number }>> {
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      const rows = await this.db.all(
+        'SELECT embedding_id, text, document_id FROM chunks ORDER BY id'
+      );
+
+      return rows.map(row => ({
+        embedding_id: row.embedding_id,
+        text: row.text,
+        document_id: row.document_id
+      }));
+    } catch (error) {
+      throw new Error(`Failed to get chunks from DB: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Convert embedding ID string to numeric ID for hnswlib with collision handling
+   */
+  private hashEmbeddingId(embeddingId: string): number {
+    // Check if we already have a mapping for this embedding ID
+    if (this.embeddingIdToHash.has(embeddingId)) {
+      return this.embeddingIdToHash.get(embeddingId)!;
+    }
+
+    let hash = 0;
+    for (let i = 0; i < embeddingId.length; i++) {
+      const char = embeddingId.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    hash = Math.abs(hash);
+
+    // Handle hash collisions by incrementing until we find an unused hash
+    let finalHash = hash;
+    while (this.hashToEmbeddingId.has(finalHash) && this.hashToEmbeddingId.get(finalHash) !== embeddingId) {
+      finalHash = (finalHash + 1) & 0x7FFFFFFF; // Keep it positive
+    }
+
+    // Store the bidirectional mapping
+    this.embeddingIdToHash.set(embeddingId, finalHash);
+    this.hashToEmbeddingId.set(finalHash, embeddingId);
+
+    return finalHash;
+  }
+
+  /**
+   * Convert numeric ID back to embedding ID using the maintained mapping
+   */
+  private unhashEmbeddingId(numericId: number): string {
+    const embeddingId = this.hashToEmbeddingId.get(numericId);
+    if (!embeddingId) {
+      console.warn(`Warning: No embedding ID found for hash ${numericId}. This may indicate index/database synchronization issues.`);
+      console.warn('Consider running "raglite rebuild" to fix synchronization problems.');
+      throw new Error(`No embedding ID found for hash ${numericId}`);
+    }
+    return embeddingId;
+  }
+
+  /**
+   * Close database connection
+   */
+  async close(): Promise<void> {
+    if (this.db) {
+      await this.db.close();
+      this.db = null;
+    }
+  }
+}
