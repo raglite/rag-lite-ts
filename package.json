@@ -1,6 +1,6 @@
 {
   "name": "rag-lite-ts",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Local-first TypeScript retrieval engine for semantic search over static documents",
   "type": "module",
   "main": "./dist/index.js",
@@ -29,7 +29,7 @@
     "build:test": "tsc --project tsconfig.test.json",
     "clean": "rimraf dist",
     "dev": "tsc --watch",
-    "test": "npm run build:test && node --test dist/tokenizer.test.js dist/chunker.test.js dist/embedder.test.js dist/vector-index.test.js dist/index-manager.test.js dist/search.test.js dist/file-processor.test.js dist/mcp-server.test.js dist/preprocess.test.js dist/config.test.js dist/preprocessors/integration.test.js",
+    "test": "npm run build:test && node --test dist/text/tokenizer.test.js dist/core/chunker.test.js dist/text/embedder.test.js dist/core/vector-index.test.js dist/index-manager.test.js dist/core/search.test.js dist/file-processor.test.js dist/mcp-server.test.js dist/preprocess.test.js dist/core/config.test.js dist/preprocessors/integration.test.js dist/cli/cli.test.js",
     "test:integration": "npm run build && npm run build:test && node --test dist/integration.test.js",
     "test:all": "npm run test && npm run test:integration",
     "prepublishOnly": "npm run clean && npm run build"

@@ -1,5 +1,7 @@
 # Model Selection Guide
 
+*For users who want to optimize performance or need specific model characteristics*
+
 Complete guide to embedding models, performance characteristics, and selection criteria for RAG-lite TS.
 
 ## Table of Contents
@@ -160,8 +162,9 @@ The system automatically optimizes settings based on your chosen model:
 
 ### Custom Overrides
 
-You can override auto-configured values:
+You can override auto-configured values through environment variables or programmatically:
 
+**Environment Variables:**
 ```bash
 # Override batch size for MiniLM
 export RAG_EMBEDDING_MODEL="sentence-transformers/all-MiniLM-L6-v2"
@@ -172,7 +175,29 @@ export RAG_EMBEDDING_MODEL="Xenova/all-mpnet-base-v2"
 export RAG_CHUNK_SIZE="300"  # Smaller chunks for faster processing
 ```
 
+**Programmatic Configuration:**
+```typescript
+import { SearchEngine, IngestionPipeline } from 'rag-lite-ts';
+
+// MiniLM with custom batch size for speed
+const fastSearch = new SearchEngine('./index.bin', './db.sqlite', {
+  embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
+  batchSize: 32,  // Higher throughput
+  topK: 10
+});
+
+// MPNet with custom chunk size for efficiency
+const qualityIngestion = new IngestionPipeline('./db.sqlite', './index.bin', {
+  embeddingModel: 'Xenova/all-mpnet-base-v2',
+  chunkSize: 300,  // Smaller chunks
+  chunkOverlap: 60,
+  batchSize: 8
+});
+```
+
 ## Use Cases
+
+*Decision guide for choosing the right model for your needs*
 
 ### Choose MiniLM-L6-v2 When:
 
@@ -180,6 +205,16 @@ export RAG_CHUNK_SIZE="300"  # Smaller chunks for faster processing
 - Real-time search applications
 - Interactive user interfaces
 - Large batch processing jobs
+
+```typescript
+// Fast search for real-time applications
+const realtimeSearch = new SearchEngine('./index.bin', './db.sqlite', {
+  embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
+  enableReranking: false,  // Skip reranking for speed
+  topK: 5,
+  batchSize: 16
+});
+```
 
 **✅ Resources are limited**
 - Systems with < 4GB RAM
@@ -196,12 +231,32 @@ export RAG_CHUNK_SIZE="300"  # Smaller chunks for faster processing
 - Frequent re-indexing
 - Continuous ingestion pipelines
 
+```typescript
+// High-throughput ingestion
+const batchIngestion = new IngestionPipeline('./db.sqlite', './index.bin', {
+  embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
+  batchSize: 32,  // Process more at once
+  chunkSize: 250,
+  chunkOverlap: 50
+});
+```
+
 ### Choose MPNet-base-v2 When:
 
 **✅ Quality is paramount**
 - Research applications
 - Technical documentation
 - Complex domain knowledge
+
+```typescript
+// High-quality search for research
+const researchSearch = new SearchEngine('./index.bin', './db.sqlite', {
+  embeddingModel: 'Xenova/all-mpnet-base-v2',
+  enableReranking: true,  // Enable for best quality
+  topK: 20,  // More results for comprehensive search
+  batchSize: 8
+});
+```
 
 **✅ Complex semantic understanding**
 - Scientific papers
@@ -212,6 +267,16 @@ export RAG_CHUNK_SIZE="300"  # Smaller chunks for faster processing
 - Domain-specific terminology
 - Technical specifications
 - Academic literature
+
+```typescript
+// Technical documentation ingestion
+const technicalIngestion = new IngestionPipeline('./db.sqlite', './index.bin', {
+  embeddingModel: 'Xenova/all-mpnet-base-v2',
+  chunkSize: 400,  // Larger chunks for context
+  chunkOverlap: 80,  // More overlap for continuity
+  batchSize: 8
+});
+```
 
 **✅ Sufficient resources**
 - Systems with 8GB+ RAM

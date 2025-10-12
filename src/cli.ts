@@ -3,7 +3,7 @@
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { EXIT_CODES, ConfigurationError } from './config.js';
+import { EXIT_CODES, ConfigurationError } from './core/config.js';
 
 // Get package.json for version info
 const __filename = fileURLToPath(import.meta.url);
@@ -238,7 +238,7 @@ function validateArgs(command: string, args: string[], options: Record<string, a
       console.error('');
       console.error('Supported strategies:');
       console.error('  relative   Store paths relative to base directory (default, portable)');
-      console.error('  absolute   Store absolute paths (legacy mode)');
+      console.error('  absolute   Store absolute paths');
       console.error('');
       console.error('Examples:');
       console.error('  --path-strategy relative');

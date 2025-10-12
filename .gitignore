@@ -44,14 +44,14 @@ models/*
 # Common model cache patterns
 .cache/
 *.onnx
-*.bin
 *.safetensors
 **/transformers/
 **/huggingface/
 
 # Vector index files (generated at runtime)
-*.bin
-vector-index.*
+vector-index.bin
+index.bin
+*.index.bin
 
 # Test coverage
 coverage/

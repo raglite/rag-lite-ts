@@ -1,7 +1,7 @@
 import { existsSync, statSync } from 'fs';
 import { resolve } from 'path';
-import { IngestionPipeline, rebuildIndex } from '../ingestion.js';
-import { EXIT_CODES, ConfigurationError } from '../config.js';
+import { TextIngestionFactory } from '../factories/text-factory.js';
+import { EXIT_CODES, ConfigurationError } from '../core/config.js';
 
 /**
  * Run document ingestion from CLI
@@ -63,52 +63,28 @@ export async function runIngest(path: string, options: Record<string, any> = {})
     console.log('This may take a while for large document collections...');
     console.log('');
 
-    // Create and run ingestion pipeline
-    const configOverrides: any = {};
+    // Prepare factory options
+    const factoryOptions: any = {};
     if (options.model) {
-      configOverrides.embedding_model = options.model;
+      factoryOptions.embeddingModel = options.model;
       console.log(`Using embedding model: ${options.model}`);
     }
     
-    const pipeline = new IngestionPipeline();
-    pipeline.setConfigOverrides(configOverrides);
-    
-    // Set path storage strategy if specified
-    if (options['path-strategy'] || options['path-base']) {
-      const strategy = options['path-strategy'] || 'relative';
-      const basePath = options['path-base'] || process.cwd();
-      pipeline.setPathStorageStrategy(strategy, basePath);
-      console.log(`Using path storage strategy: ${strategy} (base: ${basePath})`);
+    if (options.rebuildIfNeeded) {
+      factoryOptions.forceRebuild = true;
+      console.log('Force rebuild enabled due to rebuildIfNeeded option');
     }
     
+    // Create ingestion pipeline using factory
+    let pipeline;
+    
     try {
-      // Handle automatic rebuild if needed
-      if (options.rebuildIfNeeded) {
-        try {
-          await pipeline.initialize();
-        } catch (error) {
-          if (error instanceof Error && error.message.includes('Model mismatch detected')) {
-            console.log('⚠️  Model mismatch detected. Rebuilding index automatically...');
-            console.log('⚠️  WARNING: This will regenerate ALL embeddings and may take a while.');
-            console.log('');
-            
-            // Create a new pipeline with the same config overrides for rebuild
-            const rebuildPipeline = new IngestionPipeline();
-            rebuildPipeline.setConfigOverrides(configOverrides);
-            try {
-              await rebuildPipeline.initialize();
-              await rebuildPipeline.rebuildIndex();
-            } finally {
-              await rebuildPipeline.cleanup();
-            }
-            
-            console.log('✅ Rebuild completed. Continuing with ingestion...');
-            console.log('');
-          } else {
-            throw error;
-          }
-        }
-      }
+      // Create ingestion pipeline using TextIngestionFactory
+      pipeline = await TextIngestionFactory.create(
+        process.env.RAG_DB_FILE || './db.sqlite',
+        process.env.RAG_INDEX_FILE || './vector-index.bin',
+        factoryOptions
+      );
       
       const result = await pipeline.ingestPath(resolvedPath);
       
@@ -139,7 +115,9 @@ export async function runIngest(path: string, options: Record<string, any> = {})
       console.log('You can now search your documents using: raglite search "your query"');
       
     } finally {
-      await pipeline.cleanup();
+      if (pipeline) {
+        await pipeline.cleanup();
+      }
     }
     
   } catch (error) {
@@ -216,15 +194,79 @@ export async function runRebuild(): Promise<void> {
     console.log('Progress will be shown below...');
     console.log('');
 
-    await rebuildIndex();
-    
-    console.log('\n' + '='.repeat(50));
-    console.log('REBUILD COMPLETE');
-    console.log('='.repeat(50));
-    console.log('The vector index has been successfully rebuilt.');
-    console.log('All embeddings have been regenerated with the current model.');
-    console.log('');
-    console.log('You can now search your documents using: raglite search "your query"');
+    // Create ingestion pipeline with force rebuild using factory
+    const pipeline = await TextIngestionFactory.create(
+      process.env.RAG_DB_FILE || './db.sqlite',
+      process.env.RAG_INDEX_FILE || './vector-index.bin',
+      { forceRebuild: true }
+    );
+
+    try {
+      // Get all documents from database and re-ingest them
+      const { openDatabase } = await import('../core/db.js');
+      const db = await openDatabase(process.env.RAG_DB_FILE || './db.sqlite');
+      
+      try {
+        const documents = await db.all('SELECT DISTINCT source FROM documents ORDER BY source');
+        
+        if (documents.length === 0) {
+          throw new Error('No documents found in database. Nothing to rebuild.');
+        }
+
+        console.log(`Found ${documents.length} document${documents.length === 1 ? '' : 's'} to rebuild`);
+        
+        let totalResult = {
+          documentsProcessed: 0,
+          chunksCreated: 0,
+          embeddingsGenerated: 0,
+          documentErrors: 0,
+          embeddingErrors: 0,
+          processingTimeMs: 0
+        };
+
+        // Re-ingest each document
+        for (const doc of documents) {
+          if (existsSync(doc.source)) {
+            console.log(`Rebuilding: ${doc.source}`);
+            const result = await pipeline.ingestFile(doc.source);
+            
+            totalResult.documentsProcessed += result.documentsProcessed;
+            totalResult.chunksCreated += result.chunksCreated;
+            totalResult.embeddingsGenerated += result.embeddingsGenerated;
+            totalResult.documentErrors += result.documentErrors;
+            totalResult.embeddingErrors += result.embeddingErrors;
+            totalResult.processingTimeMs += result.processingTimeMs;
+          } else {
+            console.warn(`⚠️  Document not found, skipping: ${doc.source}`);
+            totalResult.documentErrors++;
+          }
+        }
+
+        console.log('\n' + '='.repeat(50));
+        console.log('REBUILD COMPLETE');
+        console.log('='.repeat(50));
+        console.log(`Documents processed: ${totalResult.documentsProcessed}`);
+        console.log(`Chunks created: ${totalResult.chunksCreated}`);
+        console.log(`Embeddings generated: ${totalResult.embeddingsGenerated}`);
+        if (totalResult.documentErrors > 0) {
+          console.log(`Document errors: ${totalResult.documentErrors}`);
+        }
+        if (totalResult.embeddingErrors > 0) {
+          console.log(`Embedding errors: ${totalResult.embeddingErrors}`);
+        }
+        console.log(`Total processing time: ${(totalResult.processingTimeMs / 1000).toFixed(2)} seconds`);
+        console.log('');
+        console.log('The vector index has been successfully rebuilt.');
+        console.log('All embeddings have been regenerated with the current model.');
+        console.log('');
+        console.log('You can now search your documents using: raglite search "your query"');
+
+      } finally {
+        await db.close();
+      }
+    } finally {
+      await pipeline.cleanup();
+    }
     
   } catch (error) {
     console.error('\n' + '='.repeat(50));

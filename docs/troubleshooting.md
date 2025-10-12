@@ -1,5 +1,7 @@
 # Troubleshooting Guide
 
+*For users experiencing issues or errors - solutions and diagnostics*
+
 Complete troubleshooting guide for common issues, error messages, and solutions in RAG-lite TS.
 
 ## Table of Contents

@@ -1,0 +1,243 @@
+/**
+ * CORE MODULE — Shared between text-only (rag-lite-ts) and future multimodal (rag-lite-mm)
+ * Model-agnostic. No transformer or modality-specific logic.
+ */
+
+import { IndexManager } from '../index-manager.js';
+import { DatabaseConnection, getChunksByEmbeddingIds } from './db.js';
+import type { SearchResult, SearchOptions } from './types.js';
+import type { EmbedFunction, RerankFunction } from './interfaces.js';
+import { config } from './config.js';
+
+/**
+ * Search engine that provides semantic search capabilities
+ * Implements the core search pipeline: query embedding → vector search → metadata retrieval → optional reranking
+ * Uses explicit dependency injection for clean architecture
+ */
+export class SearchEngine {
+  /**
+   * Creates a new SearchEngine with explicit dependency injection
+   * 
+   * DEPENDENCY INJECTION PATTERN:
+   * This constructor requires all dependencies to be explicitly provided, enabling:
+   * - Clean separation between core logic and implementation-specific components
+   * - Support for different embedding models (text-only, multimodal, custom)
+   * - Testability through mock injection
+   * - Future extensibility without core changes
+   * 
+   * @param embedFn - Function to embed queries into vectors
+   *   - Signature: (query: string, contentType?: string) => Promise<EmbeddingResult>
+   *   - Examples:
+   *     - Text: const embedFn = (query) => textEmbedder.embedSingle(query)
+   *     - Multimodal: const embedFn = (query, type) => type === 'image' ? clipEmbedder.embedImage(query) : clipEmbedder.embedText(query)
+   *     - Custom: const embedFn = (query) => customModel.embed(query)
+   * 
+   * @param indexManager - Vector index manager for similarity search
+   *   - Handles vector storage and retrieval operations
+   *   - Works with any embedding dimensions (384, 512, 768, etc.)
+   *   - Example: new IndexManager('./index.bin')
+   * 
+   * @param db - Database connection for metadata retrieval
+   *   - Provides access to document and chunk metadata
+   *   - Supports different content types through metadata fields
+   *   - Example: await openDatabase('./db.sqlite')
+   * 
+   * @param rerankFn - Optional function to rerank search results
+   *   - Signature: (query: string, results: SearchResult[], contentType?: string) => Promise<SearchResult[]>
+   *   - Examples:
+   *     - Text: const rerankFn = (query, results) => textReranker.rerank(query, results)
+   *     - Custom: const rerankFn = (query, results) => customReranker.rerank(query, results)
+   *     - Disabled: undefined (no reranking)
+   * 
+   * USAGE EXAMPLES:
+   * ```typescript
+   * // Text-only search engine
+   * const textEmbedFn = await createTextEmbedder();
+   * const textRerankFn = await createTextReranker();
+   * const indexManager = new IndexManager('./index.bin');
+   * const db = await openDatabase('./db.sqlite');
+   * const search = new SearchEngine(textEmbedFn, indexManager, db, textRerankFn);
+   * 
+   * // Search engine without reranking
+   * const search = new SearchEngine(textEmbedFn, indexManager, db);
+   * 
+   * // Custom embedding implementation
+   * const customEmbedFn = async (query) => ({ 
+   *   embedding_id: generateId(), 
+   *   vector: await myCustomModel.embed(query) 
+   * });
+   * const search = new SearchEngine(customEmbedFn, indexManager, db);
+   * ```
+   */
+  constructor(
+    private embedFn: EmbedFunction,
+    private indexManager: IndexManager,
+    private db: DatabaseConnection,
+    private rerankFn?: RerankFunction
+  ) {
+    // Validate required dependencies
+    if (!embedFn || typeof embedFn !== 'function') {
+      throw new Error('embedFn must be a valid function');
+    }
+    if (!indexManager) {
+      throw new Error('indexManager is required');
+    }
+    if (!db) {
+      throw new Error('db connection is required');
+    }
+  }
+
+  /**
+   * Perform semantic search on the indexed documents
+   * Implements the core search pipeline: query embedding → vector search → metadata retrieval → optional reranking
+   * @param query - Search query string
+   * @param options - Search options including top_k and rerank settings
+   * @returns Promise resolving to array of search results
+   */
+  async search(query: string, options: SearchOptions = {}): Promise<SearchResult[]> {
+    if (!query || query.trim().length === 0) {
+      return [];
+    }
+
+    const startTime = performance.now();
+    const topK = options.top_k || config.top_k || 10;
+    const shouldRerank = options.rerank !== undefined ? options.rerank : (this.rerankFn !== undefined);
+
+    try {
+      // Step 1: Build query embedding using injected embed function
+      const embeddingStartTime = performance.now();
+      const queryEmbedding = await this.embedFn(query);
+      const embeddingTime = performance.now() - embeddingStartTime;
+
+      // Step 2: Search using IndexManager (which handles hash mapping properly)
+      const searchStartTime = performance.now();
+      let searchResult;
+      try {
+        searchResult = this.indexManager.search(queryEmbedding.vector, topK);
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('No embedding ID found for hash')) {
+          console.warn(`Hash mapping issue detected: ${error.message}`);
+          console.warn('This may indicate index/database synchronization issues. Consider running: raglite rebuild');
+          return [];
+        }
+        throw error;
+      }
+      const vectorSearchTime = performance.now() - searchStartTime;
+
+      if (searchResult.embeddingIds.length === 0) {
+        const totalTime = performance.now() - startTime;
+        console.log(`No similar documents found (${totalTime.toFixed(2)}ms total)`);
+        return [];
+      }
+
+      // Step 3: Retrieve chunks from database using embedding IDs
+      const retrievalStartTime = performance.now();
+      const chunks = await getChunksByEmbeddingIds(this.db, searchResult.embeddingIds);
+      const retrievalTime = performance.now() - retrievalStartTime;
+
+      // Step 4: Format results as JSON with text, score, and document metadata
+      let results = this.formatSearchResults(chunks, searchResult.distances, searchResult.embeddingIds);
+
+      // Step 5: Optional reranking with injected rerank function
+      let rerankTime = 0;
+      if (shouldRerank && this.rerankFn && results.length > 1) {
+        try {
+          const rerankStartTime = performance.now();
+          results = await this.rerankFn(query, results);
+          rerankTime = performance.now() - rerankStartTime;
+        } catch (error) {
+          // Fallback to vector search results and log the error
+          console.warn(`Reranking failed, using vector search results: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
+
+      const totalTime = performance.now() - startTime;
+      
+      // Measure latency without premature optimization - just log for monitoring
+      console.log(`Search completed: ${results.length} results in ${totalTime.toFixed(2)}ms ` +
+        `(embed: ${embeddingTime.toFixed(2)}ms, vector: ${vectorSearchTime.toFixed(2)}ms, ` +
+        `retrieval: ${retrievalTime.toFixed(2)}ms${rerankTime > 0 ? `, rerank: ${rerankTime.toFixed(2)}ms` : ''})`);
+
+      return results;
+
+    } catch (error) {
+      throw new Error(`Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Format search results with proper structure
+   * @param chunks - Database chunks with metadata
+   * @param distances - Similarity distances from vector search
+   * @param embeddingIds - Embedding IDs in search result order
+   * @returns Formatted search results
+   */
+  private formatSearchResults(
+    chunks: any[],
+    distances: number[],
+    embeddingIds: string[]
+  ): SearchResult[] {
+    const results: SearchResult[] = [];
+    
+    // Create a map for quick chunk lookup by embedding_id
+    const chunkMap = new Map();
+    chunks.forEach(chunk => {
+      chunkMap.set(chunk.embedding_id, chunk);
+    });
+
+    // Build results in the order of search results
+    for (let i = 0; i < embeddingIds.length; i++) {
+      const embeddingId = embeddingIds[i];
+      const chunk = chunkMap.get(embeddingId);
+      
+      if (chunk) {
+        // Convert cosine distance to similarity score (1 - distance)
+        // hnswlib-wasm returns cosine distance, we want similarity
+        const score = Math.max(0, 1 - distances[i]);
+        
+        results.push({
+          content: chunk.content,
+          score: score,
+          contentType: chunk.content_type || 'text',
+          document: {
+            id: chunk.document_id,
+            source: chunk.document_source,
+            title: chunk.document_title,
+            contentType: chunk.document_content_type || 'text'
+          }
+        });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Get search engine statistics
+   * @returns Object with current search engine stats
+   */
+  async getStats(): Promise<{ 
+    totalChunks: number; 
+    indexSize: number; 
+    rerankingEnabled: boolean;
+  }> {
+    const indexStats = await this.indexManager.getStats();
+    return {
+      totalChunks: indexStats.totalVectors,
+      indexSize: indexStats.totalVectors,
+      rerankingEnabled: this.rerankFn !== undefined
+    };
+  }
+
+  /**
+   * Clean up resources - explicit cleanup method
+   */
+  async cleanup(): Promise<void> {
+    try {
+      await this.db.close();
+      await this.indexManager.close();
+    } catch (error) {
+      console.error('Error during SearchEngine cleanup:', error instanceof Error ? error.message : String(error));
+    }
+  }
+}

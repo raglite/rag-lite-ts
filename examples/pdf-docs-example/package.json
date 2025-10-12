@@ -1,0 +1,24 @@
+{
+  "name": "rag-lite-pdf-docs-example",
+  "version": "1.0.0",
+  "description": "Example demonstrating RAG-lite with PDF and DOCX documents",
+  "type": "module",
+  "main": "pdf-docx-example.js",
+  "scripts": {
+    "start": "node pdf-docx-example.js",
+    "clean": "node clean.js",
+    "clean:files": "rm -f example-docs/db.sqlite example-docs/vector-index.bin"
+  },
+  "dependencies": {
+    "rag-lite-ts": "file:../../"
+  },
+  "keywords": [
+    "rag-lite",
+    "pdf",
+    "docx",
+    "example",
+    "semantic-search"
+  ],
+  "author": "RAG-lite TS Contributors",
+  "license": "MIT"
+}

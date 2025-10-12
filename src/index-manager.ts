@@ -1,7 +1,7 @@
-import { VectorIndex } from './vector-index.js';
-import { openDatabase, getModelVersion, setModelVersion, getStoredModelInfo, setStoredModelInfo, type DatabaseConnection } from './db.js';
-import type { EmbeddingResult } from './types.js';
-import { config, getModelDefaults } from './config.js';
+import { VectorIndex } from './core/vector-index.js';
+import { openDatabase, getModelVersion, setModelVersion, getStoredModelInfo, setStoredModelInfo, type DatabaseConnection } from './core/db.js';
+import type { EmbeddingResult } from './core/types.js';
+import { config, getModelDefaults } from './core/config.js';
 import { existsSync } from 'fs';
 
 export interface IndexStats {
@@ -35,8 +35,9 @@ export class IndexManager {
   /**
    * Initialize the index manager and load existing index if available
    * @param skipModelCheck - Skip model compatibility check (used for rebuilds)
+   * @param forceRecreate - Force recreation of index (used for model changes)
    */
-  async initialize(skipModelCheck: boolean = false): Promise<void> {
+  async initialize(skipModelCheck: boolean = false, forceRecreate: boolean = false): Promise<void> {
     if (this.isInitialized) {
       return;
     }
@@ -47,16 +48,17 @@ export class IndexManager {
 
       // Check model compatibility BEFORE trying to load the vector index
       // This prevents WebAssembly exceptions when dimensions don't match
-      if (!skipModelCheck) {
+      if (!skipModelCheck && !forceRecreate) {
         await this.checkModelCompatibility();
       }
 
-      if (this.vectorIndex.indexExists()) {
-        console.log('Loading existing vector index...');
-        await this.vectorIndex.loadIndex();
-      } else {
+      if (forceRecreate || !this.vectorIndex.indexExists()) {
         console.log('Creating new vector index...');
         await this.vectorIndex.initialize();
+      } else {
+        // Only try to load existing index if not forcing recreation
+        console.log('Loading existing vector index...');
+        await this.vectorIndex.loadIndex();
       }
 
       // Always populate the embedding ID mapping from existing database entries
@@ -461,7 +463,7 @@ export class IndexManager {
 
     try {
       const rows = await this.db.all(
-        'SELECT embedding_id, text, document_id FROM chunks ORDER BY id'
+        'SELECT embedding_id, content as text, document_id FROM chunks ORDER BY id'
       );
 
       return rows.map(row => ({

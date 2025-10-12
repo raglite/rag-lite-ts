@@ -1,53 +1,105 @@
 # API Reference
 
-This document provides comprehensive documentation for all public APIs in RAG-lite TS.
+This document provides comprehensive documentation for RAG-lite TS APIs, focusing on the clean architecture with simple constructors and optional factory patterns.
 
 ## Table of Contents
 
-- [Core Classes](#core-classes)
+- [Quick Start](#quick-start)
+- [Main Classes](#main-classes)
   - [SearchEngine](#searchengine)
   - [IngestionPipeline](#ingestionpipeline)
-  - [EmbeddingEngine](#embeddingengine)
-- [Advanced Classes](#advanced-classes)
-  - [VectorIndex](#vectorindex)
-  - [IndexManager](#indexmanager)
-  - [ResourceManager](#resourcemanager)
-  - [CrossEncoderReranker](#crossencoderreranker)
-- [Database Operations](#database-operations)
-- [File Processing](#file-processing)
-- [Preprocessing](#preprocessing)
-- [Tokenization](#tokenization)
+- [Factory Pattern](#factory-pattern)
+  - [SearchFactory](#searchfactory)
+  - [IngestionFactory](#ingestionfactory)
+  - [RAGFactory](#ragfactory)
+- [Core Architecture](#core-architecture)
 - [Configuration](#configuration)
 - [Type Definitions](#type-definitions)
 - [Error Handling](#error-handling)
 - [Utility Functions](#utility-functions)
 
-## Core Classes
+## Quick Start
+
+*For most users - get started in minutes*
+
+The fastest way to get started with RAG-lite TS using simple constructors:
+
+```typescript
+import { SearchEngine, IngestionPipeline } from 'rag-lite-ts';
+
+// Initialize and ingest documents
+const ingestion = new IngestionPipeline('./db.sqlite', './index.bin');
+await ingestion.ingestDirectory('./docs');
+
+// Search your documents
+const search = new SearchEngine('./index.bin', './db.sqlite');
+const results = await search.search('your query');
+```
+
+### Configuration Options
+
+```typescript
+import { SearchEngine, IngestionPipeline } from 'rag-lite-ts';
+
+// Custom model configuration
+const search = new SearchEngine('./index.bin', './db.sqlite', {
+  embeddingModel: 'Xenova/all-mpnet-base-v2',
+  enableReranking: true
+});
+
+// Ingestion with custom settings
+const ingestion = new IngestionPipeline('./db.sqlite', './index.bin', {
+  embeddingModel: 'Xenova/all-mpnet-base-v2',
+  chunkSize: 400,
+  chunkOverlap: 80
+});
+```
+
+## Main Classes
+
+*For application developers - the primary API*
+
+These classes provide the main interface for RAG-lite TS functionality with simple, direct constructors that handle initialization automatically.
 
 ### SearchEngine
 
-The main class for performing semantic search over indexed documents.
+Performs semantic search over indexed documents with automatic initialization.
 
 ```typescript
 class SearchEngine {
-  constructor(indexPath: string, dbPath: string, embedder?: EmbeddingEngine);
+  constructor(indexPath: string, dbPath: string, options?: SearchEngineOptions);
   
   async search(query: string, options?: SearchOptions): Promise<SearchResult[]>;
-  async close(): Promise<void>;
+  async getStats(): Promise<SearchStats>;
+  async cleanup(): Promise<void>;
 }
 ```
 
 #### Constructor Parameters
 
-- `indexPath` (string): Path to the vector index file
-- `dbPath` (string): Path to the SQLite database file  
-- `embedder` (EmbeddingEngine, optional): Embedding engine instance. If not provided, will be auto-initialized
+- `indexPath` (string): Path to the vector index file (must exist)
+- `dbPath` (string): Path to the SQLite database file (must exist)
+- `options` (SearchEngineOptions, optional): Configuration options
+
+#### SearchEngineOptions
+
+```typescript
+interface SearchEngineOptions {
+  embeddingModel?: string;        // Model name (auto-detected from database)
+  batchSize?: number;             // Embedding batch size
+  enableReranking?: boolean;      // Enable reranking (default: false)
+  rerankingModel?: string;        // Reranking model name
+  // Advanced: Custom functions for dependency injection
+  embedFn?: EmbedFunction;        // Custom embedding function
+  rerankFn?: RerankFunction;      // Custom reranking function
+}
+```
 
 #### Methods
 
 ##### `search(query, options?)`
 
-Performs semantic search over the indexed documents.
+Performs semantic search over indexed documents.
 
 **Parameters:**
 - `query` (string): Search query text
@@ -59,8 +111,8 @@ Performs semantic search over the indexed documents.
 ```typescript
 import { SearchEngine } from 'rag-lite-ts';
 
-const searchEngine = new SearchEngine('./vector-index.bin', './db.sqlite');
-const results = await searchEngine.search('machine learning', { 
+const search = new SearchEngine('./index.bin', './db.sqlite');
+const results = await search.search('machine learning', { 
   top_k: 5, 
   rerank: true 
 });
@@ -68,589 +120,419 @@ const results = await searchEngine.search('machine learning', {
 console.log(results);
 // [
 //   {
-//     text: "Machine learning is a subset of artificial intelligence...",
+//     content: "Machine learning is a subset of artificial intelligence...",
 //     score: 0.85,
-//     document: { id: 1, source: "ml-guide.md", title: "ML Guide" }
+//     document: { 
+//       id: 1, 
+//       source: "ml-guide.md", 
+//       title: "ML Guide"
+//     }
 //   }
 // ]
 ```
 
-##### `close()`
+##### `getStats()`
 
-Closes the search engine and releases resources.
+Gets statistics about the search engine and indexed content.
+
+**Returns:** `Promise<SearchStats>` - Statistics object
+
+**Example:**
+```typescript
+const stats = await search.getStats();
+console.log(`Indexed ${stats.totalChunks} chunks from ${stats.totalDocuments} documents`);
+console.log(`Reranking: ${stats.rerankingEnabled ? 'enabled' : 'disabled'}`);
+```
+
+##### `cleanup()`
+
+Cleans up resources and closes connections.
 
 **Returns:** `Promise<void>`
+
+**Example:**
+```typescript
+// Always cleanup when done
+await search.cleanup();
+```
+
+#### Complete Example
+
+```typescript
+import { SearchEngine } from 'rag-lite-ts';
+
+// Basic usage
+const search = new SearchEngine('./index.bin', './db.sqlite');
+
+try {
+  const results = await search.search('artificial intelligence');
+  console.log(`Found ${results.length} results`);
+  
+  for (const result of results) {
+    console.log(`${result.document.title}: ${result.score.toFixed(2)}`);
+    console.log(result.content.substring(0, 100) + '...');
+  }
+} finally {
+  await search.cleanup();
+}
+```
 
 ### IngestionPipeline
 
-Handles document ingestion, processing, and indexing.
+Handles document ingestion, processing, and indexing with automatic initialization.
 
 ```typescript
 class IngestionPipeline {
-  constructor(basePath: string, embedder: EmbeddingEngine, options?: IngestionOptions);
+  constructor(dbPath: string, indexPath: string, options?: IngestionPipelineOptions);
   
-  async ingestDirectory(path: string): Promise<IngestionResult>;
-  async ingestFile(filePath: string): Promise<IngestionResult>;
-  async rebuildIndex(): Promise<void>;
-  async close(): Promise<void>;
-  
-  // Path storage configuration
-  setPathStorageStrategy(strategy: 'absolute' | 'relative', basePath?: string): void;
+  async ingestDirectory(path: string, options?: IngestionOptions): Promise<IngestionResult>;
+  async ingestFile(filePath: string, options?: IngestionOptions): Promise<IngestionResult>;
+  async cleanup(): Promise<void>;
 }
 ```
 
 #### Constructor Parameters
 
-- `basePath` (string): Base directory path for relative file resolution
-- `embedder` (EmbeddingEngine): Embedding engine for generating vectors
-- `options` (IngestionOptions, optional): Ingestion configuration
+- `dbPath` (string): Path to the SQLite database file (will be created if doesn't exist)
+- `indexPath` (string): Path to the vector index file (will be created if doesn't exist)
+- `options` (IngestionPipelineOptions, optional): Configuration options
+
+#### IngestionPipelineOptions
+
+```typescript
+interface IngestionPipelineOptions {
+  embeddingModel?: string;        // Model name (default: 'sentence-transformers/all-MiniLM-L6-v2')
+  batchSize?: number;             // Embedding batch size
+  chunkSize?: number;             // Chunk size in tokens (default: 250)
+  chunkOverlap?: number;          // Overlap between chunks (default: 50)
+  forceRebuild?: boolean;         // Force index rebuild (default: false)
+}
+```
 
 #### Methods
 
-##### `ingestDirectory(path)`
+##### `ingestDirectory(path, options?)`
 
-Ingests all supported files from a directory.
+Ingests all supported documents in a directory.
 
 **Parameters:**
 - `path` (string): Directory path to ingest
+- `options` (IngestionOptions, optional): Ingestion configuration
 
-**Returns:** `Promise<IngestionResult>` - Ingestion statistics
+**Returns:** `Promise<IngestionResult>` - Ingestion statistics and results
+
+##### `ingestFile(filePath, options?)`
+
+Ingests a single document.
+
+**Parameters:**
+- `filePath` (string): Path to the document to ingest
+- `options` (IngestionOptions, optional): Ingestion configuration
+
+**Returns:** `Promise<IngestionResult>` - Ingestion statistics and results
 
 **Example:**
 ```typescript
-import { IngestionPipeline, initializeEmbeddingEngine } from 'rag-lite-ts';
+import { IngestionPipeline } from 'rag-lite-ts';
 
-const embedder = await initializeEmbeddingEngine();
-const pipeline = new IngestionPipeline('./', embedder);
+// Basic usage
+const pipeline = new IngestionPipeline('./db.sqlite', './index.bin');
 
-const result = await pipeline.ingestDirectory('./docs/');
-console.log(`Processed ${result.documentsProcessed} documents`);
-console.log(`Generated ${result.chunksGenerated} chunks`);
-```
-
-##### `ingestFile(filePath)`
-
-Ingests a single file.
-
-**Parameters:**
-- `filePath` (string): Path to the file to ingest
-
-**Returns:** `Promise<IngestionResult>` - Ingestion statistics
-
-##### `rebuildIndex()`
-
-Rebuilds the entire vector index from existing documents in the database.
-
-**Returns:** `Promise<void>`
-
-##### `setPathStorageStrategy(strategy, basePath?)`
-
-Configures how document paths are stored in the database.
-
-**Parameters:**
-- `strategy` ('absolute' | 'relative'): Path storage strategy
-- `basePath` (string, optional): Base directory for relative paths
-
-**Returns:** `void`
-
-**Example:**
-```typescript
-import { IngestionPipeline, initializeEmbeddingEngine } from 'rag-lite-ts';
-
-const embedder = await initializeEmbeddingEngine();
-const pipeline = new IngestionPipeline('./', embedder);
-
-// Configure for relative paths (portable)
-pipeline.setPathStorageStrategy('relative', '/project/base');
-
-// Configure for absolute paths (legacy)
-pipeline.setPathStorageStrategy('absolute');
-
-await pipeline.ingestDirectory('./docs/');
-```
-
-### EmbeddingEngine
-
-Generates embeddings using transformers.js models.
-
-```typescript
-class EmbeddingEngine {
-  constructor(modelName?: string, batchSize?: number);
-  
-  async loadModel(): Promise<void>;
-  async embedBatch(texts: string[]): Promise<EmbeddingResult[]>;
-  async embedSingle(text: string): Promise<EmbeddingResult>;
-  getModelVersion(): string;
-  getDimensions(): number;
-  getBatchSize(): number;
+try {
+  const result = await pipeline.ingestDirectory('./docs/');
+  console.log(`Processed ${result.documentsProcessed} documents`);
+  console.log(`Generated ${result.chunksCreated} chunks`);
+} finally {
+  await pipeline.cleanup();
 }
 ```
 
-#### Constructor Parameters
+##### `cleanup()`
 
-- `modelName` (string, optional): Hugging Face model name. Defaults to configuration value
-- `batchSize` (number, optional): Batch size for processing. Defaults to model-optimized value
-
-#### Methods
-
-##### `loadModel()`
-
-Loads the embedding model. Called automatically on first use.
+Cleans up resources and closes connections.
 
 **Returns:** `Promise<void>`
 
-##### `embedBatch(texts)`
+#### Complete Example
 
-Generates embeddings for multiple texts efficiently.
-
-**Parameters:**
-- `texts` (string[]): Array of texts to embed
-
-**Returns:** `Promise<EmbeddingResult[]>` - Array of embedding results
-
-##### `embedSingle(text)`
-
-Generates embedding for a single text.
-
-**Parameters:**
-- `text` (string): Text to embed
-
-**Returns:** `Promise<EmbeddingResult>` - Single embedding result
-
-**Example:**
 ```typescript
-import { EmbeddingEngine } from 'rag-lite-ts';
+import { IngestionPipeline } from 'rag-lite-ts';
 
-const embedder = new EmbeddingEngine('sentence-transformers/all-MiniLM-L6-v2');
+// With configuration options
+const pipeline = new IngestionPipeline('./db.sqlite', './index.bin', {
+  embeddingModel: 'Xenova/all-mpnet-base-v2',
+  chunkSize: 400,
+  chunkOverlap: 80
+});
+
+try {
+  // Ingest documents from directory
+  const result = await pipeline.ingestDirectory('./documents');
+  
+  console.log('Ingestion Summary:');
+  console.log(`- Documents processed: ${result.documentsProcessed}`);
+  console.log(`- Chunks created: ${result.chunksCreated}`);
+  console.log(`- Processing time: ${result.processingTimeMs}ms`);
+  
+  if (result.documentErrors > 0) {
+    console.warn(`- Document errors: ${result.documentErrors}`);
+  }
+} finally {
+  await pipeline.cleanup();
+}
+```
+
+## Factory Pattern
+
+*For advanced users and library authors*
+
+Factory functions provide advanced initialization with automatic setup, smart defaults, and comprehensive error handling. Use these when:
+
+- **Building libraries or frameworks** that use rag-lite-ts internally
+- **Need automatic resource management** and cleanup on process exit
+- **Require extensive error handling** and validation with detailed error messages
+- **Working with complex deployment scenarios** where initialization might fail
+
+**When to Use:**
+- **Use constructors** for direct application usage (90% of cases)
+- **Use factories** for library development, complex error handling, or automatic resource management
+
+### SearchFactory
+
+Creates and initializes search engines with automatic model loading and validation.
+
+```typescript
+class SearchFactory {
+  static async create(
+    indexPath: string, 
+    dbPath: string, 
+    options?: TextSearchOptions
+  ): Promise<SearchEngine>;
+  
+  static async createWithDefaults(
+    options?: TextSearchOptions
+  ): Promise<SearchEngine>;
+}
+```
+
+#### TextSearchOptions
+
+```typescript
+interface TextSearchOptions {
+  embeddingModel?: string;        // Model name override
+  batchSize?: number;             // Embedding batch size override
+  rerankingModel?: string;        // Reranking model name override
+  enableReranking?: boolean;      // Enable/disable reranking (default: false)
+}
+```
+
+#### Example
+
+```typescript
+import { SearchFactory } from 'rag-lite-ts';
+
+// Basic usage with comprehensive error handling
+const search = await SearchFactory.create('./index.bin', './db.sqlite');
+const results = await search.search('machine learning');
+
+// Advanced configuration
+const search = await SearchFactory.create('./index.bin', './db.sqlite', {
+  embeddingModel: 'Xenova/all-mpnet-base-v2',
+  enableReranking: true
+});
+
+// Use default paths from configuration
+const search = await SearchFactory.createWithDefaults({
+  enableReranking: false
+});
+```
+
+### IngestionFactory
+
+Creates and initializes ingestion pipelines with automatic model loading and directory setup.
+
+```typescript
+class IngestionFactory {
+  static async create(
+    dbPath: string,
+    indexPath: string,
+    options?: TextIngestionOptions
+  ): Promise<IngestionPipeline>;
+  
+  static async createWithDefaults(
+    options?: TextIngestionOptions
+  ): Promise<IngestionPipeline>;
+}
+```
+
+#### TextIngestionOptions
+
+```typescript
+interface TextIngestionOptions {
+  embeddingModel?: string;        // Model name override
+  batchSize?: number;             // Embedding batch size override
+  chunkSize?: number;             // Chunk size override
+  chunkOverlap?: number;          // Chunk overlap override
+  forceRebuild?: boolean;         // Force rebuild of existing index
+}
+```
+
+#### Example
+
+```typescript
+import { IngestionFactory } from 'rag-lite-ts';
+
+// Basic usage with automatic directory creation
+const ingestion = await IngestionFactory.create('./db.sqlite', './index.bin');
+await ingestion.ingestDirectory('./documents');
+
+// Advanced configuration with force rebuild
+const ingestion = await IngestionFactory.create('./db.sqlite', './index.bin', {
+  embeddingModel: 'Xenova/all-mpnet-base-v2',
+  chunkSize: 400,
+  chunkOverlap: 80,
+  forceRebuild: true
+});
+```
+
+### RAGFactory
+
+Creates complete RAG systems with both search and ingestion capabilities.
+
+```typescript
+class RAGFactory {
+  static async createBoth(
+    indexPath: string,
+    dbPath: string,
+    searchOptions?: TextSearchOptions,
+    ingestionOptions?: TextIngestionOptions
+  ): Promise<{
+    searchEngine: SearchEngine;
+    ingestionPipeline: IngestionPipeline;
+  }>;
+  
+  static async createBothWithDefaults(
+    searchOptions?: TextSearchOptions,
+    ingestionOptions?: TextIngestionOptions
+  ): Promise<{
+    searchEngine: SearchEngine;
+    ingestionPipeline: IngestionPipeline;
+  }>;
+}
+```
+
+#### Example
+
+```typescript
+import { RAGFactory } from 'rag-lite-ts';
+
+// Create complete RAG system
+const { searchEngine, ingestionPipeline } = await RAGFactory.createBoth(
+  './index.bin',
+  './db.sqlite'
+);
+
+// First, ingest some documents
+await ingestionPipeline.ingestDirectory('./knowledge-base');
+
+// Then search the ingested content
+const results = await searchEngine.search('What is the main topic?');
+
+// Clean up both instances
+await Promise.all([
+  searchEngine.cleanup(),
+  ingestionPipeline.cleanup()
+]);
+```
+
+## Core Architecture
+
+*For library authors and custom implementations*
+
+The core architecture provides low-level access to internal components for advanced use cases, custom implementations, and library development.
+
+### Core Classes
+
+#### CoreSearchEngine
+
+Low-level search engine with explicit dependency injection.
+
+```typescript
+import { SearchEngine as CoreSearchEngine } from 'rag-lite-ts';
+
+const coreSearch = new CoreSearchEngine(embedFn, indexManager, db, rerankFn);
+```
+
+#### CoreIngestionPipeline
+
+Low-level ingestion pipeline with explicit dependency injection.
+
+```typescript
+import { IngestionPipeline as CoreIngestionPipeline } from 'rag-lite-ts';
+
+const corePipeline = new CoreIngestionPipeline(embedFn, indexManager, db, chunkConfig);
+```
+
+### Text Implementations
+
+#### Embedding Functions
+
+```typescript
+import { createTextEmbedFunction, createTextEmbedder } from 'rag-lite-ts';
+
+// Create embedding function
+const embedFn = createTextEmbedFunction('Xenova/all-mpnet-base-v2', 16);
+
+// Create embedding engine directly
+const embedder = createTextEmbedder('Xenova/all-mpnet-base-v2');
 await embedder.loadModel();
-
-const result = await embedder.embedSingle('Hello world');
-console.log(result.embedding_id); // Unique identifier
-console.log(result.vector.length); // 384 for MiniLM model
 ```
 
-## Advanced Classes
-
-### VectorIndex
-
-Low-level vector similarity search using HNSW algorithm.
+#### Reranking Functions
 
 ```typescript
-class VectorIndex {
-  constructor(options: VectorIndexOptions);
-  
-  async initialize(): Promise<void>;
-  async addVector(id: string, vector: Float32Array): Promise<void>;
-  async addVectors(vectors: Array<{ id: string; vector: Float32Array }>): Promise<void>;
-  async search(queryVector: Float32Array, k: number): Promise<SearchResult>;
-  async save(filePath: string): Promise<void>;
-  async load(filePath: string): Promise<void>;
-  getSize(): number;
-}
+import { createTextRerankFunction, createTextReranker } from 'rag-lite-ts';
+
+// Create reranking function
+const rerankFn = createTextRerankFunction('cross-encoder/ms-marco-MiniLM-L-6-v2');
+
+// Create reranker directly
+const reranker = createTextReranker('cross-encoder/ms-marco-MiniLM-L-6-v2');
+await reranker.loadModel();
 ```
 
-#### Constructor Parameters
-
-- `options` (VectorIndexOptions): Index configuration
-
-**Example:**
-```typescript
-import { VectorIndex } from 'rag-lite-ts';
-
-const index = new VectorIndex({
-  dimensions: 384,
-  maxElements: 100000,
-  efConstruction: 200,
-  M: 16
-});
-
-await index.initialize();
-await index.addVector('doc1_chunk1', embedding.vector);
-const results = await index.search(queryEmbedding, 10);
-```
-
-### IndexManager
-
-Manages vector index lifecycle and statistics.
+### Custom Implementation Example
 
 ```typescript
-class IndexManager {
-  constructor(indexPath: string, dbConnection: DatabaseConnection);
-  
-  async initialize(dimensions: number, maxElements?: number): Promise<void>;
-  async addEmbedding(embeddingId: string, vector: Float32Array): Promise<void>;
-  async search(queryVector: Float32Array, k: number): Promise<string[]>;
-  async save(): Promise<void>;
-  async load(): Promise<void>;
-  async getStats(): Promise<IndexStats>;
-}
-```
-
-### ResourceManager
-
-Handles automatic resource management and cleanup.
-
-```typescript
-class ResourceManager {
-  static async getResources(config?: ResourceConfig): Promise<ManagedResources>;
-  static async cleanup(key?: string): Promise<void>;
-  static async cleanupAll(): Promise<void>;
-}
-```
-
-**Example:**
-```typescript
-import { ResourceManager } from 'rag-lite-ts';
-
-// Get managed resources (auto-cleanup on process exit)
-const resources = await ResourceManager.getResources({
-  dbPath: './custom.sqlite',
-  indexPath: './custom-index.bin'
-});
-
-// Use resources
-const results = await resources.indexManager.search(queryVector, 10);
-
-// Manual cleanup (optional - happens automatically)
-await ResourceManager.cleanup();
-```
-
-### CrossEncoderReranker
-
-Reranks search results using a cross-encoder model for improved relevance.
-
-```typescript
-class CrossEncoderReranker {
-  constructor(modelName?: string);
-  
-  async loadModel(): Promise<void>;
-  async rerank(query: string, results: SearchResult[]): Promise<SearchResult[]>;
-}
-```
-
-### DocumentPathManager
-
-Manages document path storage and resolution strategies.
-
-```typescript
-class DocumentPathManager {
-  constructor(strategy: 'absolute' | 'relative', basePath: string);
-  
-  toStoragePath(absolutePath: string): string;
-  toAbsolutePath(storagePath: string): string;
-  getStrategy(): 'absolute' | 'relative';
-  getBasePath(): string;
-  withBasePath(newBasePath: string): DocumentPathManager;
-  withStrategy(newStrategy: 'absolute' | 'relative', newBasePath?: string): DocumentPathManager;
-}
-```
-
-#### Constructor Parameters
-
-- `strategy` ('absolute' | 'relative'): Path storage strategy
-- `basePath` (string): Base directory for relative path calculations
-
-#### Methods
-
-##### `toStoragePath(absolutePath)`
-
-Converts an absolute file path to the storage format based on strategy.
-
-**Parameters:**
-- `absolutePath` (string): Absolute file path
-
-**Returns:** `string` - Path to store in database
-
-##### `toAbsolutePath(storagePath)`
-
-Converts a storage path back to absolute path for file operations.
-
-**Parameters:**
-- `storagePath` (string): Path from database
-
-**Returns:** `string` - Absolute file path
-
-**Example:**
-```typescript
-import { DocumentPathManager } from 'rag-lite-ts';
-
-// Create path manager for relative paths
-const pathManager = new DocumentPathManager('relative', '/project');
-
-// Convert absolute path to storage format
-const storagePath = pathManager.toStoragePath('/project/docs/api/auth.md');
-console.log(storagePath); // "docs/api/auth.md"
-
-// Convert back to absolute path
-const absolutePath = pathManager.toAbsolutePath('docs/api/auth.md');
-console.log(absolutePath); // "/project/docs/api/auth.md"
-
-// Create new manager with different base
-const newManager = pathManager.withBasePath('/different/base');
-```
-
-## Database Operations
-
-### Connection Management
-
-#### `openDatabase(dbPath)`
-
-Opens a SQLite database connection with promise-based interface.
-
-**Parameters:**
-- `dbPath` (string): Path to SQLite database file
-
-**Returns:** `Promise<DatabaseConnection>` - Database connection object
-
-**Example:**
-```typescript
-import { openDatabase, initializeSchema } from 'rag-lite-ts';
-
-const db = await openDatabase('./my-docs.sqlite');
-await initializeSchema(db);
-
-// Use database operations
-const docId = await insertDocument(db, 'README.md', 'My Document', 'Content...');
-```
-
-#### `initializeSchema(connection)`
-
-Creates the required database tables and indexes.
-
-**Parameters:**
-- `connection` (DatabaseConnection): Database connection
-
-**Returns:** `Promise<void>`
-
-### Document Operations
-
-#### `insertDocument(connection, source, title, content)`
-
-Inserts a new document into the database.
-
-**Parameters:**
-- `connection` (DatabaseConnection): Database connection
-- `source` (string): Document source path or identifier
-- `title` (string): Document title
-- `content` (string): Full document content
-
-**Returns:** `Promise<number>` - Document ID
-
-#### `upsertDocument(connection, source, title, content)`
-
-Inserts or updates a document (based on source path).
-
-**Parameters:**
-- `connection` (DatabaseConnection): Database connection  
-- `source` (string): Document source path or identifier
-- `title` (string): Document title
-- `content` (string): Full document content
-
-**Returns:** `Promise<number>` - Document ID
-
-### Chunk Operations
-
-#### `insertChunk(connection, embeddingId, documentId, text, chunkIndex)`
-
-Inserts a document chunk with its embedding reference.
-
-**Parameters:**
-- `connection` (DatabaseConnection): Database connection
-- `embeddingId` (string): Unique embedding identifier
-- `documentId` (number): Parent document ID
-- `text` (string): Chunk text content
-- `chunkIndex` (number): Chunk position within document
-
-**Returns:** `Promise<void>`
-
-#### `getChunksByEmbeddingIds(connection, embeddingIds)`
-
-Retrieves chunks and their document metadata by embedding IDs.
-
-**Parameters:**
-- `connection` (DatabaseConnection): Database connection
-- `embeddingIds` (string[]): Array of embedding identifiers
-
-**Returns:** `Promise<ChunkResult[]>` - Array of chunks with document metadata
-
-### Model Version Management
-
-#### `getModelVersion(connection)`
-
-Gets the stored embedding model version.
-
-**Parameters:**
-- `connection` (DatabaseConnection): Database connection
-
-**Returns:** `Promise<string | null>` - Model version or null if not set
-
-#### `setModelVersion(connection, modelVersion)`
-
-Stores the embedding model version for compatibility checking.
-
-**Parameters:**
-- `connection` (DatabaseConnection): Database connection
-- `modelVersion` (string): Model version string
-
-**Returns:** `Promise<void>`
-
-## File Processing
-
-### File Discovery
-
-#### `discoverFiles(path, options?)`
-
-Discovers supported files in a path (file or directory).
-
-**Parameters:**
-- `path` (string): File or directory path
-- `options` (FileProcessorOptions, optional): Discovery options
-
-**Returns:** `Promise<FileDiscoveryResult>` - Discovery results with file list and errors
-
-**Example:**
-```typescript
-import { discoverFiles } from 'rag-lite-ts';
-
-const result = await discoverFiles('./docs/', { 
-  recursive: true,
-  extensions: ['.md', '.txt', '.mdx']
-});
-
-console.log(`Found ${result.files.length} files`);
-result.errors.forEach(error => console.warn(error));
-```
-
-#### `processFiles(filePaths)`
-
-Processes discovered files into Document objects.
-
-**Parameters:**
-- `filePaths` (string[]): Array of file paths to process
-
-**Returns:** `Promise<DocumentProcessingResult>` - Processing results with documents and errors
-
-#### `discoverAndProcessFiles(path, options?)`
-
-Combines file discovery and processing in one operation.
-
-**Parameters:**
-- `path` (string): File or directory path
-- `options` (FileProcessorOptions, optional): Processing options
-
-**Returns:** `Promise<DocumentProcessingResult>` - Processing results
-
-## Preprocessing
-
-### Document Preprocessing
-
-#### `preprocessDocument(content, filePath, config?)`
-
-Preprocesses document content based on file type and configuration.
-
-**Parameters:**
-- `content` (string): Raw document content
-- `filePath` (string): File path (used to determine processing rules)
-- `config` (PreprocessingConfig, optional): Preprocessing configuration
-
-**Returns:** `string` - Processed content
-
-**Example:**
-```typescript
-import { preprocessDocument } from 'rag-lite-ts';
-
-const mdxContent = `
-# My Component
-
-<MyButton onClick={handler}>Click me</MyButton>
-
-Regular markdown content here.
-`;
-
-const processed = preprocessDocument(mdxContent, 'component.mdx', {
-  mode: 'balanced',
-  overrides: { mdx: 'placeholder' }
-});
-
-console.log(processed);
-// # My Component
-// 
-// [component removed]
-// 
-// Regular markdown content here.
-```
-
-#### `getPreprocessingStats(originalContent, processedContent)`
-
-Gets statistics about preprocessing changes for debugging.
-
-**Parameters:**
-- `originalContent` (string): Original content
-- `processedContent` (string): Processed content
-
-**Returns:** `object` - Statistics object with character counts and reduction percentage
-
-## Tokenization
-
-#### `countTokens(text)`
-
-Counts tokens in text using the configured tokenizer.
-
-**Parameters:**
-- `text` (string): Text to tokenize
-
-**Returns:** `Promise<number>` - Token count
-
-**Example:**
-```typescript
-import { countTokens } from 'rag-lite-ts';
-
-const count = await countTokens('Hello world, this is a test.');
-console.log(`Token count: ${count}`); // Token count: 8
-```
-
-#### `DocumentPathManager`
-
-Utility class for managing document path storage strategies.
-
-**Example:**
-```typescript
-import { DocumentPathManager } from 'rag-lite-ts';
-
-const pathManager = new DocumentPathManager('relative', '/project');
-const storagePath = pathManager.toStoragePath('/project/docs/readme.md');
-console.log(storagePath); // "docs/readme.md"
+import { 
+  SearchEngine as CoreSearchEngine,
+  createTextEmbedFunction,
+  IndexManager,
+  openDatabase
+} from 'rag-lite-ts';
+
+// Custom embedding function
+const customEmbedFn = async (query: string) => {
+  // Your custom embedding logic
+  return {
+    embedding_id: 'custom-' + Date.now(),
+    vector: new Float32Array([/* your embeddings */])
+  };
+};
+
+// Create core components
+const db = await openDatabase('./db.sqlite');
+const indexManager = new IndexManager('./index.bin', './db.sqlite', 384, 'custom-model');
+await indexManager.initialize();
+
+// Create search engine with custom embedding
+const search = new CoreSearchEngine(customEmbedFn, indexManager, db);
 ```
 
 ## Configuration
 
-### Configuration Management
+### Global Configuration
 
-#### `config`
-
-Global configuration object with current settings.
-
-**Type:** `Config`
-
-#### `validateConfig(userConfig?)`
-
-Validates and merges user configuration with defaults.
-
-**Parameters:**
-- `userConfig` (Partial\<Config\>, optional): User configuration overrides
-
-**Returns:** `Config` - Validated configuration object
-
-#### `getModelDefaults(modelName)`
-
-Gets optimized default settings for a specific model.
-
-**Parameters:**
-- `modelName` (string): Embedding model name
-
-**Returns:** `Partial<Config>` - Model-specific defaults
-
-**Example:**
 ```typescript
 import { config, validateConfig, getModelDefaults } from 'rag-lite-ts';
 
@@ -668,67 +550,91 @@ const customConfig = validateConfig({
 });
 ```
 
+### Model Defaults
+
+```typescript
+// Available models with optimized defaults
+const models = {
+  'sentence-transformers/all-MiniLM-L6-v2': {
+    dimensions: 384,
+    chunk_size: 250,
+    chunk_overlap: 50,
+    batch_size: 16
+  },
+  'Xenova/all-mpnet-base-v2': {
+    dimensions: 768,
+    chunk_size: 400,
+    chunk_overlap: 80,
+    batch_size: 8
+  }
+};
+```
+
 ## Type Definitions
 
 ### Core Types
 
-#### `SearchResult`
+#### SearchResult
 
 ```typescript
 interface SearchResult {
-  text: string;           // Chunk text content
-  score: number;          // Similarity score (0-1)
+  content: string;                // Chunk text content
+  score: number;                  // Similarity score (0-1)
   document: {
-    id: number;           // Document ID
-    source: string;       // Document source path
-    title: string;        // Document title
+    id: number;                   // Document ID
+    source: string;               // Document source path
+    title: string;                // Document title
   };
 }
 ```
 
-#### `SearchOptions`
+#### SearchOptions
 
 ```typescript
 interface SearchOptions {
-  top_k?: number;         // Number of results to return (default: 10)
-  rerank?: boolean;       // Enable result reranking (default: false)
+  top_k?: number;                 // Number of results to return (default: 10)
+  rerank?: boolean;               // Enable result reranking (default: false)
 }
 ```
 
-#### `Document`
+#### IngestionResult
+
+```typescript
+interface IngestionResult {
+  documentsProcessed: number;     // Number of documents processed
+  chunksCreated: number;          // Number of chunks created
+  embeddingsGenerated: number;    // Number of embeddings generated
+  documentErrors: number;         // Number of document processing errors
+  embeddingErrors: number;        // Number of embedding errors
+  processingTimeMs: number;       // Total processing time in milliseconds
+}
+```
+
+#### Document
 
 ```typescript
 interface Document {
-  source: string;         // File path or identifier
-  title: string;          // Document title
-  content: string;        // Full document content
+  source: string;                 // File path or identifier
+  title: string;                  // Document title
+  content: string;                // Full document content
 }
 ```
 
-#### `Chunk`
-
-```typescript
-interface Chunk {
-  text: string;           // Chunk text content
-  chunk_index: number;    // Position within document
-}
-```
-
-#### `EmbeddingResult`
+#### EmbeddingResult
 
 ```typescript
 interface EmbeddingResult {
-  embedding_id: string;   // Unique identifier
-  vector: Float32Array;   // Embedding vector
+  embedding_id: string;           // Unique identifier
+  vector: Float32Array;           // Embedding vector
 }
 ```
 
 ### Configuration Types
 
-#### `Config`
+#### CoreConfig
 
 ```typescript
-interface Config {
+interface CoreConfig {
   // Model settings
   embedding_model: string;
   
@@ -743,293 +649,101 @@ interface Config {
   index_file: string;
   model_cache_path: string;
   
-  // Path storage
-  path_storage_strategy: 'absolute' | 'relative';
-  
   // Features
   rerank_enabled: boolean;
-  
-  // Preprocessing
-  preprocessing: PreprocessingConfig;
-}
-```
-
-#### `PreprocessingConfig`
-
-```typescript
-interface PreprocessingConfig {
-  mode: 'strict' | 'balanced' | 'rich';
-  overrides?: {
-    mdx?: 'strip' | 'keep' | 'placeholder';
-    mermaid?: 'strip' | 'extract' | 'placeholder';
-    code?: 'strip' | 'keep' | 'placeholder';
-  };
-}
-```
-
-### File Processing Types
-
-#### `FileProcessorOptions`
-
-```typescript
-interface FileProcessorOptions {
-  recursive?: boolean;                    // Process subdirectories
-  extensions?: string[];                  // File extensions to include
-  maxFileSize?: number;                   // Maximum file size in bytes
-  encoding?: string;                      // File encoding
-}
-```
-
-#### `FileDiscoveryResult`
-
-```typescript
-interface FileDiscoveryResult {
-  files: string[];                        // Successfully discovered files
-  errors: string[];                       // Discovery errors
-  totalSize: number;                      // Total size in bytes
-}
-```
-
-#### `DocumentProcessingResult`
-
-```typescript
-interface DocumentProcessingResult {
-  documents: Document[];                  // Successfully processed documents
-  errors: string[];                       // Processing errors
-  totalChunks: number;                    // Total chunks generated
-}
-```
-
-### Advanced Types
-
-#### `VectorIndexOptions`
-
-```typescript
-interface VectorIndexOptions {
-  dimensions: number;                     // Vector dimensions
-  maxElements: number;                    // Maximum vectors
-  efConstruction?: number;                // HNSW construction parameter
-  M?: number;                            // HNSW connectivity parameter
-}
-```
-
-#### `IndexStats`
-
-```typescript
-interface IndexStats {
-  totalVectors: number;                   // Number of vectors in index
-  modelVersion: string;                   // Embedding model version
-  dimensions: number;                     // Vector dimensions
-}
-```
-
-#### `DatabaseConnection`
-
-```typescript
-interface DatabaseConnection {
-  db: sqlite3.Database;                   // Raw SQLite database
-  run: (sql: string, params?: any[]) => Promise<sqlite3.RunResult>;
-  get: (sql: string, params?: any[]) => Promise<any>;
-  all: (sql: string, params?: any[]) => Promise<any[]>;
-  close: () => Promise<void>;
 }
 ```
 
 ## Error Handling
 
-### Error Classes
-
-#### `APIError`
-
-Base error class for all API-related errors.
+### Error Types
 
 ```typescript
-class APIError extends Error {
-  constructor(message: string, public code?: string, public details?: any);
-}
+import { 
+  APIError,
+  IngestionError,
+  SearchError,
+  ResourceError,
+  ModelCompatibilityError
+} from 'rag-lite-ts';
 ```
 
-#### `SearchError`
-
-Errors related to search operations.
+### Error Handling Patterns
 
 ```typescript
-class SearchError extends APIError {
-  constructor(message: string, suggestions?: string[]);
-}
-```
+import { SearchEngine } from 'rag-lite-ts';
 
-#### `IngestionError`
-
-Errors related to document ingestion.
-
-```typescript
-class IngestionError extends APIError {
-  constructor(message: string, suggestions?: string[]);
-}
-```
-
-#### `ResourceError`
-
-Errors related to resource management.
-
-```typescript
-class ResourceError extends APIError {
-  constructor(message: string, resourceType?: string);
-}
-```
-
-#### `ModelCompatibilityError`
-
-Errors related to model compatibility issues.
-
-```typescript
-class ModelCompatibilityError extends APIError {
-  constructor(currentModel: string, indexModel: string);
-}
-```
-
-### Error Utilities
-
-#### `handleAPIError(error)`
-
-Handles and formats API errors with user-friendly messages.
-
-**Parameters:**
-- `error` (Error): Error to handle
-
-**Returns:** `never` - Throws formatted error
-
-#### `ErrorFactory`
-
-Factory for creating specific error types.
-
-```typescript
-class ErrorFactory {
-  static createSearchError(message: string, suggestions?: string[]): SearchError;
-  static createIngestionError(message: string, suggestions?: string[]): IngestionError;
-  static createResourceError(message: string, resourceType?: string): ResourceError;
-  static createModelCompatibilityError(current: string, index: string): ModelCompatibilityError;
+try {
+  const search = new SearchEngine('./index.bin', './db.sqlite');
+  const results = await search.search('query');
+} catch (error) {
+  if (error instanceof ModelCompatibilityError) {
+    console.error('Model mismatch detected:', error.message);
+    // Handle model compatibility issues
+  } else if (error instanceof SearchError) {
+    console.error('Search failed:', error.message);
+    // Handle search-specific errors
+  } else {
+    console.error('Unexpected error:', error.message);
+  }
 }
 ```
 
 ## Utility Functions
 
-### Embedding Utilities
+### Database Operations
 
-#### `getEmbeddingEngine(modelName?, batchSize?)`
-
-Gets an embedding engine instance (cached or new).
-
-**Parameters:**
-- `modelName` (string, optional): Model name
-- `batchSize` (number, optional): Batch size
-
-**Returns:** `EmbeddingEngine` - Engine instance
-
-#### `initializeEmbeddingEngine(modelName?, batchSize?)`
-
-Gets and initializes an embedding engine.
-
-**Parameters:**
-- `modelName` (string, optional): Model name  
-- `batchSize` (number, optional): Batch size
-
-**Returns:** `Promise<EmbeddingEngine>` - Initialized engine
-
-### High-Level Functions
-
-#### `ingestDocuments(path, options?)`
-
-High-level function for document ingestion with automatic resource management.
-
-**Parameters:**
-- `path` (string): Path to ingest
-- `options` (IngestionOptions, optional): Ingestion options
-
-**Returns:** `Promise<IngestionResult>` - Ingestion results
-
-#### `rebuildIndex()`
-
-High-level function for index rebuilding with automatic resource management.
-
-**Returns:** `Promise<void>`
-
-**Example:**
 ```typescript
-import { ingestDocuments, rebuildIndex } from 'rag-lite-ts';
+import { 
+  openDatabase, 
+  initializeSchema,
+  insertDocument,
+  insertChunk,
+  getChunksByEmbeddingIds
+} from 'rag-lite-ts';
 
-// Simple ingestion with automatic cleanup
-const result = await ingestDocuments('./docs/', {
-  fileOptions: { recursive: true }
+const db = await openDatabase('./my-docs.sqlite');
+await initializeSchema(db);
+
+const docId = await insertDocument(db, 'README.md', 'My Document', 'Content...');
+```
+
+### File Processing
+
+```typescript
+import { 
+  discoverFiles,
+  processFiles,
+  discoverAndProcessFiles
+} from 'rag-lite-ts';
+
+const result = await discoverFiles('./docs/', { 
+  recursive: true,
+  extensions: ['.md', '.txt', '.mdx']
 });
 
-console.log(`Processed ${result.documentsProcessed} documents`);
-
-// Rebuild index if needed
-await rebuildIndex();
+console.log(`Found ${result.files.length} files`);
 ```
 
-## Usage Patterns
-
-### Basic Usage
+### Tokenization
 
 ```typescript
-import { SearchEngine, IngestionPipeline, initializeEmbeddingEngine } from 'rag-lite-ts';
+import { countTokens } from 'rag-lite-ts';
 
-// Initialize
-const embedder = await initializeEmbeddingEngine();
-const pipeline = new IngestionPipeline('./', embedder);
-const searchEngine = new SearchEngine('./vector-index.bin', './db.sqlite');
-
-// Configure path storage (optional - defaults to relative)
-pipeline.setPathStorageStrategy('relative', '/project/base');
-
-// Ingest
-await pipeline.ingestDirectory('./docs/');
-
-// Search
-const results = await searchEngine.search('machine learning');
-// Results will include relative paths like "docs/api/auth.md"
+const count = await countTokens('Hello world, this is a test.');
+console.log(`Token count: ${count}`); // Token count: 8
 ```
 
-### Advanced Usage with Resource Management
+### Path Management
 
 ```typescript
-import { ResourceManager, ingestDocuments } from 'rag-lite-ts';
+import { DocumentPathManager } from 'rag-lite-ts';
 
-// Automatic resource management
-const resources = await ResourceManager.getResources();
-
-// Use managed resources
-const stats = await resources.indexManager.getStats();
-console.log(`Index has ${stats.totalVectors} vectors`);
-
-// Resources are automatically cleaned up on process exit
+const pathManager = new DocumentPathManager('relative', '/project');
+const storagePath = pathManager.toStoragePath('/project/docs/readme.md');
+console.log(storagePath); // "docs/readme.md"
 ```
 
-### Custom Configuration
+---
 
-```typescript
-import { validateConfig, EmbeddingEngine, IngestionPipeline } from 'rag-lite-ts';
-
-// Custom configuration
-const config = validateConfig({
-  embedding_model: 'Xenova/all-mpnet-base-v2',
-  chunk_size: 300,
-  path_storage_strategy: 'relative',
-  preprocessing: {
-    mode: 'rich',
-    overrides: { mdx: 'keep' }
-  }
-});
-
-// Use custom configuration
-const embedder = new EmbeddingEngine(config.embedding_model, config.batch_size);
-const pipeline = new IngestionPipeline('./', embedder);
-
-// Apply path storage strategy from config
-pipeline.setPathStorageStrategy(config.path_storage_strategy, './project');
-```
-
-This API reference covers all public APIs available in RAG-lite TS. For configuration details, see the [Configuration Guide](configuration.md).
+This API reference covers all aspects of RAG-lite TS from simple usage to advanced customization. Start with the [Quick Start](#quick-start) section and [Main Classes](#main-classes) for typical usage, then explore the [Factory Pattern](#factory-pattern) and [Core Architecture](#core-architecture) sections for advanced use cases.

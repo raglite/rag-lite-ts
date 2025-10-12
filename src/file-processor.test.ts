@@ -9,7 +9,7 @@ import {
   discoverAndProcessFiles,
   DEFAULT_FILE_PROCESSOR_OPTIONS 
 } from './file-processor.js';
-import { DocumentPathManager } from './path-manager.js';
+import { DocumentPathManager } from './core/path-manager.js';
 
 // Helper function to create a temporary directory for testing
 async function createTempDir(): Promise<string> {

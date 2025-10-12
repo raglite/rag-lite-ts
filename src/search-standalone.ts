@@ -6,7 +6,7 @@
  */
 
 import { runSearch } from './cli/search.js';
-import { EXIT_CODES, ConfigurationError } from './config.js';
+import { EXIT_CODES, ConfigurationError } from './core/config.js';
 
 function parseArgs(): { query: string; options: Record<string, any> } {
   const args = process.argv.slice(2);

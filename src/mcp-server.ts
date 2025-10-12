@@ -21,13 +21,12 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync, statSync } from 'fs';
 import { resolve } from 'path';
-import { SearchEngine } from './search.js';
-import { IngestionPipeline, rebuildIndex } from './ingestion.js';
-import { initializeEmbeddingEngine } from './embedder.js';
+import { TextSearchFactory, TextIngestionFactory } from './factories/text-factory.js';
+import type { SearchEngine } from './core/search.js';
 
-import { openDatabase } from './db.js';
-import { config, validateConfig, ConfigurationError } from './config.js';
-import type { SearchOptions } from './types.js';
+import { openDatabase } from './core/db.js';
+import { config, validateCoreConfig, ConfigurationError } from './core/config.js';
+import type { SearchOptions } from './core/types.js';
 
 /**
  * MCP Server class that wraps RAG-lite TS functionality
@@ -238,7 +237,7 @@ class RagLiteMCPServer {
             title: result.document.title,
             source: result.document.source
           },
-          text: result.text
+          text: result.content
         }))
       };
 
@@ -355,17 +354,24 @@ class RagLiteMCPServer {
         throw new Error(`Unsupported model: ${args.model}. Supported models: sentence-transformers/all-MiniLM-L6-v2, Xenova/all-mpnet-base-v2`);
       }
 
-      // Create config overrides if model is specified
-      const configOverrides = args.model ? { embedding_model: args.model } : {};
+      // Prepare factory options
+      const factoryOptions: any = {};
+      if (args.model) {
+        factoryOptions.embeddingModel = args.model;
+      }
+      if (args.force_rebuild) {
+        factoryOptions.forceRebuild = true;
+      }
 
-      // Create and run ingestion pipeline using existing functionality
-      const pipeline = new IngestionPipeline();
-      pipeline.setConfigOverrides(configOverrides);
+      // Create and run ingestion pipeline using factory
+      const pipeline = await TextIngestionFactory.create(
+        config.db_file,
+        config.index_file,
+        factoryOptions
+      );
 
       try {
-        const result = await pipeline.ingestPath(resolvedPath, {
-          forceRebuild: args.force_rebuild || false
-        });
+        const result = await pipeline.ingestPath(resolvedPath);
 
         // Reset search engine initialization flag since index may have changed
         this.isSearchEngineInitialized = false;
@@ -501,27 +507,81 @@ class RagLiteMCPServer {
    */
   private async handleRebuildIndex(_args: any) {
     try {
-      // Use existing rebuild functionality
-      await rebuildIndex();
+      // Create ingestion pipeline with force rebuild using factory
+      const pipeline = await TextIngestionFactory.create(
+        config.db_file,
+        config.index_file,
+        { forceRebuild: true }
+      );
 
-      // Reset search engine initialization flag since index was rebuilt
-      this.isSearchEngineInitialized = false;
-      this.searchEngine = null;
+      try {
+        // Get all documents from database and re-ingest them
+        const db = await openDatabase(config.db_file);
+        
+        try {
+          const documents = await db.all('SELECT DISTINCT source FROM documents ORDER BY source');
+          
+          if (documents.length === 0) {
+            throw new Error('No documents found in database. Nothing to rebuild.');
+          }
 
-      const rebuildSummary = {
-        operation: 'rebuild_index',
-        success: true,
-        message: 'Vector index has been successfully rebuilt. All embeddings have been regenerated with the current model.'
-      };
+          let totalResult = {
+            documentsProcessed: 0,
+            chunksCreated: 0,
+            embeddingsGenerated: 0,
+            documentErrors: 0,
+            embeddingErrors: 0,
+            processingTimeMs: 0
+          };
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(rebuildSummary, null, 2),
-          },
-        ],
-      };
+          // Re-ingest each document
+          for (const doc of documents) {
+            if (existsSync(doc.source)) {
+              const result = await pipeline.ingestFile(doc.source);
+              
+              totalResult.documentsProcessed += result.documentsProcessed;
+              totalResult.chunksCreated += result.chunksCreated;
+              totalResult.embeddingsGenerated += result.embeddingsGenerated;
+              totalResult.documentErrors += result.documentErrors;
+              totalResult.embeddingErrors += result.embeddingErrors;
+              totalResult.processingTimeMs += result.processingTimeMs;
+            } else {
+              totalResult.documentErrors++;
+            }
+          }
+
+          // Reset search engine initialization flag since index was rebuilt
+          this.isSearchEngineInitialized = false;
+          this.searchEngine = null;
+
+          const rebuildSummary = {
+            operation: 'rebuild_index',
+            success: true,
+            message: 'Vector index has been successfully rebuilt. All embeddings have been regenerated with the current model.',
+            documents_processed: totalResult.documentsProcessed,
+            chunks_created: totalResult.chunksCreated,
+            embeddings_generated: totalResult.embeddingsGenerated,
+            document_errors: totalResult.documentErrors,
+            embedding_errors: totalResult.embeddingErrors,
+            processing_time_ms: totalResult.processingTimeMs,
+            processing_time_seconds: Math.round(totalResult.processingTimeMs / 1000 * 100) / 100
+          };
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(rebuildSummary, null, 2),
+              },
+            ],
+          };
+
+        } finally {
+          await db.close();
+        }
+      } finally {
+        await pipeline.cleanup();
+      }
 
     } catch (error) {
       throw new Error(`Index rebuild failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -542,7 +602,7 @@ class RagLiteMCPServer {
 
       // Get model information and compatibility status
       const { getModelDefaults } = await import('./config.js');
-      const { getStoredModelInfo } = await import('./db.js');
+      const { getStoredModelInfo } = await import('./core/db.js');
       
       const currentModel = config.embedding_model;
       const currentDefaults = getModelDefaults(currentModel);
@@ -647,7 +707,7 @@ class RagLiteMCPServer {
   }
 
   /**
-   * Initialize search engine components
+   * Initialize search engine components using factory
    * Lazy initialization to avoid startup overhead when not needed
    */
   private async initializeSearchEngine(): Promise<void> {
@@ -657,39 +717,22 @@ class RagLiteMCPServer {
 
     try {
       // Validate configuration
-      validateConfig(config);
+      validateCoreConfig(config);
 
-      // Open database connection
-      const db = await openDatabase(config.db_file);
-
-      // Read stored model info from database (this is the key fix!)
-      const { getStoredModelInfo } = await import('./db.js');
-      const storedModelInfo = await getStoredModelInfo(db);
-      
-      if (!storedModelInfo) {
-        throw new Error('No model information found in database. The database may be from an older version or corrupted. Try running ingestion again.');
-      }
-
-      // Use the stored model info instead of config.embedding_model
-      const { getModelDefaults } = await import('./config.js');
-      const modelDefaults = getModelDefaults(storedModelInfo.modelName);
-      const embedder = await initializeEmbeddingEngine(storedModelInfo.modelName, modelDefaults.batch_size);
-
-      // Initialize index manager with stored model info
-      const { IndexManager } = await import('./index-manager.js');
-      const indexManager = new IndexManager(config.index_file, config.db_file, storedModelInfo.dimensions, storedModelInfo.modelName);
-      await indexManager.initialize();
-
-      // Create search engine
-      this.searchEngine = SearchEngine.createWithComponents(embedder, indexManager, db, config.rerank_enabled);
-      await this.searchEngine.initialize();
+      // Create search engine using factory
+      // Disable reranking by default in MCP server to avoid model loading issues
+      this.searchEngine = await TextSearchFactory.create(
+        config.index_file,
+        config.db_file,
+        { enableReranking: false }
+      );
 
       this.isSearchEngineInitialized = true;
 
     } catch (error) {
       // Check if this is a model mismatch error and re-throw with more context
       if (error instanceof Error && (error.message.includes('Model mismatch detected') || error.message.includes('dimension mismatch'))) {
-        // Re-throw the original error - it already has good formatting from IndexManager
+        // Re-throw the original error - it already has good formatting from factory
         throw error;
       }
 

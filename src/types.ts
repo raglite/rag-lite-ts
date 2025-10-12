@@ -52,4 +52,4 @@ export interface PreprocessingConfig {
 }
 
 // Re-export database types for convenience
-export type { DatabaseConnection, ChunkResult } from './db.js';
+export type { DatabaseConnection, ContentChunk } from './core/db.js';

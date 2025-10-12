@@ -4,18 +4,27 @@ A simple example demonstrating how to use the RAG-lite TypeScript API for docume
 
 ## What This Example Does
 
-This example shows the basic RAG-lite workflow:
+This example shows the basic RAG-lite workflow using the simple constructor API:
 
-1. **Initialize** the embedding engine
-2. **Ingest** documents (uses the main README.md as sample content)
-3. **Search** the indexed documents using the API
-4. **Display** search results with scores and snippets
+1. **Create ingestion pipeline** using `new IngestionPipeline()` (simple constructor)
+2. **Ingest documents** from the docs directory (processes README.md as sample content)
+3. **Create search engine** using `new SearchEngine()` (simple constructor)
+4. **Search** the indexed documents using semantic queries
+5. **Display** search results with relevance scores and content snippets
+
+The simple constructor API provides an intuitive interface that "just works" with sensible defaults while allowing configuration when needed.
 
 ## Running the Example
 
 ```bash
-# Run the example
+# Run the example (uses existing database if present)
 node index.js
+
+# Or use npm scripts
+npm start
+
+# Clean run (removes existing database and index files first)
+npm run clean
 ```
 
 ## Expected Output
@@ -28,30 +37,39 @@ The example will:
   - "TypeScript API usage examples"
   - "MCP server integration"
 
-Each search shows the top 3 results with relevance scores and text snippets.
+Each search shows the top 3 results with relevance scores and content snippets.
 
 ## Key API Components
 
-### EmbeddingEngine
-```javascript
-const embedder = await initializeEmbeddingEngine();
-```
-Initializes the embedding model (downloads if needed).
-
 ### IngestionPipeline
 ```javascript
-const embedder = await initializeEmbeddingEngine();
-const pipeline = new IngestionPipeline('./', embedder);
-await pipeline.ingestDirectory('./docs/');
+const ingestion = new IngestionPipeline('./db.sqlite', './vector-index.bin');
+await ingestion.ingestDirectory('./docs/');
 ```
-Processes and indexes documents from a directory.
+Creates an ingestion pipeline and processes documents from a directory. The constructor handles embedding model initialization automatically.
 
 ### SearchEngine
 ```javascript
 const searchEngine = new SearchEngine('./vector-index.bin', './db.sqlite');
 const results = await searchEngine.search(query, { top_k: 3 });
 ```
-Performs semantic search over indexed documents.
+Creates a search engine and performs semantic search over indexed documents. The constructor automatically detects and loads the correct embedding model.
+
+### Search Results Structure
+```javascript
+interface SearchResult {
+  content: string;        // The text content of the chunk
+  score: number;          // Relevance score (0-1, higher is better)
+  contentType: string;    // Content type (e.g., "text")
+  document: {
+    id: number;           // Document ID
+    source: string;       // File path
+    title: string;        // Document title
+    contentType: string;  // Document content type
+  };
+  metadata?: Record<string, any>; // Optional metadata
+}
+```
 
 ## Sample Search Queries
 

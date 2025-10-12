@@ -1,20 +1,20 @@
-import { SearchEngine, IngestionPipeline, initializeEmbeddingEngine } from 'rag-lite-ts';
+import { SearchEngine, IngestionPipeline } from 'rag-lite-ts';
 
 async function main() {
     console.log('🚀 RAG-lite API Example');
     console.log('========================\n');
 
     try {
-        // Initialize the embedding engine
-        const embedder = await initializeEmbeddingEngine();
-
-        // Ingest documents (supports .md, .txt, .mdx)
+        // Ingest documents using the simple constructor pattern
         console.log('Ingesting documents...');
-        const pipeline = new IngestionPipeline('./', embedder);
-        await pipeline.ingestDirectory('./docs/');
+        const ingestion = new IngestionPipeline('./db.sqlite', './vector-index.bin');
+        await ingestion.ingestDirectory('./docs/');
+        console.log('✅ Documents ingested successfully!\n');
 
-        // Search
+        // Create search engine using the simple constructor pattern
+        console.log('Initializing search engine...');
         const searchEngine = new SearchEngine('./vector-index.bin', './db.sqlite');
+        console.log('✅ Search engine ready!\n');
 
         // Run sample searches
         const queries = [
@@ -41,12 +41,13 @@ async function main() {
             results.forEach((result, index) => {
                 console.log(`${index + 1}. Score: ${result.score.toFixed(3)}`);
                 console.log(`   Source: ${result.document.source}`);
-                console.log(`   Text: ${result.text.substring(0, 120)}...`);
+                console.log(`   Content: ${result.content.substring(0, 120)}...`);
                 console.log();
             });
         }
     } catch (error) {
         console.error('❌ Error:', error.message);
+        console.error('Stack:', error.stack);
         process.exit(1);
     }
 }

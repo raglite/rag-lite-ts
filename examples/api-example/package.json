@@ -1,0 +1,23 @@
+{
+  "name": "rag-lite-api-example",
+  "version": "1.0.0",
+  "description": "Example demonstrating RAG-lite TypeScript API usage",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "clean": "node run-clean.js",
+    "clean:files": "rm -f db.sqlite vector-index.bin"
+  },
+  "dependencies": {
+    "rag-lite-ts": "file:../../"
+  },
+  "keywords": [
+    "rag-lite",
+    "example",
+    "semantic-search",
+    "typescript"
+  ],
+  "author": "RAG-lite TS Contributors",
+  "license": "MIT"
+}

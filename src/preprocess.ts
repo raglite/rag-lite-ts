@@ -1,5 +1,5 @@
 import { PreprocessingConfig, PreprocessorOptions } from './types.js';
-import { mergePreprocessingConfig, validatePreprocessingConfig } from './config.js';
+import { mergePreprocessingConfig, validatePreprocessingConfig } from './core/config.js';
 import { preprocessorRegistry, ContentTypeDetector } from './preprocessors/index.js';
 
 /**

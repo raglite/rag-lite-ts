@@ -1,10 +1,10 @@
 import { promises as fs } from 'fs';
 import { join, extname, basename, resolve } from 'path';
-import { handleError, ErrorCategory, ErrorSeverity, safeExecute } from './error-handler.js';
+import { handleError, ErrorCategory, ErrorSeverity, safeExecute } from './core/error-handler.js';
 import { preprocessDocument } from './preprocess.js';
-import { config } from './config.js';
-import { DocumentPathManager } from './path-manager.js';
-import type { Document } from './types.js';
+import { config } from './core/config.js';
+import { DocumentPathManager } from './core/path-manager.js';
+import type { Document } from './core/types.js';
 import { createRequire } from 'module';
 import { JSDOM } from 'jsdom';
 const require = createRequire(import.meta.url);

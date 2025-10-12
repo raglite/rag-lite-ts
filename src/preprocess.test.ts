@@ -2,7 +2,7 @@ import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { preprocessDocument, getPreprocessingStats } from './preprocess.js';
 import { PreprocessingConfig } from './types.js';
-import { validatePreprocessingConfig, mergePreprocessingConfig, ConfigurationError } from './config.js';
+import { validatePreprocessingConfig, mergePreprocessingConfig, ConfigurationError } from './core/config.js';
 
 // Store original console methods
 const originalConsoleError = console.error;

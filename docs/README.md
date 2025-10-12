@@ -16,6 +16,7 @@ New to RAG-lite TS? Start with the [CLI Reference](cli-reference.md) for install
   - MCP server integration
 
 - **[API Reference](api-reference.md)** - Comprehensive programmatic API documentation
+  - Simple constructors and factory patterns
   - Core classes and methods
   - Type definitions and interfaces
   - Usage patterns and examples

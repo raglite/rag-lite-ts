@@ -36,7 +36,7 @@ A comprehensive example demonstrating how to use RAG-lite TS for semantic search
 
 3. **Run the Agent**:
    ```bash
-   dexto --agent ./agent.yml
+   dexto --agent ./dexto-helper-agent.yml
    ```
 
 4. **Test RAG-lite Search** (see [example-queries.md](./example-queries.md) for comprehensive examples):
@@ -58,7 +58,7 @@ This example demonstrates RAG-lite TS integration patterns:
 
 ## Files Included
 
-- `agent.yml` - Dexto agent configuration with RAG-lite MCP integration
+- `dexto-helper-agent.yml` - Dexto agent configuration with RAG-lite MCP integration
 - `docs/` - Nested documentation folder structure for indexing
 - `db.sqlite` - RAG-lite documentation database (generated after indexing)
 - `vector-index.bin` - RAG-lite vector search index (generated after indexing)
@@ -73,7 +73,7 @@ This example demonstrates RAG-lite TS integration patterns:
 - **Local Storage**: SQLite database and hnswlib vector index for fast local search
 - **Preprocessing**: Balanced mode for handling markdown with code blocks and diagrams
 
-### Agent Configuration (`agent.yml`)
+### Agent Configuration (`dexto-helper-agent.yml`)
 - **MCP Integration**: Connects to RAG-lite MCP server for document search capabilities
 - **System Prompts**: Specialized prompts for documentation retrieval and response formatting
 - **Local-First Search**: No external API dependencies for document indexing and search
@@ -89,7 +89,7 @@ raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2
 raglite-mcp &
 
 # 3. Start the agent
-dexto --agent ./agent.yml
+dexto --agent ./dexto-helper-agent.yml
 
 # The system will automatically:
 # 1. Load the RAG-lite configuration
@@ -209,4 +209,4 @@ npm install -g rag-lite-ts
 1. **Verify raglite-mcp works**: `raglite-mcp --help`
 2. **Check database exists**: Ensure `db.sqlite` and `vector-index.bin` exist
 3. **Re-index if needed**: `raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2`
-4. **Check environment variables**: Verify paths in agent.yml match your file locations
+4. **Check environment variables**: Verify paths in dexto-helper-agent.yml match your file locations

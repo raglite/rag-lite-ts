@@ -1,28 +1,18 @@
 # RAG-lite TS
-*A local-first, TypeScript-friendly retrieval engine*
+*Simple by default, powerful when needed*
 
-A local-first TypeScript retrieval engine for semantic search over static documents. Built to be lightweight, modular, and hackable with zero external run-time dependencies.
+A local-first TypeScript retrieval engine for semantic search over static documents. Built to be simple to use, lightweight, and hackable with zero external run-time dependencies.
 
 ![Pipeline](docs/assets/pipeline.jpg)
-
-## Features
-
-- 🏠 **Local-first**: All processing happens offline on your machine
-- 🚀 **Fast**: Sub-100ms queries for typical document collections
-- 📝 **Simple**: No ORMs, frameworks, or complex abstractions
-- 🔍 **Semantic**: Uses embeddings for meaning-based search, not just keywords
-- 🛠️ **Hackable**: Clear module boundaries and minimal dependencies
-- 📦 **Dual Interface**: CLI + MCP server entry points in one package
-- 🎯 **TypeScript**: Full type safety with ESM-only architecture
-- 🧠 **Multi-Model**: Support for multiple embedding models with automatic compatibility checking
 
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [Features](#features)
 - [How It Works](#how-it-works)
 - [Supported Models](#supported-models)
-- [MCP Server Integration](#mcp-server-integration)
 - [Documentation](#documentation)
+- [MCP Server Integration](#mcp-server-integration)
 - [Development](#development)
 - [Contributing](#contributing)
 - [License](#license)
@@ -61,19 +51,49 @@ raglite search "complex query"
 ### Programmatic Usage
 
 ```typescript
-import { SearchEngine, IngestionPipeline, initializeEmbeddingEngine } from 'rag-lite-ts';
+import { SearchEngine, IngestionPipeline } from 'rag-lite-ts';
 
-// Initialize and ingest
-const embedder = await initializeEmbeddingEngine();
-const pipeline = new IngestionPipeline('./data/', embedder);
-await pipeline.ingestDirectory('./docs/');
+// Initialize and ingest documents
+const ingestion = new IngestionPipeline('./db.sqlite', './vector-index.bin');
+await ingestion.ingestDirectory('./docs/');
 
-// Search
-const searchEngine = new SearchEngine('./vector-index.bin', './db.sqlite');
-const results = await searchEngine.search('machine learning', { top_k: 10 });
+// Search your documents
+const search = new SearchEngine('./vector-index.bin', './db.sqlite');
+const results = await search.search('machine learning', { top_k: 10 });
+```
+
+#### Configuration Options
+
+```typescript
+import { SearchEngine, IngestionPipeline } from 'rag-lite-ts';
+
+// Custom model configuration
+const search = new SearchEngine('./vector-index.bin', './db.sqlite', {
+  embeddingModel: 'Xenova/all-mpnet-base-v2',
+  enableReranking: true,
+  topK: 15
+});
+
+// Ingestion with custom settings
+const ingestion = new IngestionPipeline('./db.sqlite', './vector-index.bin', {
+  embeddingModel: 'Xenova/all-mpnet-base-v2',
+  chunkSize: 400,
+  chunkOverlap: 80
+});
 ```
 
 → **[Complete CLI Reference](docs/cli-reference.md)** | **[API Documentation](docs/api-reference.md)**
+
+## Features
+
+- 📝 **Simple**: Get started with just `new SearchEngine()` - no complex setup required
+- 🏠 **Local-first**: All processing happens offline on your machine
+- 🚀 **Fast**: Sub-100ms queries for typical document collections
+- 🔍 **Semantic**: Uses embeddings for meaning-based search, not just keywords
+- 🛠️ **Flexible**: Simple constructors for basic use, advanced options when you need them
+- 📦 **Complete**: CLI, programmatic API, and MCP server in one package
+- 🎯 **TypeScript**: Full type safety with modern ESM architecture
+- 🧠 **Smart**: Automatic model management and compatibility checking
 
 ## How It Works
 
@@ -115,8 +135,34 @@ RAG-lite TS supports multiple embedding models with automatic optimization:
 
 → **[Complete Model Guide](docs/model-guide.md)** | **[Performance Benchmarks](docs/EMBEDDING_MODELS_COMPARISON.md)**
 
+## Documentation
 
+### 📚 Getting Started
+- **[CLI Reference](docs/cli-reference.md)** - Installation and basic usage
+- **[API Reference](docs/api-reference.md)** - Simple constructors and programmatic usage
 
+### 🔧 Customization & Advanced Usage
+- **[Configuration Guide](docs/configuration.md)** - Custom settings and options
+- **[Model Selection Guide](docs/model-guide.md)** - Choose the right model for your needs
+- **[Path Storage Strategies](docs/path-strategies.md)** - Document path management
+- **[Document Preprocessing](docs/preprocessing.md)** - Content processing options
+
+### 🛠️ Support
+- **[Troubleshooting Guide](docs/troubleshooting.md)** - Common issues and solutions
+
+### 📊 Technical References
+- **[Embedding Models Comparison](docs/EMBEDDING_MODELS_COMPARISON.md)** - Detailed benchmarks
+- **[Documentation Hub](docs/README.md)** - Complete documentation index
+
+### Quick Links by User Type
+
+| User Type | Start Here | Next Steps |
+|-----------|------------|------------|
+| **New Users** | [CLI Reference](docs/cli-reference.md) | [API Reference](docs/api-reference.md) |
+| **App Developers** | [API Reference](docs/api-reference.md) | [Configuration Guide](docs/configuration.md) |
+| **Performance Optimizers** | [Model Guide](docs/model-guide.md) | [Performance Benchmarks](docs/EMBEDDING_MODELS_COMPARISON.md) |
+| **Production Deployers** | [Configuration Guide](docs/configuration.md) | [Path Strategies](docs/path-strategies.md) |
+| **Troubleshooters** | [Troubleshooting Guide](docs/troubleshooting.md) | [Preprocessing Guide](docs/preprocessing.md) |
 
 ## MCP Server Integration
 
@@ -143,34 +189,6 @@ raglite-mcp
 
 → **[Complete MCP Integration Guide](docs/cli-reference.md#mcp-server)**
 
-## Documentation
-
-### 📚 Core Guides
-- **[CLI Reference](docs/cli-reference.md)** - Complete command-line documentation
-- **[API Reference](docs/api-reference.md)** - Programmatic usage and types
-- **[Configuration Guide](docs/configuration.md)** - Advanced configuration options
-
-### 🔧 Specialized Guides  
-- **[Model Selection Guide](docs/model-guide.md)** - Embedding models and performance
-- **[Path Storage Strategies](docs/path-strategies.md)** - Document path management
-- **[Document Preprocessing](docs/preprocessing.md)** - Content processing options
-- **[Troubleshooting Guide](docs/troubleshooting.md)** - Common issues and solutions
-
-### 📊 Technical References
-- **[Embedding Models Comparison](docs/EMBEDDING_MODELS_COMPARISON.md)** - Detailed benchmarks
-- **[Documentation Hub](docs/README.md)** - Complete documentation index
-
-### Quick Links by Use Case
-
-| Use Case | Primary Guide | Supporting Guides |
-|----------|---------------|-------------------|
-| **Getting Started** | [CLI Reference](docs/cli-reference.md) | [Configuration](docs/configuration.md) |
-| **Model Selection** | [Model Guide](docs/model-guide.md) | [Performance Benchmarks](docs/EMBEDDING_MODELS_COMPARISON.md) |
-| **Production Setup** | [Configuration Guide](docs/configuration.md) | [Path Strategies](docs/path-strategies.md) |
-| **File Processing** | [Preprocessing Guide](docs/preprocessing.md) | [Troubleshooting](docs/troubleshooting.md) |
-| **Integration** | [API Reference](docs/api-reference.md) | [Configuration](docs/configuration.md) |
-| **Issue Resolution** | [Troubleshooting Guide](docs/troubleshooting.md) | All guides |
-
 ## Development
 
 ### Building from Source
@@ -194,13 +212,21 @@ npm run test:integration
 
 ```
 src/
-├── index.ts              # Main exports
-├── config.ts             # Configuration system
-├── db.ts                 # SQLite operations
-├── embedder.ts           # Embedding generation
-├── search.ts             # Search engine
-├── ingestion.ts          # Document ingestion
-├── preprocess.ts         # Document preprocessing
+├── index.ts              # Main exports and factory functions
+├── search.ts             # Public SearchEngine API
+├── ingestion.ts          # Public IngestionPipeline API
+├── core/                 # Model-agnostic core layer
+│   ├── search.ts         # Core search engine
+│   ├── ingestion.ts      # Core ingestion pipeline
+│   ├── db.ts             # SQLite operations
+│   ├── config.ts         # Configuration system
+│   └── types.ts          # Core type definitions
+├── factories/            # Factory functions for easy setup
+│   └── text-factory.ts   # Text-specific factories
+├── text/                 # Text-specific implementations
+│   ├── embedder.ts       # Text embedding generation
+│   ├── reranker.ts       # Text reranking
+│   └── tokenizer.ts      # Text tokenization
 ├── cli.ts                # CLI interface
 ├── mcp-server.ts         # MCP server
 └── preprocessors/        # Content type processors
@@ -210,14 +236,17 @@ dist/                     # Compiled output
 
 ### Design Philosophy
 
-**"Boringly Simple" Approach:**
-- ✅ Raw SQLite queries (no ORMs)
-- ✅ Direct function calls (no REST/GraphQL)
-- ✅ Simple configuration objects
-- ✅ Minimal abstractions
-- ❌ No complex frameworks or dependency injection
+**Simple by default, powerful when needed:**
+- ✅ Simple constructors work immediately with sensible defaults
+- ✅ Configuration options available when you need customization
+- ✅ Advanced patterns available for complex use cases
+- ✅ Clean architecture with minimal dependencies
+- ✅ No ORMs or heavy frameworks - just TypeScript and SQLite
+- ✅ Extensible design for future capabilities
 
-This keeps the codebase hackable and maintainable while providing all functionality needed for local semantic search.
+This approach ensures that basic usage is effortless while providing the flexibility needed for advanced scenarios.
+
+
 
 ## Contributing
 
@@ -228,7 +257,7 @@ This keeps the codebase hackable and maintainable while providing all functional
 5. Ensure all tests pass
 6. Submit a pull request
 
-Please maintain the "boringly simple" philosophy - avoid unnecessary abstractions or dependencies.
+We welcome contributions that maintain our clean architecture principles while enhancing functionality and developer experience.
 
 ## License
 

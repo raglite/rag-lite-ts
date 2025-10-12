@@ -60,6 +60,8 @@ raglite ingest <path> [options]
 - `sentence-transformers/all-MiniLM-L6-v2` (384 dim, fast, default)
 - `Xenova/all-mpnet-base-v2` (768 dim, higher quality)
 
+**Note:** The search command automatically uses the model that was used during ingestion (stored in database). To search with a different model, you need to re-ingest with that model first.
+
 #### Examples
 
 **Basic ingestion:**
@@ -76,7 +78,7 @@ raglite ingest ./README.md
 # Use higher quality model
 raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2
 
-# Auto-rebuild if switching models
+# Auto-rebuild if switching models (WARNING: rebuilds entire index)
 raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2 --rebuild-if-needed
 ```
 

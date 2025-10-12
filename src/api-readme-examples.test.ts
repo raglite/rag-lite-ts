@@ -5,7 +5,7 @@
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { SearchEngine, IngestionPipeline, initializeEmbeddingEngine, ResourceManager } from './index.js';
+import { SearchEngine, IngestionPipeline, initializeEmbeddingEngine } from './index.js';
 import { existsSync, rmSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -38,60 +38,49 @@ Machine learning is a subset of artificial intelligence that focuses on algorith
 - Supervised learning uses labeled data
 - Unsupervised learning finds patterns in unlabeled data
 - Neural networks are inspired by biological neurons
+- Deep learning uses multi-layer neural networks
     `);
     
     writeFileSync(join(docsDir, 'api-docs.md'), `
 # API Documentation
 
-This document describes the REST API endpoints.
+This document describes the REST API endpoints for our service.
 
 ## Authentication
 
-All API calls require authentication via API key.
+All API calls require authentication via API key in the header.
 
 ## Endpoints
 
-### GET /users
-Returns a list of users.
+### GET /search
+Search for documents using natural language queries.
 
-### POST /users
-Creates a new user.
+### POST /documents
+Upload new documents to the knowledge base.
     `);
-    
-    writeFileSync(join(docsDir, 'typescript-guide.md'), `
-# TypeScript Examples
 
-TypeScript adds static typing to JavaScript.
+    writeFileSync(join(docsDir, 'getting-started.md'), `
+# Getting Started Guide
 
-## Interfaces
+Welcome to our platform! This guide will help you get up and running quickly.
 
-\`\`\`typescript
-interface User {
-  id: number;
-  name: string;
-  email: string;
-}
-\`\`\`
+## Installation
 
-## Async Functions
+1. Install the required dependencies
+2. Configure your environment
+3. Run the setup script
 
-\`\`\`typescript
-async function fetchUser(id: number): Promise<User> {
-  const response = await fetch(\`/api/users/\${id}\`);
-  return response.json();
-}
-\`\`\`
+## First Steps
+
+After installation, you can start by creating your first project.
     `);
   });
 
   afterEach(async () => {
-    // Clean up resources first
-    await ResourceManager.cleanupAll();
-    
     // Add a small delay for Windows file handles to close
     await new Promise(resolve => setTimeout(resolve, 100));
     
-    // Then clean up test directory with retry logic for Windows
+    // Clean up test directory
     if (existsSync(testDir)) {
       let retries = 3;
       while (retries > 0) {
@@ -103,7 +92,6 @@ async function fetchUser(id: number): Promise<User> {
             await new Promise(resolve => setTimeout(resolve, 200));
             retries--;
           } else {
-            // If it's the last retry or not a busy error, just log and continue
             console.warn('Failed to clean up test directory:', error.message);
             break;
           }
@@ -112,215 +100,239 @@ async function fetchUser(id: number): Promise<User> {
     }
   });
 
-  test('README programmatic usage example works exactly as documented', async () => {
-    // Change to test directory for this test
+  test('Quick Start Example', async () => {
     const originalCwd = process.cwd();
     process.chdir(testDir);
-    
+
     try {
-      // This is the exact code from the README
-      const embedder = await initializeEmbeddingEngine();
-
-      // Ingest documents (supports .md, .txt, .mdx)
-      const pipeline = new IngestionPipeline('./data/', embedder);
-      await pipeline.ingestDirectory('./docs/');
-
-      // Search
-      const searchEngine = new SearchEngine('./data/vector-index.bin', './data/db.sqlite');
-      const results = await searchEngine.search('machine learning', { top_k: 10 });
-
-      // Verify results
+      // README Quick Start Example
+      
+      // Simple ingestion - just works!
+      const ingestion = new IngestionPipeline('./data/db.sqlite', './data/vector-index.bin');
+      await ingestion.ingestDirectory('./docs');
+      
+      // Simple search - just works!
+      const search = new SearchEngine('./data/vector-index.bin', './data/db.sqlite');
+      const results = await search.search('machine learning concepts');
+      
+      // Verify the example works
       assert.ok(results);
       assert.ok(Array.isArray(results));
       assert.ok(results.length > 0);
       
-      // Verify result structure matches README interface
+      // Verify result structure
       const firstResult = results[0];
-      assert.ok('text' in firstResult);
+      assert.ok('content' in firstResult);
       assert.ok('score' in firstResult);
       assert.ok('document' in firstResult);
-      assert.ok('id' in firstResult.document);
-      assert.ok('source' in firstResult.document);
-      assert.ok('title' in firstResult.document);
+      assert.ok('contentType' in firstResult);
       
-      // Verify the search found relevant content
-      assert.ok(firstResult.text.toLowerCase().includes('machine learning'));
+      console.log('✓ Quick Start example works');
     } finally {
       process.chdir(originalCwd);
     }
   });
 
-  test('IngestionPipeline constructor variations work as documented', async () => {
+  test('Configuration Example', async () => {
     const originalCwd = process.cwd();
     process.chdir(testDir);
-    
+
     try {
-      const embedder = await initializeEmbeddingEngine();
-
-      // Test all documented constructor variations
+      // README Configuration Example
       
-      // 1. With both basePath and embedder (from README example)
-      const pipeline1 = new IngestionPipeline('./data/', embedder);
-      assert.ok(pipeline1);
+      const search = new SearchEngine('./data/vector-index.bin', './data/db.sqlite', {
+        embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
+        enableReranking: true
+      });
       
-      // 2. With only basePath (embedder should be auto-initialized)
-      const pipeline2 = new IngestionPipeline('./data/');
-      assert.ok(pipeline2);
+      const ingestion = new IngestionPipeline('./data/db.sqlite', './data/vector-index.bin', {
+        embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
+        chunkSize: 300,
+        chunkOverlap: 60
+      });
       
-      // 3. With no parameters (should use defaults)
-      const pipeline3 = new IngestionPipeline();
-      assert.ok(pipeline3);
-      
-      // Verify they can all ingest documents
-      await pipeline1.ingestDirectory('./docs/');
-      
-      // Verify files were created in the correct location
-      assert.ok(existsSync('./data/db.sqlite'));
-      assert.ok(existsSync('./data/vector-index.bin'));
-    } finally {
-      process.chdir(originalCwd);
-    }
-  });
-
-  test('SearchEngine constructor variations work as documented', async () => {
-    const originalCwd = process.cwd();
-    process.chdir(testDir);
-    
-    try {
-      // First ingest some documents
-      const embedder = await initializeEmbeddingEngine();
-      const pipeline = new IngestionPipeline('./data/', embedder);
-      await pipeline.ingestDirectory('./docs/');
-
-      // Test documented constructor variations
-      
-      // 1. With both paths (from README example)
-      const engine1 = new SearchEngine('./data/vector-index.bin', './data/db.sqlite');
-      assert.ok(engine1);
-      
-      // 2. With no parameters (should use defaults)
-      // First copy files to default location
-      const { copyFileSync } = await import('fs');
-      copyFileSync('./data/db.sqlite', './db.sqlite');
-      copyFileSync('./data/vector-index.bin', './vector-index.bin');
-      
-      const engine2 = new SearchEngine();
-      assert.ok(engine2);
-      
-      // Verify both can search
-      const results1 = await engine1.search('machine learning');
-      assert.ok(results1);
-      assert.ok(results1.length > 0);
-      
-      const results2 = await engine2.search('API documentation');
-      assert.ok(results2);
-      assert.ok(results2.length > 0);
-    } finally {
-      process.chdir(originalCwd);
-    }
-  });
-
-  test('methods work without manual initialization as documented', async () => {
-    const originalCwd = process.cwd();
-    process.chdir(testDir);
-    
-    try {
-      const embedder = await initializeEmbeddingEngine();
-      
-      // Test that methods work immediately after construction
-      const pipeline = new IngestionPipeline('./data/', embedder);
-      
-      // These should work without any initialization calls
-      await pipeline.ingestDirectory('./docs/');
-      await pipeline.ingestFile('./docs/machine-learning.md');
-      
-      // Search should work immediately after construction
-      const searchEngine = new SearchEngine('./data/vector-index.bin', './data/db.sqlite');
-      const results = await searchEngine.search('typescript examples', { top_k: 10 });
+      // Test the configured instances
+      await ingestion.ingestDirectory('./docs');
+      const results = await search.search('API documentation');
       
       assert.ok(results);
+      assert.ok(Array.isArray(results));
+      
+      console.log('✓ Configuration example works');
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  test('Advanced Usage Example - Custom Dependencies', async () => {
+    const originalCwd = process.cwd();
+    process.chdir(testDir);
+
+    try {
+      // First ingest with default settings
+      const ingestion = new IngestionPipeline('./data/db.sqlite', './data/vector-index.bin');
+      await ingestion.ingestDirectory('./docs');
+      
+      // Advanced Usage: Custom Dependencies
+      const customEmbedFn = async (query: string) => {
+        // Custom embedding logic (mock for testing)
+        return {
+          embedding_id: 'custom_' + Date.now(),
+          vector: new Float32Array(384).fill(0.1),
+          contentType: 'text'
+        };
+      };
+      
+      const customRerankFn = async (query: string, results: any[]) => {
+        // Custom reranking logic (mock for testing)
+        return results.map(r => ({ ...r, score: r.score * 1.1 }));
+      };
+      
+      const search = new SearchEngine('./data/vector-index.bin', './data/db.sqlite', {
+        embedFn: customEmbedFn,
+        rerankFn: customRerankFn
+      });
+      
+      const results = await search.search('neural networks');
+      assert.ok(results);
+      assert.ok(Array.isArray(results));
+      
+      console.log('✓ Advanced usage example works');
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  test('Factory Pattern Example', async () => {
+    const originalCwd = process.cwd();
+    process.chdir(testDir);
+
+    try {
+      // Using factory functions for complex scenarios
+      const { TextSearchFactory, TextIngestionFactory } = await import('./index.js');
+      
+      // Factory-based ingestion
+      const ingestion = await TextIngestionFactory.create('./data/db.sqlite', './data/vector-index.bin', {
+        embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2'
+      });
+      
+      await ingestion.ingestDirectory('./docs');
+      
+      // Factory-based search
+      const search = await TextSearchFactory.create('./data/vector-index.bin', './data/db.sqlite', {
+        enableReranking: true
+      });
+      
+      const results = await search.search('getting started');
+      assert.ok(results);
+      assert.ok(Array.isArray(results));
+      
+      console.log('✓ Factory pattern example works');
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  test('Error Handling Examples', async () => {
+    // Test that error handling works as documented
+    
+    // Missing files should provide clear error messages (async since initialization is lazy)
+    const searchEngine = new SearchEngine('./missing-index.bin', './missing-db.sqlite');
+    await assert.rejects(async () => {
+      await searchEngine.search('test query');
+    }, /Vector index not found/);
+    
+    // Invalid parameters should provide clear error messages
+    assert.throws(() => {
+      new IngestionPipeline('', '');
+    }, /Both dbPath and indexPath are required/);
+    
+    console.log('✓ Error handling examples work as documented');
+  });
+
+  test('Search Result Structure', async () => {
+    const originalCwd = process.cwd();
+    process.chdir(testDir);
+
+    try {
+      // Test that search results have the documented structure
+      const ingestion = new IngestionPipeline('./data/db.sqlite', './data/vector-index.bin');
+      await ingestion.ingestDirectory('./docs');
+      
+      const search = new SearchEngine('./data/vector-index.bin', './data/db.sqlite');
+      const results = await search.search('machine learning');
+      
       assert.ok(results.length > 0);
+      
+      // Verify result structure as documented
+      const result = results[0];
+      assert.ok(typeof result.content === 'string');
+      assert.ok(typeof result.score === 'number');
+      assert.ok(typeof result.contentType === 'string');
+      assert.ok(typeof result.document === 'object');
+      assert.ok(typeof result.document.id === 'number');
+      assert.ok(typeof result.document.source === 'string');
+      assert.ok(typeof result.document.title === 'string');
+      assert.ok(typeof result.document.contentType === 'string');
+      
+      console.log('✓ Search result structure matches documentation');
     } finally {
       process.chdir(originalCwd);
     }
   });
 
-  test('search options work as documented in README', async () => {
+  test('Multiple Search Queries', async () => {
     const originalCwd = process.cwd();
     process.chdir(testDir);
-    
+
     try {
-      // Setup
-      const embedder = await initializeEmbeddingEngine();
-      const pipeline = new IngestionPipeline('./data/', embedder);
-      await pipeline.ingestDirectory('./docs/');
+      // Test multiple different search queries work correctly
+      const ingestion = new IngestionPipeline('./data/db.sqlite', './data/vector-index.bin');
+      await ingestion.ingestDirectory('./docs');
       
-      const searchEngine = new SearchEngine('./data/vector-index.bin', './data/db.sqlite');
+      const search = new SearchEngine('./data/vector-index.bin', './data/db.sqlite');
       
-      // Test search with options as shown in README
-      const results = await searchEngine.search('machine learning', { top_k: 10 });
-      assert.ok(results);
-      assert.ok(results.length <= 10);
+      // Test different types of queries
+      const mlResults = await search.search('machine learning');
+      const apiResults = await search.search('API documentation');
+      const startResults = await search.search('getting started');
       
-      // Test search without options
-      const resultsDefault = await searchEngine.search('API documentation');
-      assert.ok(resultsDefault);
+      assert.ok(mlResults.length > 0);
+      assert.ok(apiResults.length > 0);
+      assert.ok(startResults.length > 0);
       
-      // Test with different top_k values
-      const resultsSmall = await searchEngine.search('typescript', { top_k: 2 });
-      assert.ok(resultsSmall.length <= 2);
+      // Results should be different for different queries (if both have results)
+      if (mlResults.length > 0 && apiResults.length > 0 && mlResults[0] && apiResults[0]) {
+        assert.notStrictEqual(mlResults[0].content, apiResults[0].content);
+      }
+      
+      console.log('✓ Multiple search queries work correctly');
     } finally {
       process.chdir(originalCwd);
     }
   });
 
-  test('error scenarios provide helpful guidance as documented', async () => {
+  test('Ingestion Statistics', async () => {
     const originalCwd = process.cwd();
     process.chdir(testDir);
-    
+
     try {
-      // Test search without ingestion first
-      const searchEngine = new SearchEngine('./nonexistent-index.bin', './nonexistent-db.sqlite');
+      // Test that ingestion provides useful statistics
+      const ingestion = new IngestionPipeline('./data/db.sqlite', './data/vector-index.bin');
+      const result = await ingestion.ingestDirectory('./docs');
       
-      // The error should be helpful and actionable
-      try {
-        await searchEngine.search('test query');
-        assert.fail('Expected search to throw an error');
-      } catch (error: any) {
-        assert.ok(error.message.match(/ingest|documents|first/i));
-      }
+      // Verify ingestion result structure
+      assert.ok(typeof result.documentsProcessed === 'number');
+      assert.ok(typeof result.chunksCreated === 'number');
+      assert.ok(typeof result.embeddingsGenerated === 'number');
+      assert.ok(typeof result.processingTimeMs === 'number');
       
-      // Test missing vector index file
-      writeFileSync('./db.sqlite', 'invalid db content');
-      const searchEngine2 = new SearchEngine('./nonexistent-index.bin', './db.sqlite');
+      assert.ok(result.documentsProcessed > 0);
+      assert.ok(result.chunksCreated > 0);
+      assert.ok(result.embeddingsGenerated > 0);
+      assert.ok(result.processingTimeMs > 0);
       
-      try {
-        await searchEngine2.search('test query');
-        assert.fail('Expected search to throw an error for missing index');
-      } catch (error: any) {
-        assert.ok(error.message.length > 0);
-      }
-      
-      // Test ingestion with invalid directory
-      const embedder = await initializeEmbeddingEngine();
-      const pipeline = new IngestionPipeline('./data/', embedder);
-      
-      try {
-        await pipeline.ingestDirectory('./nonexistent-directory/');
-        assert.fail('Expected ingestion to handle missing directory gracefully');
-      } catch (error: any) {
-        // Should provide helpful error about directory not existing
-        assert.ok(error.message.length > 0);
-      }
-      
-      // Test ingestion with invalid file
-      try {
-        await pipeline.ingestFile('./nonexistent-file.md');
-        assert.fail('Expected ingestion to handle missing file gracefully');
-      } catch (error: any) {
-        // Should provide helpful error about file not existing
-        assert.ok(error.message.length > 0);
-      }
+      console.log('✓ Ingestion statistics work as documented');
     } finally {
       process.chdir(originalCwd);
     }

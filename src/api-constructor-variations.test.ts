@@ -1,20 +1,19 @@
 /**
- * Tests for all documented constructor parameter combinations
- * Verifies default parameter handling and parameter validation
+ * Tests for constructor parameter combinations
+ * Verifies constructor signatures and parameter validation
  */
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { SearchEngine, IngestionPipeline, initializeEmbeddingEngine, EmbeddingEngine, ResourceManager } from './index.js';
+import { SearchEngine, IngestionPipeline } from './index.js';
 import { existsSync, rmSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
-describe('Constructor Variations', () => {
+describe('Constructor Variations - Clean Architecture', () => {
     const testBaseDir = join(tmpdir(), 'rag-lite-constructor-test');
     const testDir = join(testBaseDir, Date.now().toString());
     const docsDir = join(testDir, 'docs');
-    let embedder: EmbeddingEngine;
 
     beforeEach(async () => {
         // Clean up any existing test directory
@@ -35,20 +34,16 @@ This is a test document for constructor validation.
 ## Content
 
 Some content for testing search functionality.
+Natural language processing is important.
+Machine learning algorithms are powerful.
     `);
-
-        // Initialize embedder once for all tests
-        embedder = await initializeEmbeddingEngine();
     });
 
     afterEach(async () => {
-        // Clean up resources first
-        await ResourceManager.cleanupAll();
-
         // Add a small delay for Windows file handles to close
         await new Promise(resolve => setTimeout(resolve, 100));
 
-        // Then clean up test directory with retry logic for Windows
+        // Clean up test directory
         if (existsSync(testDir)) {
             let retries = 3;
             while (retries > 0) {
@@ -70,18 +65,19 @@ Some content for testing search functionality.
     });
 
     describe('IngestionPipeline Constructor Variations', () => {
-        test('constructor with both basePath and embedder', async () => {
+        test('constructor with required parameters (dbPath, indexPath)', async () => {
             const originalCwd = process.cwd();
             process.chdir(testDir);
 
             try {
-                const pipeline = new IngestionPipeline('./data/', embedder);
+                // constructor: (dbPath, indexPath, options?)
+                const pipeline = new IngestionPipeline('./data/db.sqlite', './data/vector-index.bin');
                 assert.ok(pipeline);
 
-                // Should work immediately
+                // Should work with new constructor
                 await pipeline.ingestDirectory('./docs/');
 
-                // Files should be created in the specified basePath
+                // Files should be created at specified paths
                 assert.ok(existsSync('./data/db.sqlite'));
                 assert.ok(existsSync('./data/vector-index.bin'));
             } finally {
@@ -89,99 +85,91 @@ Some content for testing search functionality.
             }
         });
 
-        test('constructor with only basePath (embedder auto-initialized)', async () => {
+        test('constructor with options', async () => {
             const originalCwd = process.cwd();
             process.chdir(testDir);
 
             try {
-                const pipeline = new IngestionPipeline('./data/');
+                // constructor with options
+                const pipeline = new IngestionPipeline('./data/db.sqlite', './data/vector-index.bin', {
+                    embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
+                    chunkSize: 200,
+                    chunkOverlap: 40
+                });
                 assert.ok(pipeline);
 
-                // Should work with auto-initialized embedder
                 await pipeline.ingestDirectory('./docs/');
 
-                // Files should be created in the specified basePath
                 assert.ok(existsSync('./data/db.sqlite'));
                 assert.ok(existsSync('./data/vector-index.bin'));
-            } finally {
-                process.chdir(originalCwd);
-            }
-        });
-
-        test('constructor with only embedder (basePath defaults to current directory)', async () => {
-            const originalCwd = process.cwd();
-            process.chdir(testDir);
-
-            try {
-                const pipeline = new IngestionPipeline(undefined, embedder);
-                assert.ok(pipeline);
-
-                // Should work with default basePath (current directory)
-                await pipeline.ingestDirectory('./docs/');
-
-                // Files should be created in current directory
-                assert.ok(existsSync('./db.sqlite'));
-                assert.ok(existsSync('./vector-index.bin'));
-            } finally {
-                process.chdir(originalCwd);
-            }
-        });
-
-        test('constructor with no parameters (all defaults)', async () => {
-            const originalCwd = process.cwd();
-            process.chdir(testDir);
-
-            try {
-                const pipeline = new IngestionPipeline();
-                assert.ok(pipeline);
-
-                // Should work with all defaults
-                await pipeline.ingestDirectory('./docs/');
-
-                // Files should be created in current directory with default names
-                assert.ok(existsSync('./db.sqlite'));
-                assert.ok(existsSync('./vector-index.bin'));
             } finally {
                 process.chdir(originalCwd);
             }
         });
 
         test('constructor parameter validation provides clear error messages', () => {
-            // Test invalid basePath
-            assert.throws(() => new IngestionPipeline(''));
-            assert.throws(() => new IngestionPipeline('   '));
+            // Test invalid dbPath
+            assert.throws(() => new IngestionPipeline('', './index.bin'), /Both dbPath and indexPath are required/);
+            assert.throws(() => new IngestionPipeline('   ', './index.bin'), /Both dbPath and indexPath are required/);
 
-            try {
-                new IngestionPipeline('');
-                assert.fail('Expected constructor to throw');
-            } catch (error: any) {
-                assert.ok(error.message.match(/basePath.*empty/i));
-            }
-
-            try {
-                new IngestionPipeline('   ');
-                assert.fail('Expected constructor to throw');
-            } catch (error: any) {
-                assert.ok(error.message.match(/basePath.*empty/i));
-            }
+            // Test invalid indexPath
+            assert.throws(() => new IngestionPipeline('./db.sqlite', ''), /Both dbPath and indexPath are required/);
+            assert.throws(() => new IngestionPipeline('./db.sqlite', '   '), /Both dbPath and indexPath are required/);
         });
 
-        test('constructor handles relative and absolute paths correctly', async () => {
+        test('constructor creates directories automatically', async () => {
             const originalCwd = process.cwd();
             process.chdir(testDir);
 
             try {
-                // Test relative path
-                const pipeline1 = new IngestionPipeline('./data/', embedder);
-                await pipeline1.ingestDirectory('./docs/');
-                assert.ok(existsSync('./data/db.sqlite'));
+                // Create pipeline with nested directory paths that don't exist yet
+                const pipeline = new IngestionPipeline('./nested/data/db.sqlite', './nested/index/vector-index.bin');
+                assert.ok(pipeline);
 
-                // Test absolute path
-                const absolutePath = join(process.cwd(), 'absolute-data');
-                mkdirSync(absolutePath, { recursive: true });
-                const pipeline2 = new IngestionPipeline(absolutePath, embedder);
+                await pipeline.ingestDirectory('./docs/');
+
+                // Directories should be created automatically
+                assert.ok(existsSync('./nested/data/db.sqlite'));
+                assert.ok(existsSync('./nested/index/vector-index.bin'));
+            } finally {
+                process.chdir(originalCwd);
+            }
+        });
+
+        test('constructor with absolute paths', async () => {
+            const absoluteDbPath = join(testDir, 'absolute-db.sqlite');
+            const absoluteIndexPath = join(testDir, 'absolute-index.bin');
+
+            const pipeline = new IngestionPipeline(absoluteDbPath, absoluteIndexPath);
+            assert.ok(pipeline);
+
+            await pipeline.ingestDirectory(docsDir);
+
+            assert.ok(existsSync(absoluteDbPath));
+            assert.ok(existsSync(absoluteIndexPath));
+        });
+
+        test('constructor with force rebuild option', async () => {
+            const originalCwd = process.cwd();
+            process.chdir(testDir);
+
+            try {
+                // First ingestion
+                const pipeline1 = new IngestionPipeline('./data/db.sqlite', './data/vector-index.bin');
+                await pipeline1.ingestDirectory('./docs/');
+
+                assert.ok(existsSync('./data/db.sqlite'));
+                assert.ok(existsSync('./data/vector-index.bin'));
+
+                // Second ingestion with force rebuild
+                const pipeline2 = new IngestionPipeline('./data/db.sqlite', './data/vector-index.bin', {
+                    forceRebuild: true
+                });
                 await pipeline2.ingestDirectory('./docs/');
-                assert.ok(existsSync(join(absolutePath, 'db.sqlite')));
+
+                // Files should still exist after rebuild
+                assert.ok(existsSync('./data/db.sqlite'));
+                assert.ok(existsSync('./data/vector-index.bin'));
             } finally {
                 process.chdir(originalCwd);
             }
@@ -189,198 +177,179 @@ Some content for testing search functionality.
     });
 
     describe('SearchEngine Constructor Variations', () => {
-        beforeEach(async () => {
-            // Setup some ingested data for search tests
+        test('constructor with required parameters (indexPath, dbPath)', async () => {
             const originalCwd = process.cwd();
             process.chdir(testDir);
 
             try {
-                const pipeline = new IngestionPipeline('./data/', embedder);
+                // First create the index and database
+                const pipeline = new IngestionPipeline('./data/db.sqlite', './data/vector-index.bin');
                 await pipeline.ingestDirectory('./docs/');
-            } finally {
-                process.chdir(originalCwd);
-            }
-        });
 
-        test('constructor with both indexPath and dbPath', async () => {
-            const originalCwd = process.cwd();
-            process.chdir(testDir);
-
-            try {
+                // constructor: (indexPath, dbPath, options?)
                 const searchEngine = new SearchEngine('./data/vector-index.bin', './data/db.sqlite');
                 assert.ok(searchEngine);
 
-                // Should work immediately
-                const results = await searchEngine.search('test document');
-                assert.ok(results);
-                assert.ok(results.length > 0);
+                // Should work with new constructor
+                const results = await searchEngine.search('machine learning');
+                assert.ok(Array.isArray(results));
             } finally {
                 process.chdir(originalCwd);
             }
         });
 
-        test('constructor with only indexPath (dbPath auto-resolved)', async () => {
+        test('constructor with options', async () => {
             const originalCwd = process.cwd();
             process.chdir(testDir);
 
             try {
-                // Copy db to expected location for auto-resolution
-                const { copyFileSync } = await import('fs');
-                copyFileSync('./data/db.sqlite', './db.sqlite');
+                // First create the index and database
+                const pipeline = new IngestionPipeline('./data/db.sqlite', './data/vector-index.bin');
+                await pipeline.ingestDirectory('./docs/');
 
-                const searchEngine = new SearchEngine('./data/vector-index.bin');
+                // constructor with options
+                const searchEngine = new SearchEngine('./data/vector-index.bin', './data/db.sqlite', {
+                    enableReranking: true,
+                    embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2'
+                });
                 assert.ok(searchEngine);
 
-                const results = await searchEngine.search('test document');
-                assert.ok(results);
-            } finally {
-                process.chdir(originalCwd);
-            }
-        });
-
-        test('constructor with only dbPath (indexPath auto-resolved)', async () => {
-            const originalCwd = process.cwd();
-            process.chdir(testDir);
-
-            try {
-                // Copy index to expected location for auto-resolution
-                const { copyFileSync } = await import('fs');
-                copyFileSync('./data/vector-index.bin', './vector-index.bin');
-
-                const searchEngine = new SearchEngine(undefined, './data/db.sqlite');
-                assert.ok(searchEngine);
-
-                const results = await searchEngine.search('test document');
-                assert.ok(results);
-            } finally {
-                process.chdir(originalCwd);
-            }
-        });
-
-        test('constructor with no parameters (all defaults)', async () => {
-            const originalCwd = process.cwd();
-            process.chdir(testDir);
-
-            try {
-                // Copy files to default locations
-                const { copyFileSync } = await import('fs');
-                copyFileSync('./data/db.sqlite', './db.sqlite');
-                copyFileSync('./data/vector-index.bin', './vector-index.bin');
-
-                const searchEngine = new SearchEngine();
-                assert.ok(searchEngine);
-
-                const results = await searchEngine.search('test document');
-                assert.ok(results);
-                assert.ok(results.length > 0);
+                const results = await searchEngine.search('natural language');
+                assert.ok(Array.isArray(results));
             } finally {
                 process.chdir(originalCwd);
             }
         });
 
         test('constructor parameter validation provides clear error messages', () => {
-            // Test invalid paths
-            assert.throws(() => new SearchEngine(''));
-            assert.throws(() => new SearchEngine('   '));
-            assert.throws(() => new SearchEngine('./valid-path', ''));
-            assert.throws(() => new SearchEngine('./valid-path', '   '));
+            // Test invalid indexPath
+            assert.throws(() => new SearchEngine('', './db.sqlite'), /Both indexPath and dbPath are required/);
+            assert.throws(() => new SearchEngine('   ', './db.sqlite'), /Both indexPath and dbPath are required/);
 
-            try {
-                new SearchEngine('');
-                assert.fail('Expected constructor to throw');
-            } catch (error: any) {
-                assert.ok(error.message.match(/indexPath.*empty/i));
-            }
-
-            try {
-                new SearchEngine('./valid-path', '');
-                assert.fail('Expected constructor to throw');
-            } catch (error: any) {
-                assert.ok(error.message.match(/dbPath.*empty/i));
-            }
+            // Test invalid dbPath
+            assert.throws(() => new SearchEngine('./index.bin', ''), /Both indexPath and dbPath are required/);
+            assert.throws(() => new SearchEngine('./index.bin', '   '), /Both indexPath and dbPath are required/);
         });
 
-        test('constructor handles relative and absolute paths correctly', async () => {
+        test('constructor validates file existence', () => {
+            // Test non-existent index file
+            assert.throws(() => new SearchEngine('./non-existent-index.bin', './also-non-existent.sqlite'), /Vector index not found/);
+        });
+
+        test('constructor with absolute paths', async () => {
             const originalCwd = process.cwd();
             process.chdir(testDir);
 
             try {
-                // Test relative paths
-                const searchEngine1 = new SearchEngine('./data/vector-index.bin', './data/db.sqlite');
-                const results1 = await searchEngine1.search('test');
-                assert.ok(results1);
+                // First create the index and database
+                const pipeline = new IngestionPipeline('./data/db.sqlite', './data/vector-index.bin');
+                await pipeline.ingestDirectory('./docs/');
 
-                // Test absolute paths
-                const absoluteIndexPath = join(process.cwd(), 'data', 'vector-index.bin');
-                const absoluteDbPath = join(process.cwd(), 'data', 'db.sqlite');
-                const searchEngine2 = new SearchEngine(absoluteIndexPath, absoluteDbPath);
-                const results2 = await searchEngine2.search('test');
-                assert.ok(results2);
+                const absoluteIndexPath = join(testDir, 'data', 'vector-index.bin');
+                const absoluteDbPath = join(testDir, 'data', 'db.sqlite');
+
+                const searchEngine = new SearchEngine(absoluteIndexPath, absoluteDbPath);
+                assert.ok(searchEngine);
+
+                const results = await searchEngine.search('test');
+                assert.ok(Array.isArray(results));
+            } finally {
+                process.chdir(originalCwd);
+            }
+        });
+
+        test('constructor with custom embedding function', async () => {
+            const originalCwd = process.cwd();
+            process.chdir(testDir);
+
+            try {
+                // First create the index and database
+                const pipeline = new IngestionPipeline('./data/db.sqlite', './data/vector-index.bin');
+                await pipeline.ingestDirectory('./docs/');
+
+                // Create custom embed function for testing
+                const customEmbedFn = async (query: string) => {
+                    // This is just for testing - return a mock embedding
+                    return {
+                        embedding_id: 'custom_' + Date.now(),
+                        vector: new Float32Array(384).fill(0.1),
+                        contentType: 'text'
+                    };
+                };
+
+                const searchEngine = new SearchEngine('./data/vector-index.bin', './data/db.sqlite', {
+                    embedFn: customEmbedFn
+                });
+                assert.ok(searchEngine);
+
+                // Should work with custom embed function
+                const results = await searchEngine.search('test query');
+                assert.ok(Array.isArray(results));
             } finally {
                 process.chdir(originalCwd);
             }
         });
     });
 
-    describe('Default Parameter Handling', () => {
-        test('IngestionPipeline uses sensible defaults', async () => {
+    describe('Integration Tests', () => {
+        test('complete workflow with constructors', async () => {
             const originalCwd = process.cwd();
             process.chdir(testDir);
 
             try {
-                const pipeline = new IngestionPipeline();
+                // Step 1: Create ingestion pipeline with new constructor
+                const pipeline = new IngestionPipeline('./workflow/db.sqlite', './workflow/vector-index.bin', {
+                    embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
+                    chunkSize: 200
+                });
 
-                // Should use current directory as basePath
+                // Step 2: Ingest documents
                 await pipeline.ingestDirectory('./docs/');
 
-                // Files should be created with default names in current directory
-                assert.ok(existsSync('./db.sqlite'));
-                assert.ok(existsSync('./vector-index.bin'));
+                // Step 3: Verify files were created
+                assert.ok(existsSync('./workflow/db.sqlite'));
+                assert.ok(existsSync('./workflow/vector-index.bin'));
+
+                // Step 4: Create search engine with new constructor
+                const searchEngine = new SearchEngine('./workflow/vector-index.bin', './workflow/db.sqlite', {
+                    enableReranking: false // Disable for faster testing
+                });
+
+                // Step 5: Perform searches
+                const results1 = await searchEngine.search('machine learning');
+                assert.ok(Array.isArray(results1));
+                assert.ok(results1.length > 0);
+
+                const results2 = await searchEngine.search('natural language processing');
+                assert.ok(Array.isArray(results2));
+
+                // Step 6: Verify result structure
+                const firstResult = results1[0];
+                assert.ok('content' in firstResult);
+                assert.ok('score' in firstResult);
+                assert.ok('document' in firstResult);
+                assert.ok('contentType' in firstResult);
+
+                console.log('✓ Complete workflow test passed');
             } finally {
                 process.chdir(originalCwd);
             }
         });
 
-        test('SearchEngine uses sensible defaults', async () => {
-            const originalCwd = process.cwd();
-            process.chdir(testDir);
+        test('error handling with new constructors', async () => {
+            // Test that proper error messages are provided for common mistakes
 
-            try {
-                // First create files with default names
-                const pipeline = new IngestionPipeline();
-                await pipeline.ingestDirectory('./docs/');
+            // Missing files
+            assert.throws(() => {
+                new SearchEngine('./missing-index.bin', './missing-db.sqlite');
+            }, /Vector index not found/);
 
-                // SearchEngine should find them automatically
-                const searchEngine = new SearchEngine();
-                const results = await searchEngine.search('test');
+            // Invalid parameters
+            assert.throws(() => {
+                new IngestionPipeline('', '');
+            }, /Both dbPath and indexPath are required/);
 
-                assert.ok(results);
-                assert.ok(results.length > 0);
-            } finally {
-                process.chdir(originalCwd);
-            }
-        });
-
-        test('parameters override defaults correctly', async () => {
-            const originalCwd = process.cwd();
-            process.chdir(testDir);
-
-            try {
-                // Create with custom paths
-                const customPath = './custom-location';
-                mkdirSync(customPath, { recursive: true });
-
-                const pipeline = new IngestionPipeline(customPath, embedder);
-                await pipeline.ingestDirectory('./docs/');
-
-                // Files should be in custom location, not defaults
-                assert.ok(!existsSync('./db.sqlite'));
-                assert.ok(!existsSync('./vector-index.bin'));
-                assert.ok(existsSync(join(customPath, 'db.sqlite')));
-                assert.ok(existsSync(join(customPath, 'vector-index.bin')));
-            } finally {
-                process.chdir(originalCwd);
-            }
+            console.log('✓ Error handling tests passed');
         });
     });
 });

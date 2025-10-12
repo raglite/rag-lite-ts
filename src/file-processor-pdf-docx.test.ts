@@ -3,7 +3,7 @@ import { strict as assert } from 'node:assert';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { discoverFiles, processFiles } from './file-processor.js';
-import { DocumentPathManager } from './path-manager.js';
+import { DocumentPathManager } from './core/path-manager.js';
 
 test('PDF and DOCX file support', async () => {
   // Test that PDF and DOCX extensions are now supported

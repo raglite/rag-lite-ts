@@ -1,10 +1,7 @@
 import { existsSync } from 'fs';
-import { SearchEngine } from '../search.js';
-import { initializeEmbeddingEngine } from '../embedder.js';
-import { VectorIndex } from '../vector-index.js';
-import { openDatabase } from '../db.js';
-import { config, EXIT_CODES, ConfigurationError, Config } from '../config.js';
-import type { SearchOptions } from '../types.js';
+import { TextSearchFactory } from '../factories/text-factory.js';
+import { config, EXIT_CODES, ConfigurationError } from '../core/config.js';
+import type { SearchOptions } from '../core/types.js';
 
 /**
  * Run search from CLI
@@ -63,40 +60,23 @@ export async function runSearch(query: string, options: Record<string, any> = {}
     }
 
     console.log(`Searching for: "${query}"`);
-    console.log('Loading search engine...');
     console.log('');
 
-    // Initialize components
-    let db, embedder, indexManager, searchEngine;
+    // Initialize search engine using factory
+    let searchEngine;
     
     try {
-      // Open database connection
-      db = await openDatabase(effectiveConfig.db_file);
-      
-      // Read the model that was used during ingestion from the database
-      const { getStoredModelInfo } = await import('../db.js');
-      const storedModel = await getStoredModelInfo(db);
-      const modelToUse = storedModel ? storedModel.modelName : effectiveConfig.embedding_model;
-      
-      console.log(`Using model from ingestion: ${modelToUse}`);
-      
-      // Initialize embedding engine with the correct model
-      const { EmbeddingEngine } = await import('../embedder.js');
-      embedder = new EmbeddingEngine(modelToUse);
-      await embedder.loadModel();
-      
-      // Initialize index manager (which handles the vector index and hash mapping)
-      const { IndexManager } = await import('../index-manager.js');
-      const { getModelDefaults } = await import('../config.js');
-      const modelDefaults = getModelDefaults(modelToUse);
-      indexManager = new IndexManager(effectiveConfig.index_file, effectiveConfig.db_file, modelDefaults.dimensions, modelToUse);
-      await indexManager.initialize();
-      
-      // Create search engine with index manager
-      const enableReranking = options.rerank !== undefined ? options.rerank : effectiveConfig.rerank_enabled;
-      const { SearchEngine } = await import('../search.js');
-      searchEngine = SearchEngine.createWithComponents(embedder, indexManager, db, enableReranking);
-      await searchEngine.initialize();
+      // Prepare factory options
+      const factoryOptions = {
+        enableReranking: options.rerank !== undefined ? options.rerank : effectiveConfig.rerank_enabled
+      };
+
+      // Create search engine using TextSearchFactory
+      searchEngine = await TextSearchFactory.create(
+        effectiveConfig.index_file,
+        effectiveConfig.db_file,
+        factoryOptions
+      );
       
       // Prepare search options
       const searchOptions: SearchOptions = {};
@@ -128,7 +108,7 @@ export async function runSearch(query: string, options: Record<string, any> = {}
           console.log(`${index + 1}. ${result.document.title}`);
           console.log(`   Source: ${result.document.source}`);
           console.log(`   Score: ${(result.score * 100).toFixed(1)}%`);
-          console.log(`   Text: ${truncateText(result.text, 200)}`);
+          console.log(`   Text: ${truncateText(result.content, 200)}`);
           console.log('');
         });
         
@@ -144,8 +124,8 @@ export async function runSearch(query: string, options: Record<string, any> = {}
       
     } finally {
       // Cleanup resources
-      if (db) {
-        await db.close();
+      if (searchEngine) {
+        await searchEngine.cleanup();
       }
     }
     

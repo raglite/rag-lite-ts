@@ -1,13 +1,83 @@
 # Configuration Guide
 
-This guide covers advanced configuration options for RAG-lite TS.
+*For users who need custom settings, multiple environments, or production deployments*
+
+This guide covers configuration options for RAG-lite TS, from simple constructor options to advanced environment-specific setups.
 
 ## Configuration Methods
 
 RAG-lite TS supports configuration through:
-1. **Configuration file** (`raglite.config.js`)
-2. **Environment variables** (override any setting)
-3. **CLI flags** (for specific commands)
+1. **Constructor options** (programmatic usage)
+2. **Configuration file** (`raglite.config.js`)
+3. **Environment variables** (override any setting)
+4. **CLI flags** (for specific commands)
+
+## Programmatic Configuration
+
+*For application developers using the TypeScript/JavaScript API*
+
+When using RAG-lite TS programmatically, you can configure options directly in the constructor:
+
+### Basic Configuration
+
+```typescript
+import { SearchEngine, IngestionPipeline } from 'rag-lite-ts';
+
+// Search with custom model and reranking
+const search = new SearchEngine('./index.bin', './db.sqlite', {
+  embeddingModel: 'Xenova/all-mpnet-base-v2',
+  enableReranking: true
+});
+
+// Ingestion with custom chunking
+const ingestion = new IngestionPipeline('./db.sqlite', './index.bin', {
+  embeddingModel: 'Xenova/all-mpnet-base-v2',
+  chunkSize: 400,
+  chunkOverlap: 80,
+  batchSize: 8
+});
+```
+
+### Advanced Configuration
+
+```typescript
+import { SearchEngine, IngestionPipeline } from 'rag-lite-ts';
+
+// Production search configuration
+const search = new SearchEngine('./index.bin', './db.sqlite', {
+  embeddingModel: 'Xenova/all-mpnet-base-v2',
+  enableReranking: true,
+  rerankingModel: 'cross-encoder/ms-marco-MiniLM-L-6-v2',
+  batchSize: 8
+});
+
+// High-throughput ingestion configuration
+const ingestion = new IngestionPipeline('./db.sqlite', './index.bin', {
+  embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
+  chunkSize: 300,
+  chunkOverlap: 60,
+  batchSize: 32,
+  forceRebuild: false
+});
+```
+
+### Model-Specific Configurations
+
+```typescript
+// Fast processing (development)
+const fastSearch = new SearchEngine('./index.bin', './db.sqlite', {
+  embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
+  enableReranking: false,
+  batchSize: 16
+});
+
+// High quality (production)
+const qualitySearch = new SearchEngine('./index.bin', './db.sqlite', {
+  embeddingModel: 'Xenova/all-mpnet-base-v2',
+  enableReranking: true,
+  batchSize: 8
+});
+```
 
 ## Configuration File
 

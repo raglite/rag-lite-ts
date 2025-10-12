@@ -35,7 +35,7 @@ function cleanup(indexPath: string, dbPath: string) {
 
 // Initialize test database with schema
 async function initTestDB(dbPath: string): Promise<void> {
-  const { openDatabase, initializeSchema } = await import('./db.js');
+  const { openDatabase, initializeSchema } = await import('./core/db.js');
   const connection = await openDatabase(dbPath);
   await initializeSchema(connection);
   await connection.close();
@@ -126,7 +126,7 @@ for (const model of TEST_MODELS.filter(m => m.dimensions === 384)) {
       await manager1.initialize();
       
       // First insert test documents and chunks into database
-      const { insertDocument, insertChunk } = await import('./db.js');
+      const { insertDocument, insertChunk } = await import('./core/db.js');
       const docId = await insertDocument(manager1['db']!, 'test.md', 'Test Document');
       
       // Insert chunks with the embedding IDs we'll use
@@ -183,13 +183,13 @@ for (const model of TEST_MODELS.filter(m => m.dimensions === 384)) {
       await manager.initialize();
       
       // Add some test data to the chunks table to simulate existing data
-      const { openDatabase } = await import('./db.js');
+      const { openDatabase } = await import('./core/db.js');
       const db = await openDatabase(dbPath);
       await db.run('INSERT INTO documents (source, title) VALUES (?, ?)', ['test.md', 'Test Document']);
-      await db.run('INSERT INTO chunks (embedding_id, document_id, text, chunk_index) VALUES (?, ?, ?, ?)', 
-        ['emb1', 1, 'test chunk 1', 0]);
-      await db.run('INSERT INTO chunks (embedding_id, document_id, text, chunk_index) VALUES (?, ?, ?, ?)', 
-        ['emb2', 1, 'test chunk 2', 1]);
+      await db.run('INSERT INTO chunks (embedding_id, document_id, content, chunk_index, content_type) VALUES (?, ?, ?, ?, ?)', 
+        ['emb1', 1, 'test chunk 1', 0, 'text']);
+      await db.run('INSERT INTO chunks (embedding_id, document_id, content, chunk_index, content_type) VALUES (?, ?, ?, ?, ?)', 
+        ['emb2', 1, 'test chunk 2', 1, 'text']);
       await db.close();
       
       // Test rebuild (this will reset the index but show the structure)
@@ -249,7 +249,7 @@ for (const model of TEST_MODELS.filter(m => m.dimensions === 384)) {
       await manager1.initialize();
       
       // Manually corrupt the stored dimensions to simulate a mismatch
-      const { openDatabase, setStoredModelInfo } = await import('./db.js');
+      const { openDatabase, setStoredModelInfo } = await import('./core/db.js');
       const db = await openDatabase(dbPath);
       const wrongDimensions = model.dimensions === 384 ? 768 : 384;
       await setStoredModelInfo(db, model.name, wrongDimensions);
@@ -283,7 +283,7 @@ for (const model of TEST_MODELS.filter(m => m.dimensions === 384)) {
       await manager.initialize();
       
       // Verify model info was stored during initialization
-      const { openDatabase, getStoredModelInfo } = await import('./db.js');
+      const { openDatabase, getStoredModelInfo } = await import('./core/db.js');
       const db = await openDatabase(dbPath);
       const storedInfo = await getStoredModelInfo(db);
       await db.close();
@@ -305,7 +305,7 @@ for (const model of TEST_MODELS.filter(m => m.dimensions === 384)) {
       await manager.initialize();
       
       // Should have stored the model info
-      const { openDatabase, getStoredModelInfo } = await import('./db.js');
+      const { openDatabase, getStoredModelInfo } = await import('./core/db.js');
       const db = await openDatabase(dbPath);
       const storedInfo = await getStoredModelInfo(db);
       await db.close();
@@ -326,11 +326,11 @@ for (const model of TEST_MODELS.filter(m => m.dimensions === 384)) {
       await manager.initialize();
       
       // Add some test data
-      const { openDatabase } = await import('./db.js');
+      const { openDatabase } = await import('./core/db.js');
       const db = await openDatabase(dbPath);
       await db.run('INSERT INTO documents (source, title) VALUES (?, ?)', ['test.md', 'Test Document']);
-      await db.run('INSERT INTO chunks (embedding_id, document_id, text, chunk_index) VALUES (?, ?, ?, ?)', 
-        ['emb1', 1, 'test chunk 1', 0]);
+      await db.run('INSERT INTO chunks (embedding_id, document_id, content, chunk_index, content_type) VALUES (?, ?, ?, ?, ?)', 
+        ['emb1', 1, 'test chunk 1', 0, 'text']);
       await db.close();
       
       // Perform rebuild with new model version
@@ -342,7 +342,7 @@ for (const model of TEST_MODELS.filter(m => m.dimensions === 384)) {
       assert.equal(stats.modelVersion, newModelVersion);
       
       // Verify model info is still correct
-      const { openDatabase: openDB2, getStoredModelInfo } = await import('./db.js');
+      const { openDatabase: openDB2, getStoredModelInfo } = await import('./core/db.js');
       const db2 = await openDB2(dbPath);
       const storedInfo = await getStoredModelInfo(db2);
       await db2.close();
@@ -367,7 +367,7 @@ for (const model of TEST_MODELS.filter(m => m.dimensions === 384)) {
       await manager1.close();
       
       // Manually corrupt the stored model info
-      const { openDatabase, setStoredModelInfo } = await import('./db.js');
+      const { openDatabase, setStoredModelInfo } = await import('./core/db.js');
       const db = await openDatabase(dbPath);
       await setStoredModelInfo(db, 'different-model', 999);
       await db.close();

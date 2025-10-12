@@ -2,8 +2,8 @@ import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { existsSync, unlinkSync } from 'fs';
 import { IndexManager } from './index-manager.js';
-import { openDatabase, initializeSchema, insertDocument, insertChunk, setStoredModelInfo, getStoredModelInfo } from './db.js';
-import { getModelDefaults } from './config.js';
+import { openDatabase, initializeSchema, insertDocument, insertChunk, setStoredModelInfo, getStoredModelInfo } from './core/db.js';
+import { getModelDefaults } from './core/config.js';
 
 // Helper function to clean up test files
 function cleanup(testDbPath: string, testIndexPath: string) {

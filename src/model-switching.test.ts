@@ -2,9 +2,9 @@ import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { existsSync, unlinkSync } from 'fs';
 import { IndexManager } from './index-manager.js';
-import { openDatabase, initializeSchema, insertDocument, insertChunk, setStoredModelInfo } from './db.js';
-import { getModelDefaults } from './config.js';
-import type { DatabaseConnection } from './db.js';
+import { openDatabase, initializeSchema, insertDocument, insertChunk, setStoredModelInfo } from './core/db.js';
+import { getModelDefaults } from './core/config.js';
+import type { DatabaseConnection } from './core/db.js';
 
 // Helper function to clean up test files
 function cleanup(testDbPath: string, testIndexPath: string) {
@@ -188,7 +188,7 @@ describe('Model Switching Scenario', () => {
         
         // Verify model info was updated in database
         const updatedDb = await openDatabase(testDbPath);
-        const { getStoredModelInfo } = await import('./db.js');
+        const { getStoredModelInfo } = await import('./core/db.js');
         const storedInfo = await getStoredModelInfo(updatedDb);
         
         assert.ok(storedInfo !== null, 'Stored model info should exist');
