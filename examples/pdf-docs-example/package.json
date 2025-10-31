@@ -1,12 +1,13 @@
 {
   "name": "rag-lite-pdf-docs-example",
-  "version": "1.0.0",
-  "description": "Example demonstrating RAG-lite with PDF and DOCX documents",
+  "version": "1.1.0",
+  "description": "Example demonstrating RAG-lite's unified content system with PDF and DOCX documents",
   "type": "module",
   "main": "pdf-docx-example.js",
   "scripts": {
     "start": "node pdf-docx-example.js",
-    "clean": "node clean.js",
+    "clean": "node clean-only.js",
+    "clean:run": "node clean.js",
     "clean:files": "rm -f example-docs/db.sqlite example-docs/vector-index.bin"
   },
   "dependencies": {
@@ -17,7 +18,11 @@
     "pdf",
     "docx",
     "example",
-    "semantic-search"
+    "semantic-search",
+    "unified-content-system",
+    "memory-ingestion",
+    "content-retrieval",
+    "mcp-integration"
   ],
   "author": "RAG-lite TS Contributors",
   "license": "MIT"

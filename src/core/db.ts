@@ -6,6 +6,7 @@
 import sqlite3 from 'sqlite3';
 import { promisify } from 'util';
 import { handleError, ErrorCategory, ErrorSeverity, createError } from './error-handler.js';
+import type { SystemInfo, ModeType, ModelType, RerankingStrategyType } from '../types.js';
 
 // Type definitions for database operations
 export interface DatabaseConnection {
@@ -28,6 +29,7 @@ export interface ContentChunk {
   document_source: string;
   document_title: string;
   document_content_type: string;
+  document_content_id?: string; // Content ID from unified content system
 }
 
 
@@ -128,15 +130,18 @@ function enhanceSQLiteError(error: Error, sql?: string): Error {
  */
 export async function initializeSchema(connection: DatabaseConnection): Promise<void> {
   try {
-    // Create documents table with content type support
+    // Create documents table with content type support and content_id reference
     await connection.run(`
       CREATE TABLE IF NOT EXISTS documents (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        content_id TEXT,                        -- References content_metadata.id
         source TEXT NOT NULL UNIQUE,
         title TEXT NOT NULL,
         content_type TEXT DEFAULT 'text',
         metadata TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (content_id) REFERENCES content_metadata(id)
       )
     `);
 
@@ -155,72 +160,63 @@ export async function initializeSchema(connection: DatabaseConnection): Promise<
       )
     `);
 
-    // Create system_info table for model version tracking
+    // Create content_metadata table for unified content system
     await connection.run(`
-      CREATE TABLE IF NOT EXISTS system_info (
+      CREATE TABLE IF NOT EXISTS content_metadata (
+        id TEXT PRIMARY KEY,                    -- Hash-based content ID
+        storage_type TEXT NOT NULL CHECK (storage_type IN ('filesystem', 'content_dir')),
+        original_path TEXT,                     -- Original file path (filesystem only)
+        content_path TEXT NOT NULL,             -- Actual storage path
+        display_name TEXT NOT NULL,             -- User-friendly name
+        content_type TEXT NOT NULL,             -- MIME type
+        file_size INTEGER NOT NULL,             -- Size in bytes
+        content_hash TEXT NOT NULL,             -- SHA-256 hash
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create storage_stats table for basic content directory tracking
+    await connection.run(`
+      CREATE TABLE IF NOT EXISTS storage_stats (
         id INTEGER PRIMARY KEY CHECK (id = 1),
-        model_version TEXT NOT NULL,
-        model_name TEXT,
-        model_dimensions INTEGER,
+        content_dir_files INTEGER DEFAULT 0,
+        content_dir_size INTEGER DEFAULT 0,
+        filesystem_refs INTEGER DEFAULT 0,
+        last_cleanup DATETIME,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    // Add content_type and metadata columns if they don't exist
-    try {
-      await connection.run(`ALTER TABLE documents ADD COLUMN content_type TEXT DEFAULT 'text'`);
-    } catch (error) {
-      // Column already exists, ignore error
-      if (error instanceof Error && !error.message.includes('duplicate column name')) {
-        throw error;
-      }
-    }
+    // Create system_info table for mode persistence and model tracking
+    await connection.run(`
+      CREATE TABLE IF NOT EXISTS system_info (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        
+        -- Core mode and model information
+        mode TEXT NOT NULL DEFAULT 'text' CHECK (mode IN ('text', 'multimodal')),
+        model_name TEXT NOT NULL DEFAULT 'sentence-transformers/all-MiniLM-L6-v2',
+        model_type TEXT NOT NULL DEFAULT 'sentence-transformer' CHECK (model_type IN ('sentence-transformer', 'clip')),
+        model_dimensions INTEGER NOT NULL DEFAULT 384,
+        model_version TEXT NOT NULL DEFAULT '',
+        
+        -- Content type support (JSON array)
+        supported_content_types TEXT NOT NULL DEFAULT '["text"]',
+        
+        -- Reranking configuration
+        reranking_strategy TEXT DEFAULT 'cross-encoder' CHECK (
+          reranking_strategy IN ('cross-encoder', 'text-derived', 'metadata', 'hybrid', 'disabled')
+        ),
+        reranking_model TEXT,
+        reranking_config TEXT, -- JSON configuration for strategy-specific settings
+        
+        -- Timestamps
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
-    try {
-      await connection.run(`ALTER TABLE documents ADD COLUMN metadata TEXT`);
-    } catch (error) {
-      // Column already exists, ignore error
-      if (error instanceof Error && !error.message.includes('duplicate column name')) {
-        throw error;
-      }
-    }
-
-    try {
-      await connection.run(`ALTER TABLE chunks ADD COLUMN content_type TEXT DEFAULT 'text'`);
-    } catch (error) {
-      // Column already exists, ignore error
-      if (error instanceof Error && !error.message.includes('duplicate column name')) {
-        throw error;
-      }
-    }
-
-    try {
-      await connection.run(`ALTER TABLE chunks ADD COLUMN metadata TEXT`);
-    } catch (error) {
-      // Column already exists, ignore error
-      if (error instanceof Error && !error.message.includes('duplicate column name')) {
-        throw error;
-      }
-    }
-
-    // Add model tracking columns if they don't exist
-    try {
-      await connection.run(`ALTER TABLE system_info ADD COLUMN model_name TEXT`);
-    } catch (error) {
-      // Column already exists, ignore error
-      if (error instanceof Error && !error.message.includes('duplicate column name')) {
-        throw error;
-      }
-    }
-
-    try {
-      await connection.run(`ALTER TABLE system_info ADD COLUMN model_dimensions INTEGER`);
-    } catch (error) {
-      // Column already exists, ignore error
-      if (error instanceof Error && !error.message.includes('duplicate column name')) {
-        throw error;
-      }
-    }
+    // Clean slate approach - no migration logic needed
+    // Users will perform fresh ingestion with the new architecture
 
     // Create indexes for performance
     await connection.run(`
@@ -243,6 +239,19 @@ export async function initializeSchema(connection: DatabaseConnection): Promise<
       CREATE INDEX IF NOT EXISTS idx_documents_content_type ON documents(content_type)
     `);
 
+    await connection.run(`
+      CREATE INDEX IF NOT EXISTS idx_documents_content_id ON documents(content_id)
+    `);
+
+    // Create indexes for content metadata table for efficient lookup
+    await connection.run(`
+      CREATE INDEX IF NOT EXISTS idx_content_hash ON content_metadata(content_hash)
+    `);
+
+    await connection.run(`
+      CREATE INDEX IF NOT EXISTS idx_storage_type ON content_metadata(storage_type)
+    `);
+
     console.log('Database schema initialized successfully');
   } catch (error) {
     throw new Error(`Failed to initialize database schema: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -256,6 +265,7 @@ export async function initializeSchema(connection: DatabaseConnection): Promise<
  * @param title - Title of the document
  * @param contentType - Type of content ('text', 'image', etc.)
  * @param metadata - Optional metadata object
+ * @param contentId - Optional content ID referencing content_metadata table
  * @returns Promise that resolves to the document ID
  */
 export async function insertDocument(
@@ -263,13 +273,17 @@ export async function insertDocument(
   source: string,
   title: string,
   contentType: string = 'text',
-  metadata?: Record<string, any>
+  metadata?: Record<string, any>,
+  contentId?: string
 ): Promise<number> {
   try {
+    // Validate content type
+    validateContentType(contentType);
+    
     const metadataJson = metadata ? JSON.stringify(metadata) : null;
     const result = await connection.run(
-      'INSERT INTO documents (source, title, content_type, metadata) VALUES (?, ?, ?, ?)',
-      [source, title, contentType, metadataJson]
+      'INSERT INTO documents (content_id, source, title, content_type, metadata) VALUES (?, ?, ?, ?, ?)',
+      [contentId || null, source, title, contentType, metadataJson]
     );
     
     if (typeof result.lastID !== 'number' || result.lastID <= 0) {
@@ -305,6 +319,9 @@ export async function insertChunk(
   metadata?: Record<string, any>
 ): Promise<void> {
   try {
+    // Validate content type
+    validateContentType(contentType);
+    
     const metadataJson = metadata ? JSON.stringify(metadata) : null;
     // Use INSERT OR REPLACE to handle duplicates gracefully
     await connection.run(
@@ -327,6 +344,7 @@ export async function insertChunk(
  * @param title - Title of the document
  * @param contentType - Type of content ('text', 'image', etc.)
  * @param metadata - Optional metadata object
+ * @param contentId - Optional content ID referencing content_metadata table
  * @returns Promise that resolves to the document ID
  */
 export async function upsertDocument(
@@ -334,9 +352,13 @@ export async function upsertDocument(
   source: string,
   title: string,
   contentType: string = 'text',
-  metadata?: Record<string, any>
+  metadata?: Record<string, any>,
+  contentId?: string
 ): Promise<number> {
   try {
+    // Validate content type
+    validateContentType(contentType);
+    
     // First try to get existing document
     const existing = await connection.get(
       'SELECT id FROM documents WHERE source = ?',
@@ -350,8 +372,8 @@ export async function upsertDocument(
     // Insert new document if it doesn't exist
     const metadataJson = metadata ? JSON.stringify(metadata) : null;
     const result = await connection.run(
-      'INSERT INTO documents (source, title, content_type, metadata) VALUES (?, ?, ?, ?)',
-      [source, title, contentType, metadataJson]
+      'INSERT INTO documents (content_id, source, title, content_type, metadata) VALUES (?, ?, ?, ?, ?)',
+      [contentId || null, source, title, contentType, metadataJson]
     );
     
     if (typeof result.lastID !== 'number' || result.lastID <= 0) {
@@ -393,7 +415,8 @@ export async function getChunksByEmbeddingIds(
         c.created_at,
         d.source as document_source,
         d.title as document_title,
-        d.content_type as document_content_type
+        d.content_type as document_content_type,
+        d.content_id as document_content_id
       FROM chunks c
       JOIN documents d ON c.document_id = d.id
       WHERE c.embedding_id IN (${placeholders})
@@ -415,48 +438,229 @@ export async function getChunksByEmbeddingIds(
 
 
 /**
+ * Validates mode value against allowed enum values
+ */
+function validateMode(mode: string): void {
+  const validModes = ['text', 'multimodal'];
+  if (!validModes.includes(mode)) {
+    throw new Error(`Invalid mode '${mode}'. Must be one of: ${validModes.join(', ')}`);
+  }
+}
+
+/**
+ * Validates model type value against allowed enum values
+ */
+function validateModelType(modelType: string): void {
+  const validTypes = ['sentence-transformer', 'clip'];
+  if (!validTypes.includes(modelType)) {
+    throw new Error(`Invalid model type '${modelType}'. Must be one of: ${validTypes.join(', ')}`);
+  }
+}
+
+/**
+ * Validates reranking strategy value against allowed enum values
+ */
+function validateRerankingStrategy(strategy: string): void {
+  const validStrategies = ['cross-encoder', 'text-derived', 'metadata', 'hybrid', 'disabled'];
+  if (!validStrategies.includes(strategy)) {
+    throw new Error(`Invalid reranking strategy '${strategy}'. Must be one of: ${validStrategies.join(', ')}`);
+  }
+}
+
+/**
+ * Validates content type value against allowed types
+ */
+function validateContentType(contentType: string): void {
+  const validTypes = ['text', 'image', 'pdf', 'docx'];
+  if (!validTypes.includes(contentType)) {
+    throw new Error(`Invalid content type '${contentType}'. Must be one of: ${validTypes.join(', ')}`);
+  }
+}
+
+/**
+ * Gets the complete system information from system_info table
+ * @param connection - Database connection object
+ * @returns Promise that resolves to SystemInfo object or null if not set
+ */
+export async function getSystemInfo(connection: DatabaseConnection): Promise<SystemInfo | null> {
+  try {
+    const result = await connection.get(`
+      SELECT 
+        mode, model_name, model_type, model_dimensions, model_version,
+        supported_content_types, reranking_strategy, reranking_model, 
+        reranking_config, created_at, updated_at
+      FROM system_info WHERE id = 1
+    `);
+    
+    if (!result) {
+      return null;
+    }
+    
+    // Parse JSON fields and convert to proper types
+    const supportedContentTypes = result.supported_content_types 
+      ? JSON.parse(result.supported_content_types) 
+      : ['text'];
+    
+    const rerankingConfig = result.reranking_config 
+      ? JSON.parse(result.reranking_config) 
+      : undefined;
+    
+    return {
+      mode: result.mode as ModeType,
+      modelName: result.model_name,
+      modelType: result.model_type as ModelType,
+      modelDimensions: result.model_dimensions,
+      modelVersion: result.model_version,
+      supportedContentTypes,
+      rerankingStrategy: result.reranking_strategy as RerankingStrategyType,
+      rerankingModel: result.reranking_model,
+      rerankingConfig,
+      createdAt: new Date(result.created_at),
+      updatedAt: new Date(result.updated_at)
+    };
+  } catch (error) {
+    throw new Error(`Failed to get system info: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Sets the complete system information in system_info table
+ * @param connection - Database connection object
+ * @param systemInfo - SystemInfo object to store
+ */
+export async function setSystemInfo(connection: DatabaseConnection, systemInfo: Partial<SystemInfo>): Promise<void> {
+  try {
+    // Validate enum values if provided
+    if (systemInfo.mode) {
+      validateMode(systemInfo.mode);
+    }
+    if (systemInfo.modelType) {
+      validateModelType(systemInfo.modelType);
+    }
+    if (systemInfo.rerankingStrategy) {
+      validateRerankingStrategy(systemInfo.rerankingStrategy);
+    }
+    
+    // Check if there's already a row
+    const existing = await connection.get('SELECT id FROM system_info WHERE id = 1');
+    
+    // Prepare JSON fields
+    const supportedContentTypesJson = systemInfo.supportedContentTypes 
+      ? JSON.stringify(systemInfo.supportedContentTypes)
+      : undefined;
+    
+    const rerankingConfigJson = systemInfo.rerankingConfig 
+      ? JSON.stringify(systemInfo.rerankingConfig)
+      : undefined;
+    
+    if (existing) {
+      // Build dynamic UPDATE query based on provided fields
+      const updateFields: string[] = [];
+      const updateValues: any[] = [];
+      
+      if (systemInfo.mode !== undefined) {
+        updateFields.push('mode = ?');
+        updateValues.push(systemInfo.mode);
+      }
+      if (systemInfo.modelName !== undefined) {
+        updateFields.push('model_name = ?');
+        updateValues.push(systemInfo.modelName);
+      }
+      if (systemInfo.modelType !== undefined) {
+        updateFields.push('model_type = ?');
+        updateValues.push(systemInfo.modelType);
+      }
+      if (systemInfo.modelDimensions !== undefined) {
+        updateFields.push('model_dimensions = ?');
+        updateValues.push(systemInfo.modelDimensions);
+      }
+      if (systemInfo.modelVersion !== undefined) {
+        updateFields.push('model_version = ?');
+        updateValues.push(systemInfo.modelVersion);
+      }
+      if (supportedContentTypesJson !== undefined) {
+        updateFields.push('supported_content_types = ?');
+        updateValues.push(supportedContentTypesJson);
+      }
+      if (systemInfo.rerankingStrategy !== undefined) {
+        updateFields.push('reranking_strategy = ?');
+        updateValues.push(systemInfo.rerankingStrategy);
+      }
+      if (systemInfo.rerankingModel !== undefined) {
+        updateFields.push('reranking_model = ?');
+        updateValues.push(systemInfo.rerankingModel);
+      }
+      if (rerankingConfigJson !== undefined) {
+        updateFields.push('reranking_config = ?');
+        updateValues.push(rerankingConfigJson);
+      }
+      
+      // Always update the timestamp
+      updateFields.push('updated_at = CURRENT_TIMESTAMP');
+      updateValues.push(1); // Add WHERE clause parameter
+      
+      if (updateFields.length > 1) { // More than just the timestamp
+        const sql = `UPDATE system_info SET ${updateFields.join(', ')} WHERE id = ?`;
+        await connection.run(sql, updateValues);
+      }
+    } else {
+      // Insert new row with provided values and defaults
+      const insertSql = `
+        INSERT INTO system_info (
+          id, mode, model_name, model_type, model_dimensions, model_version,
+          supported_content_types, reranking_strategy, reranking_model, reranking_config,
+          created_at, updated_at
+        ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `;
+      
+      await connection.run(insertSql, [
+        systemInfo.mode || 'text',
+        systemInfo.modelName || 'sentence-transformers/all-MiniLM-L6-v2',
+        systemInfo.modelType || 'sentence-transformer',
+        systemInfo.modelDimensions || 384,
+        systemInfo.modelVersion || '',
+        supportedContentTypesJson || '["text"]',
+        systemInfo.rerankingStrategy || 'cross-encoder',
+        systemInfo.rerankingModel || null,
+        rerankingConfigJson || null
+      ]);
+    }
+  } catch (error) {
+    throw new Error(`Failed to set system info: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * @deprecated Use getSystemInfo() instead. This function is kept for existing code compatibility.
  * Gets the current model version from system_info table
  * @param connection - Database connection object
  * @returns Promise that resolves to the model version string or null if not set
  */
 export async function getModelVersion(connection: DatabaseConnection): Promise<string | null> {
   try {
-    const result = await connection.get('SELECT model_version FROM system_info WHERE id = 1');
-    return result ? result.model_version : null;
+    const systemInfo = await getSystemInfo(connection);
+    return systemInfo ? systemInfo.modelVersion : null;
   } catch (error) {
     throw new Error(`Failed to get model version: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
 /**
+ * @deprecated Use setSystemInfo() instead. This function is kept for existing code compatibility.
  * Sets the model version in system_info table
  * @param connection - Database connection object
  * @param modelVersion - Model version string to store
  */
 export async function setModelVersion(connection: DatabaseConnection, modelVersion: string): Promise<void> {
   try {
-    // Check if there's already a row
-    const existing = await connection.get('SELECT model_name, model_dimensions FROM system_info WHERE id = 1');
-    
-    if (existing) {
-      // Update only the model_version field, preserve existing model info
-      await connection.run(
-        'UPDATE system_info SET model_version = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1',
-        [modelVersion]
-      );
-    } else {
-      // Insert new row with just model_version
-      await connection.run(
-        'INSERT INTO system_info (id, model_version, updated_at) VALUES (1, ?, CURRENT_TIMESTAMP)',
-        [modelVersion]
-      );
-    }
+    await setSystemInfo(connection, { modelVersion });
   } catch (error) {
     throw new Error(`Failed to set model version: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
 /**
+ * @deprecated Use getSystemInfo() instead. This function is kept for existing code compatibility.
  * Gets the stored model information from system_info table
  * @param connection - Database connection object
  * @returns Promise that resolves to model info object or null if not set
@@ -466,17 +670,14 @@ export async function getStoredModelInfo(connection: DatabaseConnection): Promis
   dimensions: number;
 } | null> {
   try {
-    const result = await connection.get(
-      'SELECT model_name, model_dimensions FROM system_info WHERE id = 1'
-    );
-    
-    if (!result || !result.model_name || !result.model_dimensions) {
+    const systemInfo = await getSystemInfo(connection);
+    if (!systemInfo || !systemInfo.modelName || !systemInfo.modelDimensions) {
       return null;
     }
     
     return {
-      modelName: result.model_name,
-      dimensions: result.model_dimensions
+      modelName: systemInfo.modelName,
+      dimensions: systemInfo.modelDimensions
     };
   } catch (error) {
     throw new Error(`Failed to get stored model info: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -484,6 +685,7 @@ export async function getStoredModelInfo(connection: DatabaseConnection): Promis
 }
 
 /**
+ * @deprecated Use setSystemInfo() instead. This function is kept for existing code compatibility.
  * Sets the model information in system_info table
  * @param connection - Database connection object
  * @param modelName - Name of the embedding model
@@ -495,23 +697,490 @@ export async function setStoredModelInfo(
   dimensions: number
 ): Promise<void> {
   try {
-    // Check if there's already a row
-    const existing = await connection.get('SELECT model_version FROM system_info WHERE id = 1');
-    
-    if (existing) {
-      // Update only the model info fields, preserve existing model_version
-      await connection.run(
-        'UPDATE system_info SET model_name = ?, model_dimensions = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1',
-        [modelName, dimensions]
-      );
-    } else {
-      // Insert new row with placeholder model_version (will be updated by setModelVersion)
-      await connection.run(
-        'INSERT INTO system_info (id, model_version, model_name, model_dimensions, updated_at) VALUES (1, "", ?, ?, CURRENT_TIMESTAMP)',
-        [modelName, dimensions]
-      );
-    }
+    await setSystemInfo(connection, { 
+      modelName, 
+      modelDimensions: dimensions 
+    });
   } catch (error) {
     throw new Error(`Failed to set stored model info: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Retrieves documents by content type
+ * @param connection - Database connection object
+ * @param contentType - Content type to filter by
+ * @returns Promise that resolves to an array of documents
+ */
+export async function getDocumentsByContentType(
+  connection: DatabaseConnection,
+  contentType: string
+): Promise<Array<{
+  id: number;
+  source: string;
+  title: string;
+  content_type: string;
+  metadata?: Record<string, any>;
+  created_at: string;
+}>> {
+  try {
+    validateContentType(contentType);
+    
+    const results = await connection.all(
+      'SELECT id, source, title, content_type, metadata, created_at FROM documents WHERE content_type = ? ORDER BY created_at DESC',
+      [contentType]
+    );
+    
+    // Parse metadata JSON strings back to objects
+    return results.map((row: any) => ({
+      ...row,
+      metadata: row.metadata ? JSON.parse(row.metadata) : undefined
+    }));
+  } catch (error) {
+    throw new Error(`Failed to get documents by content type: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Retrieves chunks by content type
+ * @param connection - Database connection object
+ * @param contentType - Content type to filter by
+ * @returns Promise that resolves to an array of chunks with document metadata
+ */
+export async function getChunksByContentType(
+  connection: DatabaseConnection,
+  contentType: string
+): Promise<ContentChunk[]> {
+  try {
+    validateContentType(contentType);
+    
+    const sql = `
+      SELECT 
+        c.id,
+        c.embedding_id,
+        c.document_id,
+        c.content,
+        c.content_type,
+        c.chunk_index,
+        c.metadata,
+        c.created_at,
+        d.source as document_source,
+        d.title as document_title,
+        d.content_type as document_content_type,
+        d.content_id as document_content_id
+      FROM chunks c
+      JOIN documents d ON c.document_id = d.id
+      WHERE c.content_type = ?
+      ORDER BY d.source, c.chunk_index
+    `;
+
+    const results = await connection.all(sql, [contentType]);
+    
+    // Parse metadata JSON strings back to objects
+    return results.map((row: any) => ({
+      ...row,
+      metadata: row.metadata ? JSON.parse(row.metadata) : undefined
+    })) as ContentChunk[];
+  } catch (error) {
+    throw new Error(`Failed to get chunks by content type: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Gets content type statistics from the database
+ * @param connection - Database connection object
+ * @returns Promise that resolves to content type statistics
+ */
+export async function getContentTypeStatistics(
+  connection: DatabaseConnection
+): Promise<{
+  documents: Record<string, number>;
+  chunks: Record<string, number>;
+  total: { documents: number; chunks: number };
+}> {
+  try {
+    // Get document statistics
+    const docStats = await connection.all(`
+      SELECT content_type, COUNT(*) as count 
+      FROM documents 
+      GROUP BY content_type
+    `);
+    
+    // Get chunk statistics
+    const chunkStats = await connection.all(`
+      SELECT content_type, COUNT(*) as count 
+      FROM chunks 
+      GROUP BY content_type
+    `);
+    
+    // Get totals
+    const totalDocs = await connection.get('SELECT COUNT(*) as count FROM documents');
+    const totalChunks = await connection.get('SELECT COUNT(*) as count FROM chunks');
+    
+    const documentStats: Record<string, number> = {};
+    const chunkStatsMap: Record<string, number> = {};
+    
+    docStats.forEach((row: any) => {
+      documentStats[row.content_type] = row.count;
+    });
+    
+    chunkStats.forEach((row: any) => {
+      chunkStatsMap[row.content_type] = row.count;
+    });
+    
+    return {
+      documents: documentStats,
+      chunks: chunkStatsMap,
+      total: {
+        documents: totalDocs.count,
+        chunks: totalChunks.count
+      }
+    };
+  } catch (error) {
+    throw new Error(`Failed to get content type statistics: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Updates document metadata
+ * @param connection - Database connection object
+ * @param documentId - ID of the document to update
+ * @param metadata - New metadata object
+ */
+export async function updateDocumentMetadata(
+  connection: DatabaseConnection,
+  documentId: number,
+  metadata: Record<string, any>
+): Promise<void> {
+  try {
+    const metadataJson = JSON.stringify(metadata);
+    const result = await connection.run(
+      'UPDATE documents SET metadata = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [metadataJson, documentId]
+    );
+    
+    if (result.changes === 0) {
+      throw new Error(`Document with ID ${documentId} not found`);
+    }
+  } catch (error) {
+    throw new Error(`Failed to update document metadata: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Updates chunk metadata
+ * @param connection - Database connection object
+ * @param chunkId - ID of the chunk to update
+ * @param metadata - New metadata object
+ */
+export async function updateChunkMetadata(
+  connection: DatabaseConnection,
+  chunkId: number,
+  metadata: Record<string, any>
+): Promise<void> {
+  try {
+    const metadataJson = JSON.stringify(metadata);
+    const result = await connection.run(
+      'UPDATE chunks SET metadata = ? WHERE id = ?',
+      [metadataJson, chunkId]
+    );
+    
+    if (result.changes === 0) {
+      throw new Error(`Chunk with ID ${chunkId} not found`);
+    }
+  } catch (error) {
+    throw new Error(`Failed to update chunk metadata: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+// =============================================================================
+// CONTENT METADATA FUNCTIONS
+// =============================================================================
+
+/**
+ * Content metadata interface for unified content system
+ */
+export interface ContentMetadata {
+  id: string;
+  storageType: 'filesystem' | 'content_dir';
+  originalPath?: string;
+  contentPath: string;
+  displayName: string;
+  contentType: string;
+  fileSize: number;
+  contentHash: string;
+  createdAt: Date;
+}
+
+/**
+ * Inserts content metadata into the content_metadata table
+ * @param connection - Database connection object
+ * @param contentMetadata - Content metadata to insert
+ */
+export async function insertContentMetadata(
+  connection: DatabaseConnection,
+  contentMetadata: Omit<ContentMetadata, 'createdAt'>
+): Promise<void> {
+  try {
+    await connection.run(`
+      INSERT INTO content_metadata (
+        id, storage_type, original_path, content_path, display_name, 
+        content_type, file_size, content_hash
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      contentMetadata.id,
+      contentMetadata.storageType,
+      contentMetadata.originalPath || null,
+      contentMetadata.contentPath,
+      contentMetadata.displayName,
+      contentMetadata.contentType,
+      contentMetadata.fileSize,
+      contentMetadata.contentHash
+    ]);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('UNIQUE constraint failed')) {
+      throw new Error(`Content with ID '${contentMetadata.id}' already exists`);
+    }
+    throw new Error(`Failed to insert content metadata: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Gets content metadata by content ID
+ * @param connection - Database connection object
+ * @param contentId - Content ID to retrieve
+ * @returns Promise that resolves to ContentMetadata or null if not found
+ */
+export async function getContentMetadata(
+  connection: DatabaseConnection,
+  contentId: string
+): Promise<ContentMetadata | null> {
+  try {
+    const result = await connection.get(`
+      SELECT id, storage_type, original_path, content_path, display_name,
+             content_type, file_size, content_hash, created_at
+      FROM content_metadata 
+      WHERE id = ?
+    `, [contentId]);
+    
+    if (!result) {
+      return null;
+    }
+    
+    return {
+      id: result.id,
+      storageType: result.storage_type as 'filesystem' | 'content_dir',
+      originalPath: result.original_path,
+      contentPath: result.content_path,
+      displayName: result.display_name,
+      contentType: result.content_type,
+      fileSize: result.file_size,
+      contentHash: result.content_hash,
+      createdAt: new Date(result.created_at)
+    };
+  } catch (error) {
+    throw new Error(`Failed to get content metadata: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Gets content metadata by content hash (for deduplication)
+ * @param connection - Database connection object
+ * @param contentHash - Content hash to search for
+ * @returns Promise that resolves to ContentMetadata or null if not found
+ */
+export async function getContentMetadataByHash(
+  connection: DatabaseConnection,
+  contentHash: string
+): Promise<ContentMetadata | null> {
+  try {
+    const result = await connection.get(`
+      SELECT id, storage_type, original_path, content_path, display_name,
+             content_type, file_size, content_hash, created_at
+      FROM content_metadata 
+      WHERE content_hash = ?
+    `, [contentHash]);
+    
+    if (!result) {
+      return null;
+    }
+    
+    return {
+      id: result.id,
+      storageType: result.storage_type as 'filesystem' | 'content_dir',
+      originalPath: result.original_path,
+      contentPath: result.content_path,
+      displayName: result.display_name,
+      contentType: result.content_type,
+      fileSize: result.file_size,
+      contentHash: result.content_hash,
+      createdAt: new Date(result.created_at)
+    };
+  } catch (error) {
+    throw new Error(`Failed to get content metadata by hash: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Gets all content metadata by storage type
+ * @param connection - Database connection object
+ * @param storageType - Storage type to filter by
+ * @returns Promise that resolves to array of ContentMetadata
+ */
+export async function getContentMetadataByStorageType(
+  connection: DatabaseConnection,
+  storageType: 'filesystem' | 'content_dir'
+): Promise<ContentMetadata[]> {
+  try {
+    const results = await connection.all(`
+      SELECT id, storage_type, original_path, content_path, display_name,
+             content_type, file_size, content_hash, created_at
+      FROM content_metadata 
+      WHERE storage_type = ?
+      ORDER BY created_at DESC
+    `, [storageType]);
+    
+    return results.map((result: any) => ({
+      id: result.id,
+      storageType: result.storage_type as 'filesystem' | 'content_dir',
+      originalPath: result.original_path,
+      contentPath: result.content_path,
+      displayName: result.display_name,
+      contentType: result.content_type,
+      fileSize: result.file_size,
+      contentHash: result.content_hash,
+      createdAt: new Date(result.created_at)
+    }));
+  } catch (error) {
+    throw new Error(`Failed to get content metadata by storage type: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Deletes content metadata by content ID
+ * @param connection - Database connection object
+ * @param contentId - Content ID to delete
+ * @returns Promise that resolves to true if deleted, false if not found
+ */
+export async function deleteContentMetadata(
+  connection: DatabaseConnection,
+  contentId: string
+): Promise<boolean> {
+  try {
+    const result = await connection.run(
+      'DELETE FROM content_metadata WHERE id = ?',
+      [contentId]
+    );
+    
+    return result.changes > 0;
+  } catch (error) {
+    throw new Error(`Failed to delete content metadata: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Gets storage statistics from storage_stats table
+ * @param connection - Database connection object
+ * @returns Promise that resolves to storage statistics
+ */
+export async function getStorageStats(
+  connection: DatabaseConnection
+): Promise<{
+  contentDirFiles: number;
+  contentDirSize: number;
+  filesystemRefs: number;
+  lastCleanup: Date | null;
+  updatedAt: Date;
+} | null> {
+  try {
+    const result = await connection.get(`
+      SELECT content_dir_files, content_dir_size, filesystem_refs, 
+             last_cleanup, updated_at
+      FROM storage_stats 
+      WHERE id = 1
+    `);
+    
+    if (!result) {
+      return null;
+    }
+    
+    return {
+      contentDirFiles: result.content_dir_files,
+      contentDirSize: result.content_dir_size,
+      filesystemRefs: result.filesystem_refs,
+      lastCleanup: result.last_cleanup ? new Date(result.last_cleanup) : null,
+      updatedAt: new Date(result.updated_at)
+    };
+  } catch (error) {
+    throw new Error(`Failed to get storage stats: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Updates storage statistics in storage_stats table
+ * @param connection - Database connection object
+ * @param stats - Partial storage statistics to update
+ */
+export async function updateStorageStats(
+  connection: DatabaseConnection,
+  stats: {
+    contentDirFiles?: number;
+    contentDirSize?: number;
+    filesystemRefs?: number;
+    lastCleanup?: Date;
+  }
+): Promise<void> {
+  try {
+    // Check if there's already a row
+    const existing = await connection.get('SELECT id FROM storage_stats WHERE id = 1');
+    
+    if (existing) {
+      // Build dynamic UPDATE query based on provided fields
+      const updateFields: string[] = [];
+      const updateValues: any[] = [];
+      
+      if (stats.contentDirFiles !== undefined) {
+        updateFields.push('content_dir_files = ?');
+        updateValues.push(stats.contentDirFiles);
+      }
+      if (stats.contentDirSize !== undefined) {
+        updateFields.push('content_dir_size = ?');
+        updateValues.push(stats.contentDirSize);
+      }
+      if (stats.filesystemRefs !== undefined) {
+        updateFields.push('filesystem_refs = ?');
+        updateValues.push(stats.filesystemRefs);
+      }
+      if (stats.lastCleanup !== undefined) {
+        updateFields.push('last_cleanup = ?');
+        updateValues.push(stats.lastCleanup.toISOString());
+      }
+      
+      // Always update the timestamp
+      updateFields.push('updated_at = CURRENT_TIMESTAMP');
+      updateValues.push(1); // Add WHERE clause parameter
+      
+      if (updateFields.length > 1) { // More than just the timestamp
+        const sql = `UPDATE storage_stats SET ${updateFields.join(', ')} WHERE id = ?`;
+        await connection.run(sql, updateValues);
+      }
+    } else {
+      // Insert new row with provided values and defaults
+      const insertSql = `
+        INSERT INTO storage_stats (
+          id, content_dir_files, content_dir_size, filesystem_refs, 
+          last_cleanup, updated_at
+        ) VALUES (1, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `;
+      
+      await connection.run(insertSql, [
+        stats.contentDirFiles || 0,
+        stats.contentDirSize || 0,
+        stats.filesystemRefs || 0,
+        stats.lastCleanup ? stats.lastCleanup.toISOString() : null
+      ]);
+    }
+  } catch (error) {
+    throw new Error(`Failed to update storage stats: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }

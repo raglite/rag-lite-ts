@@ -32,6 +32,8 @@ Examples:
   raglite ingest ./docs/           # Ingest all .md/.txt files in docs/
   raglite ingest ./readme.md       # Ingest single file
   raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2  # Use higher quality model
+  raglite ingest ./docs/ --mode multimodal  # Enable multimodal processing
+  raglite ingest ./docs/ --mode multimodal --rerank-strategy metadata  # Use metadata reranking
   raglite ingest ./docs/ --path-strategy relative --path-base /project  # Use relative paths
   raglite search "machine learning" # Search for documents about machine learning
   raglite search "API documentation" --top-k 10  # Get top 10 results
@@ -45,13 +47,23 @@ Options for search:
 
 Options for ingest:
   --model <name>       Use specific embedding model
+  --mode <mode>        Processing mode: 'text' (default) or 'multimodal'
+  --rerank-strategy <strategy>  Reranking strategy for multimodal mode
   --rebuild-if-needed  Automatically rebuild if model mismatch detected (WARNING: rebuilds entire index)
   --path-strategy <strategy>  Path storage strategy: 'relative' (default) or 'absolute'
   --path-base <path>   Base directory for relative paths (defaults to current directory)
 
 Available models:
-  sentence-transformers/all-MiniLM-L6-v2  (384 dim, fast, default)
-  Xenova/all-mpnet-base-v2               (768 dim, higher quality)
+  Text mode:
+    sentence-transformers/all-MiniLM-L6-v2  (384 dim, fast, default)
+    Xenova/all-mpnet-base-v2               (768 dim, higher quality)
+  Multimodal mode:
+    Xenova/clip-vit-base-patch32           (512 dim, text + image support)
+
+Available reranking strategies (multimodal mode):
+  text-derived  Use image-to-text conversion + cross-encoder (default)
+  metadata      Use filename and metadata-based scoring
+  disabled      No reranking, use vector similarity only
 
 For more information, visit: https://github.com/your-repo/rag-lite-ts
 `);
@@ -124,9 +136,13 @@ function validateArgs(command: string, args: string[], options: Record<string, a
         console.error('  raglite ingest ./docs/           # Ingest all .md/.txt files in docs/');
         console.error('  raglite ingest ./readme.md       # Ingest single file');
         console.error('  raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2  # Use higher quality model');
+        console.error('  raglite ingest ./docs/ --mode multimodal  # Enable multimodal processing');
+        console.error('  raglite ingest ./docs/ --mode multimodal --rerank-strategy metadata  # Use metadata reranking');
         console.error('');
         console.error('Options:');
         console.error('  --model <name>         Use specific embedding model');
+        console.error('  --mode <mode>          Processing mode: text (default) or multimodal');
+        console.error('  --rerank-strategy <strategy>  Reranking strategy for multimodal mode');
         console.error('  --rebuild-if-needed    Automatically rebuild if model mismatch detected');
         console.error('');
         console.error('The path can be either a file (.md or .txt) or a directory.');
@@ -192,6 +208,73 @@ function validateArgs(command: string, args: string[], options: Record<string, a
     options['top-k'] = topK;
   }
 
+  // Validate mode option (only for ingest command)
+  if (options.mode !== undefined) {
+    if (command !== 'ingest') {
+      console.error(`Error: --mode option is only available for the 'ingest' command`);
+      console.error('');
+      console.error('The search command automatically detects the mode from the database.');
+      console.error('Mode is set once during ingestion and persists for all searches.');
+      console.error('');
+      console.error('Examples:');
+      console.error('  raglite ingest ./docs/ --mode multimodal');
+      console.error('  raglite search "your query"  # Uses mode from ingestion');
+      process.exit(EXIT_CODES.INVALID_ARGUMENTS);
+    }
+
+    const supportedModes = ['text', 'multimodal'];
+    if (!supportedModes.includes(options.mode)) {
+      console.error(`Error: Unsupported mode '${options.mode}'`);
+      console.error('');
+      console.error('Supported modes:');
+      console.error('  text        Process text documents only (default)');
+      console.error('  multimodal  Process text and image documents');
+      console.error('');
+      console.error('Examples:');
+      console.error('  --mode text');
+      console.error('  --mode multimodal');
+      process.exit(EXIT_CODES.INVALID_ARGUMENTS);
+    }
+  }
+
+  // Validate rerank-strategy option (only for ingest command with multimodal mode)
+  if (options['rerank-strategy'] !== undefined) {
+    if (command !== 'ingest') {
+      console.error(`Error: --rerank-strategy option is only available for the 'ingest' command`);
+      console.error('');
+      console.error('Reranking strategy is configured during ingestion and used automatically during search.');
+      process.exit(EXIT_CODES.INVALID_ARGUMENTS);
+    }
+
+    const mode = options.mode || 'text';
+    if (mode !== 'multimodal') {
+      console.error(`Error: --rerank-strategy option is only available in multimodal mode`);
+      console.error('');
+      console.error('To use reranking strategies, specify --mode multimodal');
+      console.error('');
+      console.error('Examples:');
+      console.error('  raglite ingest ./docs/ --mode multimodal --rerank-strategy text-derived');
+      console.error('  raglite ingest ./docs/ --mode multimodal --rerank-strategy metadata');
+      process.exit(EXIT_CODES.INVALID_ARGUMENTS);
+    }
+
+    const supportedStrategies = ['text-derived', 'metadata', 'disabled'];
+    if (!supportedStrategies.includes(options['rerank-strategy'])) {
+      console.error(`Error: Unsupported reranking strategy '${options['rerank-strategy']}'`);
+      console.error('');
+      console.error('Supported strategies for multimodal mode:');
+      console.error('  text-derived  Convert images to text, then use cross-encoder (default)');
+      console.error('  metadata      Use filename and metadata-based scoring');
+      console.error('  disabled      No reranking, use vector similarity only');
+      console.error('');
+      console.error('Examples:');
+      console.error('  --rerank-strategy text-derived');
+      console.error('  --rerank-strategy metadata');
+      console.error('  --rerank-strategy disabled');
+      process.exit(EXIT_CODES.INVALID_ARGUMENTS);
+    }
+  }
+
   // Validate model option (only for ingest command)
   if (options.model !== undefined) {
     if (command !== 'ingest') {
@@ -206,21 +289,45 @@ function validateArgs(command: string, args: string[], options: Record<string, a
       process.exit(EXIT_CODES.INVALID_ARGUMENTS);
     }
 
-    const supportedModels = [
+    const mode = options.mode || 'text';
+    const textModels = [
       'sentence-transformers/all-MiniLM-L6-v2',
       'Xenova/all-mpnet-base-v2'
     ];
+    const multimodalModels = [
+      'Xenova/clip-vit-base-patch32'
+    ];
+
+    let supportedModels: string[];
+    let modelTypeDescription: string;
+
+    if (mode === 'multimodal') {
+      supportedModels = multimodalModels;
+      modelTypeDescription = 'multimodal models';
+    } else {
+      supportedModels = textModels;
+      modelTypeDescription = 'text models';
+    }
 
     if (!supportedModels.includes(options.model)) {
-      console.error(`Error: Unsupported model '${options.model}'`);
+      console.error(`Error: Model '${options.model}' is not supported for ${mode} mode`);
       console.error('');
-      console.error('Supported models:');
-      console.error('  sentence-transformers/all-MiniLM-L6-v2  (384 dim, fast, default)');
-      console.error('  Xenova/all-mpnet-base-v2               (768 dim, higher quality)');
+      if (mode === 'text') {
+        console.error('Supported models for text mode:');
+        console.error('  sentence-transformers/all-MiniLM-L6-v2  (384 dim, fast, default)');
+        console.error('  Xenova/all-mpnet-base-v2               (768 dim, higher quality)');
+      } else {
+        console.error('Supported models for multimodal mode:');
+        console.error('  Xenova/clip-vit-base-patch32           (512 dim, text + image support)');
+      }
       console.error('');
       console.error('Examples:');
-      console.error('  --model sentence-transformers/all-MiniLM-L6-v2');
-      console.error('  --model Xenova/all-mpnet-base-v2');
+      if (mode === 'text') {
+        console.error('  --model sentence-transformers/all-MiniLM-L6-v2');
+        console.error('  --model Xenova/all-mpnet-base-v2');
+      } else {
+        console.error('  --model Xenova/clip-vit-base-patch32 --mode multimodal');
+      }
       process.exit(EXIT_CODES.INVALID_ARGUMENTS);
     }
   }
@@ -269,6 +376,9 @@ function validateArgs(command: string, args: string[], options: Record<string, a
  * Main CLI entry point
  */
 async function main(): Promise<void> {
+  // Set CLI mode to prevent database connection manager from starting timers
+  process.env.RAG_CLI_MODE = 'true';
+  
   try {
     const { command, args, options } = parseArgs();
 
@@ -370,24 +480,46 @@ process.on('uncaughtException', (error) => {
 });
 
 // Handle process termination signals gracefully
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('\n\nReceived SIGINT (Ctrl+C). Shutting down gracefully...');
   console.log('If you need to force quit, press Ctrl+C again.');
-  process.exit(EXIT_CODES.SUCCESS);
-});
-
-process.on('SIGTERM', () => {
-  console.log('\n\nReceived SIGTERM. Shutting down gracefully...');
-  process.exit(EXIT_CODES.SUCCESS);
-});
-
-// Run the CLI
-main().catch((error) => {
-  console.error('Fatal error:', error instanceof Error ? error.message : String(error));
-
-  if (error instanceof ConfigurationError) {
-    process.exit(error.exitCode);
-  } else {
-    process.exit(EXIT_CODES.GENERAL_ERROR);
+  
+  // Clean up database connections before exit
+  try {
+    const { DatabaseConnectionManager } = await import('./core/database-connection-manager.js');
+    await DatabaseConnectionManager.closeAllConnections();
+  } catch (error) {
+    // Ignore cleanup errors during shutdown
   }
+  
+  process.exit(EXIT_CODES.SUCCESS);
 });
+
+process.on('SIGTERM', async () => {
+  console.log('\n\nReceived SIGTERM. Shutting down gracefully...');
+  
+  // Clean up database connections before exit
+  try {
+    const { DatabaseConnectionManager } = await import('./core/database-connection-manager.js');
+    await DatabaseConnectionManager.closeAllConnections();
+  } catch (error) {
+    // Ignore cleanup errors during shutdown
+  }
+  
+  process.exit(EXIT_CODES.SUCCESS);
+});
+
+// Run the CLI only if this file is executed directly
+// In ES modules, we need to check import.meta.url instead of require.main
+// Check if this file is being run directly
+if (process.argv[1] === __filename || process.argv[1].endsWith('cli.js')) {
+  main().catch((error) => {
+    console.error('Fatal error:', error instanceof Error ? error.message : String(error));
+
+    if (error instanceof ConfigurationError) {
+      process.exit(error.exitCode);
+    } else {
+      process.exit(EXIT_CODES.GENERAL_ERROR);
+    }
+  });
+}

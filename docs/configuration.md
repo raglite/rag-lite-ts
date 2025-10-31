@@ -2,7 +2,7 @@
 
 *For users who need custom settings, multiple environments, or production deployments*
 
-This guide covers configuration options for RAG-lite TS, from simple constructor options to advanced environment-specific setups.
+This guide covers configuration options for RAG-lite TS with **Chameleon Multimodal Architecture**, from simple constructor options to advanced environment-specific setups including mode persistence and multimodal configuration.
 
 ## Configuration Methods
 
@@ -23,15 +23,17 @@ When using RAG-lite TS programmatically, you can configure options directly in t
 ```typescript
 import { SearchEngine, IngestionPipeline } from 'rag-lite-ts';
 
-// Search with custom model and reranking
+// Text mode search with custom model and reranking
 const search = new SearchEngine('./index.bin', './db.sqlite', {
   embeddingModel: 'Xenova/all-mpnet-base-v2',
   enableReranking: true
 });
 
-// Ingestion with custom chunking
+// Multimodal ingestion with CLIP model and text-derived reranking
 const ingestion = new IngestionPipeline('./db.sqlite', './index.bin', {
-  embeddingModel: 'Xenova/all-mpnet-base-v2',
+  mode: 'multimodal',
+  embeddingModel: 'Xenova/clip-vit-base-patch32',
+  rerankingStrategy: 'text-derived',
   chunkSize: 400,
   chunkOverlap: 80,
   batchSize: 8
@@ -43,7 +45,7 @@ const ingestion = new IngestionPipeline('./db.sqlite', './index.bin', {
 ```typescript
 import { SearchEngine, IngestionPipeline } from 'rag-lite-ts';
 
-// Production search configuration
+// Production text search configuration
 const search = new SearchEngine('./index.bin', './db.sqlite', {
   embeddingModel: 'Xenova/all-mpnet-base-v2',
   enableReranking: true,
@@ -51,12 +53,14 @@ const search = new SearchEngine('./index.bin', './db.sqlite', {
   batchSize: 8
 });
 
-// High-throughput ingestion configuration
+// High-throughput multimodal ingestion configuration
 const ingestion = new IngestionPipeline('./db.sqlite', './index.bin', {
-  embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
+  mode: 'multimodal',
+  embeddingModel: 'Xenova/clip-vit-base-patch32',
+  rerankingStrategy: 'text-derived',
   chunkSize: 300,
   chunkOverlap: 60,
-  batchSize: 32,
+  batchSize: 16,
   forceRebuild: false
 });
 ```
@@ -64,19 +68,23 @@ const ingestion = new IngestionPipeline('./db.sqlite', './index.bin', {
 ### Model-Specific Configurations
 
 ```typescript
-// Fast processing (development)
+// Fast text processing (development)
 const fastSearch = new SearchEngine('./index.bin', './db.sqlite', {
   embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
   enableReranking: false,
   batchSize: 16
 });
 
-// High quality (production)
+// High quality text search (production)
 const qualitySearch = new SearchEngine('./index.bin', './db.sqlite', {
   embeddingModel: 'Xenova/all-mpnet-base-v2',
   enableReranking: true,
   batchSize: 8
 });
+
+// Multimodal search (auto-detects mode from database)
+const multimodalSearch = new SearchEngine('./index.bin', './db.sqlite');
+// Mode, model, and reranking strategy automatically detected from ingestion
 ```
 
 ## Configuration File
@@ -85,9 +93,17 @@ Create a `raglite.config.js` file in your project root:
 
 ```javascript
 export const config = {
+  // Processing mode (stored in database during ingestion)
+  mode: 'text',           // 'text' (default) or 'multimodal'
+  
   // Embedding model (transformers.js compatible)
   embedding_model: 'sentence-transformers/all-MiniLM-L6-v2',
-  // Alternative: 'Xenova/all-mpnet-base-v2' for higher quality
+  // Text alternatives: 'Xenova/all-mpnet-base-v2' for higher quality
+  // Multimodal: 'Xenova/clip-vit-base-patch32' for text + image
+  
+  // Reranking strategy (mode-dependent)
+  reranking_strategy: 'cross-encoder',  // Text: 'cross-encoder', 'disabled'
+  // Multimodal: 'text-derived', 'metadata', 'hybrid', 'disabled'
   
   // Chunking parameters (auto-adjusted based on model)
   chunk_size: 250,        // Target tokens per chunk
@@ -105,7 +121,7 @@ export const config = {
   // Path storage strategy
   path_storage_strategy: 'relative',  // 'relative' (default) or 'absolute'
   
-  // Optional reranking
+  // Optional reranking (legacy - use reranking_strategy instead)
   rerank_enabled: false,
   
   // Preprocessing configuration
@@ -134,12 +150,15 @@ export RAG_PATH_STORAGE_STRATEGY="relative"  # or "absolute"
 
 ### Model and Processing Settings
 ```bash
+export RAG_MODE="text"  # or "multimodal"
 export RAG_EMBEDDING_MODEL="sentence-transformers/all-MiniLM-L6-v2"
+export RAG_RERANKING_STRATEGY="cross-encoder"  # text: cross-encoder, disabled
+# multimodal: text-derived, metadata, hybrid, disabled
 export RAG_CHUNK_SIZE="300"
 export RAG_CHUNK_OVERLAP="60"
 export RAG_BATCH_SIZE="32"
 export RAG_TOP_K="10"
-export RAG_RERANK_ENABLED="true"
+export RAG_RERANK_ENABLED="true"  # legacy - use RAG_RERANKING_STRATEGY
 ```
 
 ### Preprocessing Settings
@@ -158,12 +177,14 @@ export RAG_PREPROCESSING_CODE="keep"
 | `RAG_INDEX_FILE` | `vector-index.bin` | Vector index file path |
 | `RAG_MODEL_CACHE_PATH` | `~/.raglite/models/` | Model cache directory |
 | `RAG_PATH_STORAGE_STRATEGY` | `relative` | Path storage strategy: 'relative' or 'absolute' |
+| `RAG_MODE` | `text` | Processing mode: 'text' or 'multimodal' |
 | `RAG_EMBEDDING_MODEL` | `sentence-transformers/all-MiniLM-L6-v2` | Hugging Face model name |
+| `RAG_RERANKING_STRATEGY` | `cross-encoder` | Reranking strategy (mode-dependent) |
 | `RAG_CHUNK_SIZE` | `250` | Target tokens per chunk |
 | `RAG_CHUNK_OVERLAP` | `50` | Overlap between chunks |
 | `RAG_BATCH_SIZE` | `16` | Embedding batch size |
 | `RAG_TOP_K` | `10` | Default number of search results |
-| `RAG_RERANK_ENABLED` | `false` | Enable result reranking |
+| `RAG_RERANK_ENABLED` | `false` | Enable result reranking (legacy) |
 | `RAG_PREPROCESSING_MODE` | `balanced` | Preprocessing mode |
 | `RAG_PREPROCESSING_MDX` | `placeholder` | MDX/JSX handling |
 | `RAG_PREPROCESSING_MERMAID` | `extract` | Mermaid diagram handling |
@@ -205,31 +226,113 @@ export RAG_MODEL_CACHE_PATH="/models/"
 
 ### Development vs Production
 ```bash
-# Development - fast model
+# Development - fast text model
+export RAG_MODE="text"
 export RAG_EMBEDDING_MODEL="sentence-transformers/all-MiniLM-L6-v2"
 export RAG_BATCH_SIZE="32"
+export RAG_RERANKING_STRATEGY="disabled"
 
-# Production - high quality model
+# Production - high quality text model
+export RAG_MODE="text"
 export RAG_EMBEDDING_MODEL="Xenova/all-mpnet-base-v2"
 export RAG_BATCH_SIZE="8"
-export RAG_RERANK_ENABLED="true"
+export RAG_RERANKING_STRATEGY="cross-encoder"
+
+# Production - multimodal with image support
+export RAG_MODE="multimodal"
+export RAG_EMBEDDING_MODEL="Xenova/clip-vit-base-patch32"
+export RAG_BATCH_SIZE="8"
+export RAG_RERANKING_STRATEGY="text-derived"
 ```
+
+## Mode Persistence and Multimodal Configuration
+
+The Chameleon Architecture stores mode configuration in the database during ingestion and automatically detects it during search operations.
+
+### Mode Storage During Ingestion
+
+```bash
+# Text mode (default) - stored in database
+raglite ingest ./docs/
+
+# Multimodal mode - stored in database with model and reranking strategy
+raglite ingest ./docs/ --mode multimodal --rerank-strategy text-derived
+```
+
+### Automatic Mode Detection During Search
+
+```bash
+# Search automatically detects mode from database
+raglite search "your query"  # Uses stored mode, model, and reranking strategy
+
+# No need to specify mode during search operations
+raglite search "diagram showing architecture"  # Works for both text and images
+```
+
+### Mode-Specific Configuration
+
+```typescript
+import { IngestionPipeline } from 'rag-lite-ts';
+
+// Text mode configuration
+const textIngestion = new IngestionPipeline('./db.sqlite', './index.bin', {
+  mode: 'text',
+  embeddingModel: 'Xenova/all-mpnet-base-v2',
+  rerankingStrategy: 'cross-encoder'
+});
+
+// Multimodal mode configuration
+const multimodalIngestion = new IngestionPipeline('./db.sqlite', './index.bin', {
+  mode: 'multimodal',
+  embeddingModel: 'Xenova/clip-vit-base-patch32',
+  rerankingStrategy: 'text-derived'
+});
+```
+
+### Supported Content Types by Mode
+
+**Text Mode:**
+- Markdown files (`.md`, `.mdx`)
+- Text files (`.txt`)
+- PDF documents (`.pdf`)
+- Word documents (`.docx`)
+
+**Multimodal Mode:**
+- All text formats above
+- JPEG images (`.jpg`, `.jpeg`)
+- PNG images (`.png`)
+- GIF images (`.gif`)
+- WebP images (`.webp`)
 
 ## Model-Specific Auto-Configuration
 
 The system automatically applies optimal settings based on your chosen model:
 
-### sentence-transformers/all-MiniLM-L6-v2 (default)
+### Text Mode Models
+
+#### sentence-transformers/all-MiniLM-L6-v2 (default)
 - Dimensions: 384
 - Chunk size: 250 tokens
 - Batch size: 16
 - Best for: Fast processing, lower memory usage
+- Reranking: Cross-encoder
 
-### Xenova/all-mpnet-base-v2
+#### Xenova/all-mpnet-base-v2
 - Dimensions: 768  
 - Chunk size: 400 tokens
 - Batch size: 8
 - Best for: Higher quality embeddings, better search accuracy
+- Reranking: Cross-encoder
+
+### Multimodal Mode Models
+
+#### Xenova/clip-vit-base-patch32
+- Dimensions: 512
+- Chunk size: 300 tokens
+- Batch size: 8
+- Best for: Text and image understanding
+- Reranking: Text-derived, metadata, or hybrid strategies
+- Content types: Text documents + images (JPG, PNG, GIF, WebP)
 
 You can override these auto-configured values using environment variables or configuration files if needed.
 
@@ -372,3 +475,182 @@ export RAG_DB_FILE="prod-db.sqlite"
 export RAG_PATH_STORAGE_STRATEGY="absolute"
 export RAG_DB_FILE="legacy-db.sqlite"
 ```
+
+## Comprehensive Workflow Examples
+
+### Text-Only Workflow
+
+Complete example for traditional document search:
+
+```typescript
+import { IngestionPipeline, SearchEngine } from 'rag-lite-ts';
+
+// 1. Configure for text-only processing
+const ingestion = new IngestionPipeline('./docs.sqlite', './docs-index.bin', {
+  mode: 'text',
+  embeddingModel: 'Xenova/all-mpnet-base-v2',
+  rerankingStrategy: 'cross-encoder',
+  chunkSize: 400,
+  chunkOverlap: 80
+});
+
+// 2. Ingest text documents
+await ingestion.ingestDirectory('./documentation/');
+await ingestion.cleanup();
+
+// 3. Search (mode auto-detected)
+const search = new SearchEngine('./docs-index.bin', './docs.sqlite');
+const results = await search.search('authentication setup');
+
+console.log('Text search results:');
+for (const result of results) {
+  console.log(`${result.document.source}: ${result.score.toFixed(2)}`);
+  console.log(result.content.substring(0, 100) + '...\n');
+}
+
+await search.cleanup();
+```
+
+### Multimodal Workflow
+
+Complete example for mixed text and image content:
+
+```typescript
+import { IngestionPipeline, SearchEngine } from 'rag-lite-ts';
+
+// 1. Configure for multimodal processing
+const ingestion = new IngestionPipeline('./mixed.sqlite', './mixed-index.bin', {
+  mode: 'multimodal',
+  embeddingModel: 'Xenova/clip-vit-base-patch32',
+  rerankingStrategy: 'text-derived',
+  chunkSize: 300,
+  chunkOverlap: 60
+});
+
+// 2. Ingest mixed content (text + images)
+await ingestion.ingestDirectory('./mixed-content/');
+await ingestion.cleanup();
+
+// 3. Search across both text and images
+const search = new SearchEngine('./mixed-index.bin', './mixed.sqlite');
+
+// Search for visual content
+const imageResults = await search.search('diagram showing architecture');
+console.log('Multimodal search results:');
+for (const result of imageResults) {
+  console.log(`${result.contentType}: ${result.document.source}`);
+  console.log(`Score: ${result.score.toFixed(2)}`);
+  if (result.metadata?.dimensions) {
+    console.log(`Image: ${result.metadata.dimensions.width}x${result.metadata.dimensions.height}`);
+  }
+  console.log(result.content.substring(0, 100) + '...\n');
+}
+
+await search.cleanup();
+```
+
+### Mixed Content Workflow with Different Strategies
+
+Example showing different reranking strategies:
+
+```typescript
+import { IngestionPipeline, SearchEngine } from 'rag-lite-ts';
+
+// Strategy 1: Text-derived reranking (converts images to text)
+const textDerivedIngestion = new IngestionPipeline('./td.sqlite', './td-index.bin', {
+  mode: 'multimodal',
+  embeddingModel: 'Xenova/clip-vit-base-patch32',
+  rerankingStrategy: 'text-derived'
+});
+
+await textDerivedIngestion.ingestDirectory('./content/');
+await textDerivedIngestion.cleanup();
+
+// Strategy 2: Metadata-based reranking (uses filenames and properties)
+const metadataIngestion = new IngestionPipeline('./md.sqlite', './md-index.bin', {
+  mode: 'multimodal',
+  embeddingModel: 'Xenova/clip-vit-base-patch32',
+  rerankingStrategy: 'metadata'
+});
+
+await metadataIngestion.ingestDirectory('./content/');
+await metadataIngestion.cleanup();
+
+// Compare results from different strategies
+const textDerivedSearch = new SearchEngine('./td-index.bin', './td.sqlite');
+const metadataSearch = new SearchEngine('./md-index.bin', './md.sqlite');
+
+const query = 'flowchart showing process';
+
+const tdResults = await textDerivedSearch.search(query, { top_k: 5 });
+const mdResults = await metadataSearch.search(query, { top_k: 5 });
+
+console.log('Text-derived reranking results:');
+tdResults.forEach((r, i) => console.log(`${i+1}. ${r.document.source} (${r.score.toFixed(2)})`));
+
+console.log('\nMetadata-based reranking results:');
+mdResults.forEach((r, i) => console.log(`${i+1}. ${r.document.source} (${r.score.toFixed(2)})`));
+
+await Promise.all([
+  textDerivedSearch.cleanup(),
+  metadataSearch.cleanup()
+]);
+```
+
+### Environment-Based Configuration Workflow
+
+Example using environment variables for different deployment scenarios:
+
+```bash
+#!/bin/bash
+# setup-environments.sh
+
+# Development environment - fast processing
+export RAG_MODE="text"
+export RAG_EMBEDDING_MODEL="sentence-transformers/all-MiniLM-L6-v2"
+export RAG_RERANKING_STRATEGY="disabled"
+export RAG_BATCH_SIZE="32"
+export RAG_DB_FILE="dev.sqlite"
+export RAG_INDEX_FILE="dev-index.bin"
+
+echo "Development environment configured"
+raglite ingest ./docs/
+raglite search "quick test"
+
+# Production environment - high quality
+export RAG_MODE="multimodal"
+export RAG_EMBEDDING_MODEL="Xenova/clip-vit-base-patch32"
+export RAG_RERANKING_STRATEGY="text-derived"
+export RAG_BATCH_SIZE="8"
+export RAG_DB_FILE="prod.sqlite"
+export RAG_INDEX_FILE="prod-index.bin"
+
+echo "Production environment configured"
+raglite ingest ./content/
+raglite search "architecture diagram"
+```
+
+### CLI-Based Workflow Examples
+
+```bash
+# Example 1: Documentation site with images
+raglite ingest ./docs/ --mode multimodal --rerank-strategy text-derived
+raglite search "screenshot showing login form"
+
+# Example 2: API documentation (text-only)
+raglite ingest ./api-docs/ --mode text --model Xenova/all-mpnet-base-v2
+raglite search "authentication endpoints"
+
+# Example 3: Mixed technical content
+raglite ingest ./technical-guides/ --mode multimodal --rerank-strategy metadata
+raglite search "network topology diagram"
+
+# Example 4: Multiple collections
+raglite ingest ./user-guides/ --mode text --db users.sqlite --index users-index.bin
+raglite ingest ./admin-guides/ --mode multimodal --db admin.sqlite --index admin-index.bin
+
+raglite search "user permissions" --db users.sqlite --index users-index.bin
+raglite search "system architecture" --db admin.sqlite --index admin-index.bin
+```
+
+These examples demonstrate the flexibility of the Chameleon Architecture in adapting to different content types and use cases while maintaining a consistent, simple interface.

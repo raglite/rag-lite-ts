@@ -15,6 +15,8 @@ import { config } from './config.js';
  * Uses explicit dependency injection for clean architecture
  */
 export class SearchEngine {
+  private contentResolver?: import('./content-resolver.js').ContentResolver;
+
   /**
    * Creates a new SearchEngine with explicit dependency injection
    * 
@@ -73,7 +75,8 @@ export class SearchEngine {
     private embedFn: EmbedFunction,
     private indexManager: IndexManager,
     private db: DatabaseConnection,
-    private rerankFn?: RerankFunction
+    private rerankFn?: RerankFunction,
+    contentResolver?: import('./content-resolver.js').ContentResolver
   ) {
     // Validate required dependencies
     if (!embedFn || typeof embedFn !== 'function') {
@@ -85,6 +88,9 @@ export class SearchEngine {
     if (!db) {
       throw new Error('db connection is required');
     }
+    
+    // Initialize ContentResolver if provided, or create lazily when needed
+    this.contentResolver = contentResolver;
   }
 
   /**
@@ -203,7 +209,8 @@ export class SearchEngine {
             id: chunk.document_id,
             source: chunk.document_source,
             title: chunk.document_title,
-            contentType: chunk.document_content_type || 'text'
+            contentType: chunk.document_content_type || 'text',
+            contentId: chunk.document_content_id || undefined
           }
         });
       }
@@ -230,10 +237,87 @@ export class SearchEngine {
   }
 
   /**
+   * Retrieve content by ID in the specified format
+   * @param contentId - Content ID to retrieve
+   * @param format - Format to return ('file' for CLI clients, 'base64' for MCP clients)
+   * @returns Promise that resolves to content in requested format
+   */
+  async getContent(contentId: string, format: 'file' | 'base64' = 'file'): Promise<string> {
+    // Lazy initialization of ContentResolver
+    if (!this.contentResolver) {
+      const { ContentResolver } = await import('./content-resolver.js');
+      this.contentResolver = new ContentResolver(this.db);
+    }
+    
+    return this.contentResolver.getContent(contentId, format);
+  }
+
+  /**
+   * Retrieve multiple content items efficiently in batch
+   * @param contentIds - Array of content IDs to retrieve
+   * @param format - Format to return ('file' for CLI clients, 'base64' for MCP clients)
+   * @returns Promise that resolves to array of content in requested format
+   */
+  async getContentBatch(contentIds: string[], format: 'file' | 'base64' = 'file'): Promise<string[]> {
+    // Lazy initialization of ContentResolver
+    if (!this.contentResolver) {
+      const { ContentResolver } = await import('./content-resolver.js');
+      this.contentResolver = new ContentResolver(this.db);
+    }
+    
+    // Convert contentIds array to ContentRequest array
+    const requests = contentIds.map(contentId => ({ contentId, format }));
+    const results = await this.contentResolver.getContentBatch(requests);
+    
+    // Extract content from results, maintaining order and handling errors
+    return results.map(result => {
+      if (!result.success) {
+        throw new Error(`Failed to retrieve content ${result.contentId}: ${result.error}`);
+      }
+      return result.content!;
+    });
+  }
+
+  /**
+   * Retrieve content metadata for result enhancement
+   * @param contentId - Content ID to get metadata for
+   * @returns Promise that resolves to content metadata
+   */
+  async getContentMetadata(contentId: string): Promise<import('./content-resolver.js').ContentMetadata> {
+    // Lazy initialization of ContentResolver
+    if (!this.contentResolver) {
+      const { ContentResolver } = await import('./content-resolver.js');
+      this.contentResolver = new ContentResolver(this.db);
+    }
+    
+    return this.contentResolver.getContentMetadata(contentId);
+  }
+
+  /**
+   * Verify that content exists and is accessible
+   * @param contentId - Content ID to verify
+   * @returns Promise that resolves to true if content exists, false otherwise
+   */
+  async verifyContentExists(contentId: string): Promise<boolean> {
+    // Lazy initialization of ContentResolver
+    if (!this.contentResolver) {
+      const { ContentResolver } = await import('./content-resolver.js');
+      this.contentResolver = new ContentResolver(this.db);
+    }
+    
+    return this.contentResolver.verifyContentExists(contentId);
+  }
+
+  /**
    * Clean up resources - explicit cleanup method
    */
   async cleanup(): Promise<void> {
     try {
+      // Clean up ContentResolver to prevent resource leaks
+      if (this.contentResolver && typeof this.contentResolver.cleanup === 'function') {
+        this.contentResolver.cleanup();
+      }
+      
       await this.db.close();
       await this.indexManager.close();
     } catch (error) {

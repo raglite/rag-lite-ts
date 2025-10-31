@@ -1,4 +1,4 @@
-# Getting Started
+# Overview
 
 Welcome to the RAG-lite TS documentation hub. This directory contains comprehensive guides for all aspects of using RAG-lite TS.
 
@@ -14,17 +14,33 @@ New to RAG-lite TS? Start with the [CLI Reference](cli-reference.md) for install
   - All commands and options
   - Usage examples and workflows
   - MCP server integration
+  - **NEW**: Multimodal mode support with `--mode` and `--rerank-strategy` parameters
 
 - **[API Reference](api-reference.md)** - Comprehensive programmatic API documentation
   - Simple constructors and factory patterns
   - Core classes and methods
   - Type definitions and interfaces
   - Usage patterns and examples
+  - **NEW**: Chameleon Multimodal Architecture with UniversalEmbedder interface and polymorphic runtime
+
+- **[Unified Content System](unified-content-system.md)** - Memory ingestion and format-adaptive retrieval
+  - Memory-based content ingestion for MCP integration
+  - Format-adaptive retrieval (file paths vs base64)
+  - Dual storage strategy and content management
+  - Performance optimization and troubleshooting
+  - **NEW**: Complete guide for modern AI workflow integration
+
+- **[Migration Guide](unified-content-migration-guide.md)** - Upgrading to unified content system
+  - Backward compatibility and zero breaking changes
+  - New memory ingestion and content retrieval features
+  - Configuration updates and troubleshooting
+  - **NEW**: Seamless migration path for existing users
 
 - **[Configuration Guide](configuration.md)** - Advanced configuration options
   - Configuration file setup
   - Environment variables
   - Multi-environment deployment
+  - **NEW**: Mode persistence and multimodal configuration options
 
 ### 🔧 Specialized Guides
 
@@ -32,6 +48,7 @@ New to RAG-lite TS? Start with the [CLI Reference](cli-reference.md) for install
   - Model comparison and benchmarks
   - Selection criteria and use cases
   - Switching between models
+  - **NEW**: Multimodal models (CLIP) with text and image support
 
 - **[Path Storage Strategies](path-strategies.md)** - Document path management
   - Relative vs absolute paths
@@ -42,11 +59,34 @@ New to RAG-lite TS? Start with the [CLI Reference](cli-reference.md) for install
   - File type handling (MDX, PDF, DOCX)
   - Preprocessing modes and configuration
   - Content extraction strategies
+  - **NEW**: Multimodal content processing with image-to-text conversion and metadata extraction
 
 - **[Troubleshooting Guide](troubleshooting.md)** - Common issues and solutions
   - Error message explanations
   - Performance optimization
   - Debug mode and diagnostics
+  - **NEW**: Multimodal-specific troubleshooting and model compatibility issues
+
+- **[Unified Content Troubleshooting](unified-content-troubleshooting.md)** - Specialized troubleshooting for unified content system
+  - Memory ingestion issues and solutions
+  - Content retrieval problems and recovery
+  - Storage management and cleanup procedures
+  - Performance optimization for large content operations
+  - **NEW**: Complete diagnostic and recovery procedures
+
+### 🎨 Multimodal Capabilities (NEW)
+
+- **[Multimodal Architecture Overview](../UNIFIED_CHAMELEON_MULTIMODAL_ARCHITECTURE.md)** - Complete architecture guide
+  - Chameleon polymorphic runtime system
+  - Mode-based operation with automatic detection
+  - Text and image processing capabilities
+  - Implementation status and performance metrics
+
+- **[Multimodal Tutorial](multimodal-tutorial.md)** - Step-by-step multimodal guide
+  - Setting up multimodal mode
+  - Processing mixed content (text + images)
+  - Advanced reranking strategies
+  - Performance optimization tips
 
 ### 📊 Technical References
 
@@ -54,6 +94,7 @@ New to RAG-lite TS? Start with the [CLI Reference](cli-reference.md) for install
   - Performance metrics and analysis
   - System requirements
   - Technical implementation details
+  - **NEW**: Multimodal model performance and capabilities matrix
 
 ## Documentation Structure
 
@@ -66,8 +107,9 @@ New to RAG-lite TS? Start with the [CLI Reference](cli-reference.md) for install
 
 **Developers:**
 1. [API Reference](api-reference.md) - Programmatic usage
-2. [Model Guide](model-guide.md) - Model selection
-3. [Preprocessing Guide](preprocessing.md) - Content handling
+2. [Unified Content System](unified-content-system.md) - Memory ingestion and MCP integration
+3. [Model Guide](model-guide.md) - Model selection
+4. [Preprocessing Guide](preprocessing.md) - Content handling
 
 **System Administrators:**
 1. [Configuration Guide](configuration.md) - Environment setup
@@ -79,6 +121,9 @@ New to RAG-lite TS? Start with the [CLI Reference](cli-reference.md) for install
 **Basic Document Search:**
 - [CLI Reference](cli-reference.md) → [Configuration Guide](configuration.md)
 
+**MCP Integration & Memory Ingestion:**
+- [Unified Content System](unified-content-system.md) → [API Reference](api-reference.md)
+
 **Technical Documentation:**
 - [Preprocessing Guide](preprocessing.md) → [Model Guide](model-guide.md)
 
@@ -89,7 +134,7 @@ New to RAG-lite TS? Start with the [CLI Reference](cli-reference.md) for install
 - [Model Guide](model-guide.md) → [Troubleshooting Guide](troubleshooting.md)
 
 **Integration Development:**
-- [API Reference](api-reference.md) → [Configuration Guide](configuration.md)
+- [API Reference](api-reference.md) → [Unified Content System](unified-content-system.md)
 
 ## Quick Reference
 
@@ -99,13 +144,16 @@ New to RAG-lite TS? Start with the [CLI Reference](cli-reference.md) for install
 |------|---------------|-------------------|
 | Install and setup | [CLI Reference](cli-reference.md) | [Configuration Guide](configuration.md) |
 | Ingest documents | [CLI Reference](cli-reference.md) | [Preprocessing](preprocessing.md) |
+| Memory ingestion (MCP) | [Unified Content System](unified-content-system.md) | [API Reference](api-reference.md) |
+| Content retrieval | [Unified Content System](unified-content-system.md) | [Unified Content Troubleshooting](unified-content-troubleshooting.md) |
+| Migrate to unified system | [Migration Guide](unified-content-migration-guide.md) | [Unified Content System](unified-content-system.md) |
 | Search documents | [CLI Reference](cli-reference.md) | [Model Guide](model-guide.md) |
 | Choose embedding model | [Model Guide](model-guide.md) | [Configuration](configuration.md) |
 | Configure for production | [Configuration Guide](configuration.md) | [Path Strategies](path-strategies.md) |
 | Handle different file types | [Preprocessing Guide](preprocessing.md) | [Troubleshooting](troubleshooting.md) |
 | Optimize performance | [Model Guide](model-guide.md) | [Troubleshooting](troubleshooting.md) |
 | Deploy across environments | [Path Strategies](path-strategies.md) | [Configuration](configuration.md) |
-| Integrate with applications | [API Reference](api-reference.md) | [Configuration](configuration.md) |
+| Integrate with applications | [API Reference](api-reference.md) | [Unified Content System](unified-content-system.md) |
 | Resolve issues | [Troubleshooting Guide](troubleshooting.md) | All guides |
 
 ### Configuration Quick Links

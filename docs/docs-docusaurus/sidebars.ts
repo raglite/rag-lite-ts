@@ -19,8 +19,26 @@ const sidebars: SidebarsConfig = {
     'cli-reference',
     'api-reference',
     'configuration',
-    'model-guide',
-    'preprocessing',
+    {
+      type: 'category',
+      label: 'Multimodal Capabilities',
+      items: [
+        'multimodal-tutorial',
+        'multimodal-configuration',
+        'model-guide',
+        'preprocessing',
+        'multimodal-troubleshooting',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Integration & Examples',
+      items: [
+        'mcp-server-multimodal-guide',
+        'examples-gallery',
+        'integration-patterns',
+      ],
+    },
     'path-strategies',
     'troubleshooting',
     'EMBEDDING_MODELS_COMPARISON',

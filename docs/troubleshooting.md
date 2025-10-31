@@ -10,6 +10,7 @@ Complete troubleshooting guide for common issues, error messages, and solutions 
 - [Common Error Messages](#common-error-messages)
 - [Installation Issues](#installation-issues)
 - [Model Issues](#model-issues)
+- [Multimodal Issues](#multimodal-issues)
 - [Search Issues](#search-issues)
 - [Performance Issues](#performance-issues)
 - [File Processing Issues](#file-processing-issues)
@@ -155,12 +156,67 @@ export RAG_EMBEDDING_MODEL="sentence-transformers/all-MiniLM-L6-v2"
 # Reduce batch size
 export RAG_BATCH_SIZE="4"
 
+# For multimodal mode, use conservative settings
+export RAG_MODE="multimodal"
+export RAG_EMBEDDING_MODEL="Xenova/clip-vit-base-patch32"
+export RAG_BATCH_SIZE="4"
+
 # Process smaller batches
 raglite ingest ./docs/batch1/
 raglite ingest ./docs/batch2/
 
 # Increase Node.js memory limit
 node --max-old-space-size=8192 $(which raglite) ingest ./docs/
+```
+
+### "Mode mismatch detected"
+
+**Error:**
+```
+Error: Mode mismatch detected!
+Current mode: multimodal
+Index mode: text
+Run 'raglite rebuild' to rebuild the index with the new mode.
+```
+
+**Cause:** Trying to use multimodal search on text-only index or vice versa.
+
+**Solution:**
+```bash
+# Rebuild index with correct mode
+raglite rebuild
+
+# Or re-ingest with desired mode
+raglite ingest ./docs/ --mode multimodal --rebuild-if-needed
+
+# Check current mode
+sqlite3 db.sqlite "SELECT mode FROM system_info;"
+```
+
+### "Image processing failed"
+
+**Error:**
+```
+Error: Failed to process image ./image.png
+Image-to-text model failed to load
+```
+
+**Cause:** Image-to-text model download failed or image file corrupted.
+
+**Solution:**
+```bash
+# Check image file integrity
+file ./image.png
+
+# Clear model cache and retry
+rm -rf ~/.raglite/models/
+raglite ingest ./docs/ --mode multimodal
+
+# Try with different image format
+# Convert to supported format: JPG, PNG, GIF, WebP
+
+# Check internet connection for model download
+ping huggingface.co
 ```
 
 ## Installation Issues
@@ -239,6 +295,9 @@ raglite ingest ./docs/
 # Use different model
 raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2
 
+# For multimodal mode, try alternative CLIP model
+raglite ingest ./docs/ --mode multimodal --model Xenova/clip-vit-base-patch16
+
 # Manual model setup (see models/README.md)
 ```
 
@@ -270,11 +329,343 @@ ls -la ~/.raglite/models/
 
 **Solution:**
 ```bash
-# Use supported models only
+# Use supported text models
 raglite ingest ./docs/ --model sentence-transformers/all-MiniLM-L6-v2
 raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2
 
+# Use supported multimodal models
+raglite ingest ./docs/ --mode multimodal --model Xenova/clip-vit-base-patch32
+raglite ingest ./docs/ --mode multimodal --model Xenova/clip-vit-base-patch16
+
 # Check model documentation for compatibility
+```
+
+## Multimodal Issues
+
+### Chameleon Architecture Mode Detection Problems
+
+**Problem:** System not automatically detecting mode from database
+
+**Error:**
+```
+Warning: No mode information found in database, defaulting to text mode
+```
+
+**Cause:** Database created before Chameleon Architecture or mode not stored during ingestion.
+
+**Diagnosis:**
+```bash
+# Check if system_info table exists with mode information
+sqlite3 db.sqlite "SELECT mode, model_name, reranking_strategy FROM system_info;"
+
+# Check database schema version
+sqlite3 db.sqlite ".schema system_info"
+```
+
+**Solutions:**
+```bash
+# Re-ingest with explicit mode to store configuration
+raglite ingest ./docs/ --mode multimodal --rebuild-if-needed
+
+# For existing databases, migrate to new schema
+raglite migrate-database --backup
+
+# Create fresh multimodal index
+rm db.sqlite vector-index.bin
+raglite ingest ./docs/ --mode multimodal
+```
+
+### Image Processing Problems
+
+**Problem:** Images not being processed in multimodal mode
+
+**Symptoms:**
+- No image descriptions generated
+- Images not appearing in search results
+- "Image processing failed" errors
+
+**Diagnosis:**
+```bash
+# Check if multimodal mode is enabled and stored
+sqlite3 db.sqlite "SELECT mode FROM system_info;"
+
+# Check for image files in directory
+find ./docs/ -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" -o -name "*.gif" -o -name "*.webp"
+
+# Verify image content in database
+sqlite3 db.sqlite "SELECT COUNT(*) FROM chunks WHERE content_type='image';"
+
+# Enable debug mode to see processing details
+DEBUG=1 raglite ingest ./docs/ --mode multimodal
+```
+
+**Solutions:**
+```bash
+# Ensure multimodal mode is specified and stored
+raglite ingest ./docs/ --mode multimodal
+
+# Check image file formats (supported: JPG, JPEG, PNG, GIF, WebP)
+file ./docs/images/*
+
+# Reduce batch size for large images
+export RAG_BATCH_SIZE="4"
+raglite ingest ./docs/ --mode multimodal
+
+# Clear model cache if image-to-text model is corrupted
+rm -rf ~/.raglite/models/
+raglite ingest ./docs/ --mode multimodal
+
+# Test with a single image first
+raglite ingest ./single-image.png --mode multimodal
+```
+
+### Image-to-Text Model Issues
+
+**Problem:** Image descriptions are poor quality or generic
+
+**Symptoms:**
+- All images described as "a picture" or similar generic text
+- Descriptions don't match image content
+- Search results for images are irrelevant
+
+**Diagnosis:**
+```bash
+# Check which image-to-text model is being used
+sqlite3 db.sqlite "SELECT reranking_model FROM system_info;"
+
+# Test image-to-text generation directly
+DEBUG=1 raglite ingest ./single-test-image.png --mode multimodal
+
+# Check generated descriptions in database
+sqlite3 db.sqlite "SELECT content, metadata FROM chunks WHERE content_type='image' LIMIT 3;"
+```
+
+**Solutions:**
+```bash
+# The system uses Xenova/vit-gpt2-image-captioning by default
+# This is currently the best available transformers.js compatible model
+
+# Try different reranking strategy that relies less on descriptions
+raglite ingest ./docs/ --mode multimodal --rerank-strategy metadata
+
+# Use descriptive filenames to improve metadata-based search
+# Rename files: diagram.png -> architecture-diagram.png
+
+# For better results, ensure images are clear and well-composed
+# Avoid very small, blurry, or complex images
+
+# Test with high-quality, simple images first
+# Complex diagrams may not generate good descriptions
+
+# Consider hybrid reranking for better results
+raglite ingest ./docs/ --mode multimodal --rerank-strategy hybrid
+```
+
+### Mixed Content Search Issues
+
+**Problem:** Search doesn't return expected mix of text and image results
+
+**Symptoms:**
+- Only text results returned for queries that should match images
+- Only image results returned for text-focused queries
+- Poor ranking of mixed results
+- Chameleon Architecture not adapting properly to content type
+
+**Diagnosis:**
+```bash
+# Check current mode and configuration
+sqlite3 db.sqlite "SELECT mode, model_name, reranking_strategy FROM system_info;"
+
+# Check content type distribution in database
+sqlite3 db.sqlite "SELECT content_type, COUNT(*) FROM chunks GROUP BY content_type;"
+
+# Test search with content type filtering
+raglite search "architecture" --content-type text
+raglite search "architecture" --content-type image
+```
+
+**Solutions:**
+```bash
+# Try different reranking strategies for better mixed results
+raglite ingest ./docs/ --mode multimodal --rerank-strategy text-derived
+raglite ingest ./docs/ --mode multimodal --rerank-strategy hybrid
+
+# Increase result count to see more diverse results
+raglite search "architecture" --top-k 20
+
+# Use more specific queries
+raglite search "diagram showing architecture"  # Better for images
+raglite search "architecture documentation"    # Better for text
+
+# Test polymorphic runtime behavior
+raglite search "architecture" --debug  # Should show mode auto-detection
+
+# Ensure proper mode storage and detection
+raglite ingest ./docs/ --mode multimodal --rebuild-if-needed
+```
+
+### Reranking Strategy Problems
+
+**Problem:** Reranking strategy not working as expected
+
+**Symptoms:**
+- Results seem randomly ordered
+- Images not ranked appropriately
+- Performance is slower than expected
+
+**Diagnosis:**
+```bash
+# Check current reranking strategy
+sqlite3 db.sqlite "SELECT reranking_strategy FROM system_info;"
+
+# Test with different strategies
+raglite search "test query" --top-k 10
+```
+
+**Solutions:**
+```bash
+# Try different strategies based on your content:
+
+# For semantic accuracy (slower but better quality)
+raglite ingest ./docs/ --mode multimodal --rerank-strategy text-derived
+
+# For filename-based matching (faster)
+raglite ingest ./docs/ --mode multimodal --rerank-strategy metadata
+
+# For balanced approach
+raglite ingest ./docs/ --mode multimodal --rerank-strategy hybrid
+
+# For maximum speed (no reranking)
+raglite ingest ./docs/ --mode multimodal --rerank-strategy disabled
+```
+
+### Chameleon Architecture Polymorphic Runtime Issues
+
+**Problem:** System not adapting behavior based on stored mode configuration
+
+**Symptoms:**
+- Same search interface but unexpected behavior
+- Mode not automatically detected during search
+- Inconsistent results across sessions
+
+**Diagnosis:**
+```bash
+# Check if mode is properly stored and detected
+sqlite3 db.sqlite "SELECT mode, model_name, created_at FROM system_info;"
+
+# Test polymorphic behavior
+DEBUG=1 raglite search "test query"  # Should show mode detection
+
+# Check if PolymorphicSearchFactory is being used
+raglite search "test" --debug | grep -i "mode\|polymorphic"
+```
+
+**Solutions:**
+```bash
+# Ensure mode is stored during ingestion
+raglite ingest ./docs/ --mode multimodal
+
+# Test mode switching behavior
+raglite ingest ./text-docs/ --mode text --db text.sqlite --index text.bin
+raglite ingest ./mixed-docs/ --mode multimodal --db multimodal.sqlite --index multimodal.bin
+
+# Verify automatic mode detection
+raglite search "test" --db text.sqlite --index text.bin
+raglite search "test" --db multimodal.sqlite --index multimodal.bin
+
+# Check for database schema compatibility
+raglite migrate-database --check
+```
+
+### Model Factory and Validation Issues
+
+**Problem:** Model creation or validation failures in Chameleon Architecture
+
+**Symptoms:**
+- "Model not supported" errors for valid models
+- Dimension mismatch errors
+- Factory creation failures
+
+**Diagnosis:**
+```bash
+# Check supported models for current mode
+raglite list-models --mode text
+raglite list-models --mode multimodal
+
+# Verify model compatibility
+raglite validate-model Xenova/clip-vit-base-patch32 --mode multimodal
+
+# Check transformers.js version compatibility
+npm list @huggingface/transformers
+```
+
+**Solutions:**
+```bash
+# Use validated models for each mode
+# Text mode:
+raglite ingest ./docs/ --mode text --model sentence-transformers/all-MiniLM-L6-v2
+raglite ingest ./docs/ --mode text --model Xenova/all-mpnet-base-v2
+
+# Multimodal mode:
+raglite ingest ./docs/ --mode multimodal --model Xenova/clip-vit-base-patch32
+raglite ingest ./docs/ --mode multimodal --model Xenova/clip-vit-base-patch16
+
+# Clear model cache if validation fails
+rm -rf ~/.raglite/models/
+raglite ingest ./docs/ --mode multimodal
+
+# Update to latest version for model compatibility
+npm install -g rag-lite-ts@latest
+```
+
+### Content Type Detection Issues
+
+**Problem:** Files not detected as correct content type
+
+**Symptoms:**
+- Images processed as text
+- Text files not processed
+- Unexpected file type errors
+
+**Solutions:**
+```bash
+# Check file extensions are supported
+ls -la ./docs/ | grep -E '\.(jpg|jpeg|png|gif|webp|md|txt|pdf|docx)$'
+
+# Verify file types
+file ./docs/*
+
+# Use explicit file patterns if needed
+raglite ingest ./docs/ --include "*.md,*.png,*.jpg"
+
+# Check for hidden characters in filenames
+ls -la ./docs/ | cat -A
+```
+
+### Memory Issues with Large Images
+
+**Problem:** Out of memory when processing large images
+
+**Symptoms:**
+- Process crashes during image processing
+- "JavaScript heap out of memory" errors
+- System becomes unresponsive
+
+**Solutions:**
+```bash
+# Reduce batch size significantly
+export RAG_BATCH_SIZE="2"
+
+# Process images in smaller groups
+raglite ingest ./docs/images/batch1/ --mode multimodal
+raglite ingest ./docs/images/batch2/ --mode multimodal
+
+# Resize large images before processing
+# Use tools like ImageMagick to reduce image size:
+# mogrify -resize 1920x1080> ./docs/images/*.jpg
+
+# Increase Node.js memory limit
+node --max-old-space-size=8192 $(which raglite) ingest ./docs/ --mode multimodal
 ```
 
 ## Search Issues

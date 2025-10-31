@@ -47,7 +47,8 @@ export {
 // Factory option types
 export type {
   TextSearchOptions,
-  TextIngestionOptions
+  TextIngestionOptions,
+  ContentSystemConfig
 } from './text-factory.js';
 
 // Convenience re-exports for common patterns

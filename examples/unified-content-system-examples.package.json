@@ -1,0 +1,28 @@
+{
+  "name": "rag-lite-unified-content-examples",
+  "version": "1.0.0",
+  "description": "Examples demonstrating RAG-lite's unified content system with memory ingestion and format-adaptive retrieval",
+  "type": "module",
+  "main": "unified-content-system-examples.js",
+  "scripts": {
+    "start": "node unified-content-system-examples.js",
+    "demo": "node unified-content-system-examples.js",
+    "clean": "rm -rf .raglite *.sqlite *.bin"
+  },
+  "dependencies": {
+    "rag-lite-ts": "^1.0.0"
+  },
+  "keywords": [
+    "rag-lite",
+    "unified-content-system",
+    "memory-ingestion",
+    "mcp-integration",
+    "semantic-search",
+    "content-retrieval"
+  ],
+  "author": "RAG-lite Contributors",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

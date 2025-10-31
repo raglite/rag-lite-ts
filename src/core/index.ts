@@ -81,6 +81,7 @@ export * from './config.js';
 // Database operations - supports different content types through metadata
 export { 
   type DatabaseConnection,
+  type ContentMetadata,
   openDatabase,
   initializeSchema,
   insertDocument,
@@ -90,7 +91,14 @@ export {
   getModelVersion,
   setModelVersion,
   getStoredModelInfo,
-  setStoredModelInfo
+  setStoredModelInfo,
+  insertContentMetadata,
+  getContentMetadata,
+  getContentMetadataByHash,
+  getContentMetadataByStorageType,
+  deleteContentMetadata,
+  getStorageStats,
+  updateStorageStats
 } from './db.js';
 
 // Vector index operations - works with any embedding dimensions
@@ -120,6 +128,20 @@ export * from './ingestion.js';
 
 // Path management utilities - content-type agnostic
 export * from './path-manager.js';
+
+// Unified content system - handles both filesystem and memory content
+export { 
+  ContentManager,
+  type MemoryContentMetadata,
+  type ContentIngestionResult,
+  type ContentManagerConfig
+} from './content-manager.js';
+
+export {
+  ContentResolver,
+  type ContentRequest,
+  type ContentResult
+} from './content-resolver.js';
 
 // Error handling framework - supports implementation-specific error contexts
 export * from './error-handler.js';

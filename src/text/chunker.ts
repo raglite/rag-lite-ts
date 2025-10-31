@@ -20,6 +20,7 @@ export interface Document {
   source: string;
   title: string;
   content: string;
+  metadata?: Record<string, any>;
 }
 
 export interface Chunk {

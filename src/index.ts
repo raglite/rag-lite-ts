@@ -84,6 +84,14 @@ export { IngestionPipeline as CoreIngestionPipeline } from './core/ingestion.js'
 export { SearchEngine } from './search.js';
 export { IngestionPipeline } from './ingestion.js';
 
+// Lazy loading system for performance optimization
+export {
+  LazyEmbedderLoader,
+  LazyRerankerLoader,
+  LazyMultimodalLoader,
+  LazyDependencyManager
+} from './core/lazy-dependency-loader.js';
+
 // Core interfaces for dependency injection
 export type {
   EmbedFunction,
@@ -124,6 +132,23 @@ export {
 
 // Text tokenization utilities
 export { countTokens } from './text/tokenizer.js';
+
+// Reranking configuration system
+export type {
+  RerankingStrategyType,
+  RerankingConfig
+} from './core/reranking-config.js';
+
+export {
+  validateRerankingStrategy,
+  validateRerankingConfig,
+  getDefaultRerankingConfig,
+  isStrategySupported,
+  getSupportedStrategies,
+  RerankingConfigBuilder,
+  DEFAULT_TEXT_RERANKING_CONFIG,
+  DEFAULT_MULTIMODAL_RERANKING_CONFIG
+} from './core/reranking-config.js';
 
 // =============================================================================
 // CORE INFRASTRUCTURE (FOR ADVANCED USERS)
@@ -182,6 +207,16 @@ export { chunkDocument, type ChunkConfig } from './core/chunker.js';
 
 // Path management
 export { DocumentPathManager } from './core/path-manager.js';
+
+// RAG-lite directory structure management
+export {
+  resolveRagLitePaths,
+  ensureRagLiteStructure,
+  migrateToRagLiteStructure,
+  getStandardRagLitePaths,
+  type RagLiteConfig,
+  type RagLitePaths
+} from './core/raglite-paths.js';
 
 // =============================================================================
 // TYPE DEFINITIONS

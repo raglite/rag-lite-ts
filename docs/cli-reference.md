@@ -1,6 +1,6 @@
 # CLI Reference
 
-Complete reference for all RAG-lite TS command-line interface commands.
+Complete reference for all RAG-lite TS command-line interface commands with **Chameleon Multimodal Architecture** support.
 
 ## Table of Contents
 
@@ -43,6 +43,8 @@ raglite ingest <path> [options]
 
 #### Options
 - `--model <name>`: Embedding model to use
+- `--mode <mode>`: Processing mode (`text` or `multimodal`)
+- `--rerank-strategy <strategy>`: Reranking strategy for multimodal mode
 - `--rebuild-if-needed`: Auto-rebuild if model mismatch detected ⚠️ **Rebuilds entire index**
 - `--path-strategy <strategy>`: Path storage strategy (`relative` or `absolute`)
 - `--path-base <path>`: Base directory for relative paths
@@ -50,17 +52,42 @@ raglite ingest <path> [options]
 - `--index <path>`: Index file path
 
 #### Supported File Types
+
+**Text Mode (default):**
 - `.md` - Markdown files
 - `.txt` - Plain text files
 - `.mdx` - Markdown with JSX
 - `.pdf` - PDF documents
 - `.docx` - Word documents
 
+**Multimodal Mode:**
+- All text file types above
+- `.jpg`, `.jpeg` - JPEG images
+- `.png` - PNG images
+- `.gif` - GIF images
+- `.webp` - WebP images
+
 #### Available Models
+
+**Text Mode:**
 - `sentence-transformers/all-MiniLM-L6-v2` (384 dim, fast, default)
 - `Xenova/all-mpnet-base-v2` (768 dim, higher quality)
 
-**Note:** The search command automatically uses the model that was used during ingestion (stored in database). To search with a different model, you need to re-ingest with that model first.
+**Multimodal Mode:**
+- `Xenova/clip-vit-base-patch32` (512 dim, text + image support)
+
+#### Available Reranking Strategies
+
+**Text Mode:**
+- `cross-encoder` - Use cross-encoder model for reranking (default)
+- `disabled` - No reranking, use vector similarity only
+
+**Multimodal Mode:**
+- `text-derived` - Convert images to text, then use cross-encoder (default)
+- `metadata` - Use filename and metadata-based scoring
+- `disabled` - No reranking, use vector similarity only
+
+**Note:** The search command automatically detects the mode and uses the model that was configured during ingestion (stored in database). To search with a different model or mode, you need to re-ingest with that configuration first.
 
 #### Examples
 
@@ -80,6 +107,18 @@ raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2
 
 # Auto-rebuild if switching models (WARNING: rebuilds entire index)
 raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2 --rebuild-if-needed
+```
+
+**Multimodal processing:**
+```bash
+# Enable multimodal mode for text and image content
+raglite ingest ./docs/ --mode multimodal
+
+# Use specific multimodal model and reranking strategy
+raglite ingest ./docs/ --mode multimodal --model Xenova/clip-vit-base-patch32 --rerank-strategy metadata
+
+# Multimodal with text-derived reranking (default)
+raglite ingest ./docs/ --mode multimodal --rerank-strategy text-derived
 ```
 
 **Path strategies:**
@@ -126,11 +165,14 @@ raglite search <query> [options]
 
 **Basic search:**
 ```bash
-# Simple search
+# Simple search (works for both text and multimodal modes)
 raglite search "machine learning concepts"
 
 # Get more results
 raglite search "API documentation" --top-k 20
+
+# Search for images or visual content (multimodal mode)
+raglite search "diagram showing architecture"
 ```
 
 **Reranking:**
@@ -283,6 +325,20 @@ raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2 --rebuild-if-needed
 
 # Search uses the model from ingestion automatically
 raglite search "complex query"
+```
+
+### Multimodal Workflow
+
+```bash
+# Ingest with multimodal support
+raglite ingest ./docs/ --mode multimodal
+
+# Search works the same - mode is auto-detected
+raglite search "diagram showing data flow"
+
+# Use different reranking strategy
+raglite ingest ./docs/ --mode multimodal --rerank-strategy metadata
+raglite search "chart with performance metrics"
 ```
 
 ### Multiple Project Setup

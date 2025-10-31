@@ -65,6 +65,7 @@ import { config, getModelDefaults } from '../core/config.js';
 import { existsSync } from 'fs';
 import { dirname } from 'path';
 import { mkdirSync } from 'fs';
+import { ContentManager } from '../core/content-manager.js';
 
 /**
  * Options for text search factory
@@ -83,6 +84,22 @@ export interface TextSearchOptions {
 }
 
 /**
+ * Content system configuration options
+ */
+export interface ContentSystemConfig {
+  /** Content directory path (default: '.raglite/content') */
+  contentDir?: string;
+  /** Maximum file size in bytes (default: 50MB) */
+  maxFileSize?: number;
+  /** Maximum content directory size in bytes (default: 2GB) */
+  maxContentDirSize?: number;
+  /** Enable content deduplication (default: true) */
+  enableDeduplication?: boolean;
+  /** Enable storage tracking (default: true) */
+  enableStorageTracking?: boolean;
+}
+
+/**
  * Options for text ingestion factory
  */
 export interface TextIngestionOptions {
@@ -96,6 +113,12 @@ export interface TextIngestionOptions {
   chunkOverlap?: number;
   /** Whether to force rebuild the index */
   forceRebuild?: boolean;
+  /** Mode for the ingestion pipeline (text or multimodal) */
+  mode?: 'text' | 'multimodal';
+  /** Reranking strategy for multimodal mode */
+  rerankingStrategy?: 'cross-encoder' | 'text-derived' | 'metadata' | 'hybrid' | 'disabled';
+  /** Content system configuration */
+  contentSystemConfig?: ContentSystemConfig;
 }
 
 /**
@@ -272,10 +295,16 @@ export class TextSearchFactory {
       await indexManager.initialize();
       console.log('✓ Vector index loaded successfully');
 
-      // Step 7: Create SearchEngine with dependency injection
-      const searchEngine = new SearchEngine(embedFn, indexManager, db, rerankFn);
+      // Step 7: Create ContentResolver for unified content system
+      console.log('📁 Initializing content resolver...');
+      const { ContentResolver } = await import('../core/content-resolver.js');
+      const contentResolver = new ContentResolver(db);
+      console.log('✓ Content resolver ready');
 
-      // Step 8: Validate the setup
+      // Step 8: Create SearchEngine with dependency injection
+      const searchEngine = new SearchEngine(embedFn, indexManager, db, rerankFn, contentResolver);
+
+      // Step 9: Validate the setup
       const stats = await searchEngine.getStats();
       console.log(`✓ Search engine ready: ${stats.totalChunks} chunks indexed, reranking ${stats.rerankingEnabled ? 'enabled' : 'disabled'}`);
 
@@ -375,20 +404,39 @@ export class TextIngestionFactory {
    * @param options.chunkSize - Override chunk size (default: from config)
    * @param options.chunkOverlap - Override chunk overlap (default: from config)
    * @param options.forceRebuild - Force rebuild of existing index (default: false)
+   * @param options.contentSystemConfig - Content system configuration options
+   * @param options.contentSystemConfig.contentDir - Content directory path (default: '.raglite/content')
+   * @param options.contentSystemConfig.maxFileSize - Maximum file size in bytes (default: 50MB)
+   * @param options.contentSystemConfig.maxContentDirSize - Maximum content directory size (default: 2GB)
+   * @param options.contentSystemConfig.enableDeduplication - Enable content deduplication (default: true)
+   * @param options.contentSystemConfig.enableStorageTracking - Enable storage tracking (default: true)
    * @returns Promise resolving to configured IngestionPipeline
    * @throws {Error} If initialization fails
    * 
    * @example
    * ```typescript
-   * // Create ingestion pipeline
+   * // Create ingestion pipeline with default content system
    * const ingestion = await TextIngestionFactory.create('./my-db.sqlite', './my-index.bin');
+   * 
+   * // Create with custom content system configuration
+   * const ingestion = await TextIngestionFactory.create('./my-db.sqlite', './my-index.bin', {
+   *   contentSystemConfig: {
+   *     contentDir: './custom-content',
+   *     maxFileSize: 100 * 1024 * 1024, // 100MB
+   *     maxContentDirSize: 5 * 1024 * 1024 * 1024, // 5GB
+   *     enableDeduplication: true
+   *   }
+   * });
    * 
    * // Ingest documents from directory
    * const result = await ingestion.ingestDirectory('./documents');
    * console.log(`Processed ${result.documentsProcessed} documents`);
    * 
-   * // Ingest single file
-   * await ingestion.ingestFile('./document.pdf');
+   * // Ingest content from memory (MCP integration)
+   * const contentId = await ingestion.ingestFromMemory(buffer, {
+   *   displayName: 'uploaded-file.pdf',
+   *   contentType: 'application/pdf'
+   * });
    * 
    * // Clean up when done
    * await ingestion.cleanup();
@@ -447,6 +495,9 @@ export class TextIngestionFactory {
       await initializeSchema(db);
       console.log('✓ Database connection established');
 
+      // Step 3.1: Handle mode storage during ingestion
+      await this.handleModeStorage(db, options, modelDefaults);
+
       // Step 4: Initialize index manager
       console.log('📇 Initializing vector index...');
       const indexManager = new IndexManager(indexPath, dbPath, modelDefaults.dimensions, options.embeddingModel || config.embedding_model);
@@ -454,7 +505,10 @@ export class TextIngestionFactory {
       // Check if we need to force recreation due to model change
       let forceRecreate = false;
       if (options.forceRebuild && existsSync(indexPath) && existsSync(dbPath)) {
-        // Check if model has changed during rebuild
+        // When forceRebuild is true, always force recreation to handle any model/dimension mismatches
+        forceRecreate = true;
+        
+        // Check if model has changed during rebuild for logging purposes
         const { getStoredModelInfo } = await import('../core/db.js');
         const tempDb = await openDatabase(dbPath);
         try {
@@ -464,7 +518,8 @@ export class TextIngestionFactory {
           if (storedModel && storedModel.modelName !== currentModel) {
             console.log(`🔄 Model change detected: ${storedModel.modelName} → ${currentModel}`);
             console.log(`🔄 Dimensions change: ${storedModel.dimensions} → ${modelDefaults.dimensions}`);
-            forceRecreate = true;
+          } else if (storedModel && storedModel.dimensions !== modelDefaults.dimensions) {
+            console.log(`🔄 Dimension mismatch detected: ${storedModel.dimensions} → ${modelDefaults.dimensions}`);
           }
         } finally {
           await tempDb.close();
@@ -495,12 +550,18 @@ export class TextIngestionFactory {
       }
       console.log('✓ Vector index ready');
 
-      // Step 4: Create IngestionPipeline with dependency injection and chunk configuration
+      // Step 5: Create ContentManager for unified content system
+      console.log('📁 Initializing content management system...');
+      const contentSystemConfig = await this.validateAndPrepareContentSystemConfig(options.contentSystemConfig);
+      const contentManager = new ContentManager(db, contentSystemConfig);
+      console.log('✓ Content management system ready');
+
+      // Step 6: Create IngestionPipeline with dependency injection and chunk configuration
       const chunkConfig = {
         chunkSize: effectiveChunkSize,
         chunkOverlap: effectiveChunkOverlap
       };
-      const ingestionPipeline = new IngestionPipeline(embedFn, indexManager, db, chunkConfig);
+      const ingestionPipeline = new IngestionPipeline(embedFn, indexManager, db, chunkConfig, contentManager);
 
       console.log('🎉 TextIngestionFactory: Ingestion pipeline initialized successfully');
       return ingestionPipeline;
@@ -524,6 +585,186 @@ export class TextIngestionFactory {
     const indexPath = config.index_file || './index.bin';
 
     return this.create(dbPath, indexPath, options);
+  }
+
+  /**
+   * Handles mode storage during ingestion
+   * Creates or validates system info based on the provided mode and options
+   * @private
+   */
+  private static async handleModeStorage(
+    db: any, 
+    options: TextIngestionOptions, 
+    modelDefaults: any
+  ): Promise<void> {
+    const { getSystemInfo, setSystemInfo } = await import('../core/db.js');
+    
+    // Determine the effective mode and model
+    const effectiveMode = options.mode || 'text';
+    const effectiveModel = options.embeddingModel || config.embedding_model;
+    const effectiveRerankingStrategy = options.rerankingStrategy || 'cross-encoder';
+    
+    // Determine model type based on model name
+    let modelType: 'sentence-transformer' | 'clip';
+    if (effectiveModel.includes('clip')) {
+      modelType = 'clip';
+    } else {
+      modelType = 'sentence-transformer';
+    }
+    
+    // Determine supported content types based on mode
+    const supportedContentTypes = effectiveMode === 'multimodal' ? ['text', 'image'] : ['text'];
+    
+    try {
+      // Check if system info already exists
+      const existingSystemInfo = await getSystemInfo(db);
+      
+      if (existingSystemInfo) {
+        // Validate mode consistency for subsequent ingestions
+        if (existingSystemInfo.mode !== effectiveMode) {
+          console.warn(`⚠️  Mode mismatch detected!`);
+          console.warn(`   Database mode: ${existingSystemInfo.mode}`);
+          console.warn(`   Requested mode: ${effectiveMode}`);
+          
+          if (options.forceRebuild) {
+            console.log('🔄 Force rebuild enabled, updating mode configuration...');
+            await this.updateSystemInfo(db, effectiveMode, effectiveModel, modelType, modelDefaults, effectiveRerankingStrategy, supportedContentTypes);
+          } else {
+            throw new Error(
+              `Mode mismatch: Database is configured for '${existingSystemInfo.mode}' mode, but '${effectiveMode}' mode was requested. ` +
+              `Use --force-rebuild to change modes, or omit the --mode parameter to use the existing mode.`
+            );
+          }
+        } else if (existingSystemInfo.modelName !== effectiveModel) {
+          // Model change within the same mode
+          console.log(`🔄 Model change detected: ${existingSystemInfo.modelName} → ${effectiveModel}`);
+          
+          if (options.forceRebuild) {
+            console.log('🔄 Force rebuild enabled, updating model configuration...');
+            await this.updateSystemInfo(db, effectiveMode, effectiveModel, modelType, modelDefaults, effectiveRerankingStrategy, supportedContentTypes);
+          } else {
+            throw new Error(
+              `Model mismatch: Database is configured for '${existingSystemInfo.modelName}', but '${effectiveModel}' was requested. ` +
+              `Use --force-rebuild to change models, or omit the --embedding-model parameter to use the existing model.`
+            );
+          }
+        } else {
+          console.log(`✅ Mode consistency validated: ${effectiveMode} mode with ${effectiveModel}`);
+        }
+      } else {
+        // First ingestion - create system info
+        console.log(`🔧 First ingestion detected, storing system configuration...`);
+        console.log(`   Mode: ${effectiveMode}`);
+        console.log(`   Model: ${effectiveModel} (${modelType})`);
+        console.log(`   Dimensions: ${modelDefaults.dimensions}`);
+        console.log(`   Reranking: ${effectiveRerankingStrategy}`);
+        console.log(`   Content types: ${supportedContentTypes.join(', ')}`);
+        
+        await this.updateSystemInfo(db, effectiveMode, effectiveModel, modelType, modelDefaults, effectiveRerankingStrategy, supportedContentTypes);
+        console.log('✅ System configuration stored successfully');
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Mode mismatch')) {
+        throw error; // Re-throw validation errors
+      }
+      console.error('❌ Failed to handle mode storage:', error);
+      throw new Error(`Mode storage failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Updates system info in the database
+   * @private
+   */
+  private static async updateSystemInfo(
+    db: any,
+    mode: 'text' | 'multimodal',
+    modelName: string,
+    modelType: 'sentence-transformer' | 'clip',
+    modelDefaults: any,
+    rerankingStrategy: string,
+    supportedContentTypes: string[]
+  ): Promise<void> {
+    const { setSystemInfo } = await import('../core/db.js');
+    
+    await setSystemInfo(db, {
+      mode,
+      modelName,
+      modelType,
+      modelDimensions: modelDefaults.dimensions,
+      modelVersion: '1.0.0', // TODO: Get actual version from model
+      supportedContentTypes,
+      rerankingStrategy: rerankingStrategy as any,
+      rerankingModel: undefined,
+      rerankingConfig: undefined
+    });
+  }
+
+  /**
+   * Validates and prepares content system configuration
+   * @private
+   */
+  private static async validateAndPrepareContentSystemConfig(
+    userConfig?: ContentSystemConfig
+  ): Promise<ContentSystemConfig> {
+    // Default configuration
+    const defaultConfig: ContentSystemConfig = {
+      contentDir: '.raglite/content',
+      maxFileSize: 50 * 1024 * 1024, // 50MB
+      maxContentDirSize: 2 * 1024 * 1024 * 1024, // 2GB
+      enableDeduplication: true,
+      enableStorageTracking: true
+    };
+
+    // Merge with user configuration
+    const config = { ...defaultConfig, ...userConfig };
+
+    // Validate content directory path
+    if (!config.contentDir || typeof config.contentDir !== 'string') {
+      throw new Error('Content directory path must be a non-empty string');
+    }
+
+    // Validate file size limits
+    if (config.maxFileSize && (typeof config.maxFileSize !== 'number' || config.maxFileSize <= 0)) {
+      throw new Error('Maximum file size must be a positive number');
+    }
+
+    if (config.maxContentDirSize && (typeof config.maxContentDirSize !== 'number' || config.maxContentDirSize <= 0)) {
+      throw new Error('Maximum content directory size must be a positive number');
+    }
+
+    // Validate that maxFileSize is not larger than maxContentDirSize
+    if (config.maxFileSize && config.maxContentDirSize && config.maxFileSize > config.maxContentDirSize) {
+      throw new Error('Maximum file size cannot be larger than maximum content directory size');
+    }
+
+    // Validate boolean options
+    if (config.enableDeduplication !== undefined && typeof config.enableDeduplication !== 'boolean') {
+      throw new Error('enableDeduplication must be a boolean value');
+    }
+
+    if (config.enableStorageTracking !== undefined && typeof config.enableStorageTracking !== 'boolean') {
+      throw new Error('enableStorageTracking must be a boolean value');
+    }
+
+    // Create content directory if it doesn't exist
+    try {
+      const { promises: fs } = await import('fs');
+      await fs.mkdir(config.contentDir, { recursive: true });
+      
+      // Verify directory is writable
+      await fs.access(config.contentDir, (await import('fs')).constants.W_OK);
+      
+      console.log(`✓ Content directory validated: ${config.contentDir}`);
+    } catch (error) {
+      throw new Error(
+        `Failed to create or access content directory '${config.contentDir}': ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }. Please check permissions and path validity.`
+      );
+    }
+
+    return config;
   }
 }
 

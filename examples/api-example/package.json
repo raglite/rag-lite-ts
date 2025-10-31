@@ -1,13 +1,17 @@
 {
   "name": "rag-lite-api-example",
   "version": "1.0.0",
-  "description": "Example demonstrating RAG-lite TypeScript API usage",
+  "description": "Comprehensive examples demonstrating RAG-lite factory pattern API with unified content system",
   "type": "module",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "clean": "node run-clean.js",
-    "clean:files": "rm -f db.sqlite vector-index.bin"
+    "clean:files": "rm -f *.sqlite *.bin",
+    "factory-example": "node factory-example.js",
+    "simple-api": "node simple-api-example.js",
+    "content-system": "node content-system-example.js",
+    "all-examples": "npm run factory-example && npm run simple-api && npm run content-system"
   },
   "dependencies": {
     "rag-lite-ts": "file:../../"
@@ -16,7 +20,10 @@
     "rag-lite",
     "example",
     "semantic-search",
-    "typescript"
+    "typescript",
+    "factory-pattern",
+    "unified-content-system",
+    "transformers"
   ],
   "author": "RAG-lite TS Contributors",
   "license": "MIT"

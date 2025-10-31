@@ -1,16 +1,17 @@
 # RAG-lite PDF & DOCX Example
 
-This example demonstrates RAG-lite's support for PDF and DOCX document processing, showing how to ingest and search across multiple document formats.
+This example demonstrates RAG-lite's unified content system with PDF and DOCX document processing, showing both filesystem and memory-based ingestion with format-adaptive content retrieval.
 
 ## What This Example Does
 
-This example shows RAG-lite's multi-format document processing:
+This example showcases RAG-lite's enhanced document processing capabilities:
 
 1. **Create ingestion pipeline** using `new IngestionPipeline()` (simple constructor)
-2. **Ingest PDF and DOCX documents** from the example-docs directory
+2. **Ingest PDF and DOCX documents** from filesystem and memory
 3. **Create search engine** using `new SearchEngine()` (simple constructor)
 4. **Search** across all document formats using semantic queries
-5. **Display** search results with relevance scores and content snippets
+5. **Retrieve content** in different formats (file paths vs base64)
+6. **Display** enhanced search results with content IDs and retrieval options
 
 ## Sample Documents
 
@@ -29,40 +30,70 @@ npm install
 # Run the example (uses existing database if present)
 npm start
 
-# Clean run (removes existing database and index files first)
+# Clean up .raglite directory only
 npm run clean
+
+# Clean and run (removes .raglite directory then runs example)
+npm run clean:run
 ```
 
 ## Expected Output
 
-The example will:
-- Process PDF and DOCX files from the example-docs directory
-- Create embeddings for text extracted from both formats
-- Run several sample search queries:
-  - "documentation and examples"
-  - "PDF processing capabilities" 
-  - "text extraction methods"
-  - "file format support"
+The example demonstrates:
+- **Filesystem ingestion**: Process PDF and DOCX files from the example-docs directory
+- **Memory ingestion**: Ingest content directly from buffers (simulated agent content)
+- **Enhanced search**: Run semantic queries with content ID tracking
+- **Content retrieval**: Demonstrate both file path and base64 content access
+- **Batch operations**: Efficiently retrieve multiple content items
 
-Each search shows the top 3 results with relevance scores and content snippets from both PDF and DOCX sources.
+Sample search queries include:
+- "documentation and examples"
+- "PDF processing capabilities" 
+- "text extraction methods"
+- "file format support"
+
+Each search shows results with content IDs and demonstrates different content retrieval formats.
 
 ## Key API Components
 
+### Standardized Path Setup
+```javascript
+import { getStandardRagLitePaths } from 'rag-lite-ts';
+
+// Get standardized .raglite paths
+const paths = getStandardRagLitePaths(); // Uses current directory
+// Results in: .raglite/db.sqlite, .raglite/index.bin, .raglite/content/
+```
+
 ### IngestionPipeline
 ```javascript
-const pipeline = new IngestionPipeline('./db.sqlite', './vector-index.bin');
+// Filesystem ingestion with standardized paths
+const pipeline = new IngestionPipeline(paths.dbPath, paths.indexPath);
 await pipeline.ingestDirectory('./docs/');
+
+// Memory ingestion (new unified content system)
+const content = Buffer.from('Document content from agent');
+await pipeline.ingestFromMemory(content, {
+  displayName: 'agent-document.txt',
+  contentType: 'text/plain'
+});
 ```
-Creates an ingestion pipeline that can process multiple document formats including PDF, DOCX, MD, TXT, and MDX.
+Creates an ingestion pipeline supporting both filesystem and memory-based content ingestion.
 
 ### SearchEngine
 ```javascript
-const searchEngine = new SearchEngine('./vector-index.bin', './db.sqlite');
+// Search with standardized paths
+const searchEngine = new SearchEngine(paths.indexPath, paths.dbPath);
 const results = await searchEngine.search(query, { top_k: 3 });
-```
-Creates a search engine that can search across all ingested document formats seamlessly.
 
-### Search Results Structure
+// Content retrieval in different formats
+const contentId = results[0].document.contentId;
+const filePath = await searchEngine.getContent(contentId, 'file');     // For CLI clients
+const base64Data = await searchEngine.getContent(contentId, 'base64'); // For MCP clients
+```
+Creates a search engine with format-adaptive content retrieval capabilities.
+
+### Enhanced Search Results Structure
 ```javascript
 interface SearchResult {
   content: string;        // The text content extracted from the document
@@ -70,13 +101,16 @@ interface SearchResult {
   contentType: string;    // Content type (e.g., "text")
   document: {
     id: number;           // Document ID
-    source: string;       // File path (shows .pdf or .docx extension)
+    source: string;       // File path or display name
     title: string;        // Document title (extracted from document)
     contentType: string;  // Document content type
+    contentId?: string;   // NEW: Content ID for retrieval (memory-ingested content)
   };
   metadata?: Record<string, any>; // Optional metadata
 }
 ```
+
+**Note**: Content IDs are available for both filesystem and memory-ingested content, enabling unified content retrieval across all sources.
 
 ## Supported Document Formats
 
@@ -90,10 +124,18 @@ RAG-lite supports the following document formats:
 
 ## Document Processing Features
 
+### Core Processing
 - **Text Extraction**: Automatically extracts text content from binary formats
 - **Metadata Preservation**: Maintains document titles and source information
 - **Unified Search**: Search across all formats with a single query
 - **Format-Agnostic Results**: Results include content regardless of original format
+
+### Unified Content System
+- **Dual Storage Strategy**: Efficient handling of filesystem and memory content
+- **Content Deduplication**: Automatic deduplication for memory-ingested content
+- **Format-Adaptive Retrieval**: Serve content as file paths or base64 based on client needs
+- **Batch Operations**: Efficient retrieval of multiple content items
+- **MCP Integration**: Seamless integration with AI agents and MCP servers
 
 ## Sample Search Queries
 
@@ -102,16 +144,43 @@ Try these queries to explore the indexed documents:
 - **General**: "documentation", "examples", "overview"
 - **Technical**: "processing", "extraction", "format support"
 - **Specific**: "PDF capabilities", "DOCX handling", "text analysis"
+- **Content System**: "memory ingestion", "content retrieval", "agent integration"
 
 ## Files Created
 
 After running this example, you'll see:
-- `example-docs/db.sqlite` - Document metadata and chunks from all formats
-- `example-docs/vector-index.bin` - Vector embeddings for semantic search
+
+### Standardized .raglite Directory Structure
+```
+.raglite/
+├── db.sqlite                    # Document metadata and chunks from all formats
+├── index.bin                    # Vector embeddings for semantic search
+└── content/                     # Directory for memory-ingested content
+    └── {contentId}.md          # Memory-ingested content files
+```
+
+### Architecture Notes
+- **Standardized structure** follows RAG-lite design specification
+- **Filesystem content** (PDF, DOCX) remains in original locations
+- **Memory content** (from agents, APIs) stored in `.raglite/content/`
+- **Database and index** centralized in `.raglite/` directory
+- **No duplication** for filesystem content, efficient storage for memory content
 
 ## Next Steps
 
+### Basic Usage
 - Add your own PDF and DOCX files to the `example-docs/` folder
 - Experiment with different search queries
 - Try the configuration options for custom processing settings
-- Explore the main CLI commands for larger document collections
+
+### Advanced Features
+- Implement memory-based ingestion for AI agent workflows
+- Use content retrieval APIs for enhanced applications
+- Integrate with MCP servers for agent-based document processing
+- Explore batch content operations for performance optimization
+
+### Integration Examples
+- **CLI Applications**: Use file-based content retrieval
+- **Web Applications**: Use base64 content retrieval for embedded display
+- **AI Agents**: Combine memory ingestion with content retrieval
+- **MCP Servers**: Leverage format-adaptive content serving

@@ -24,6 +24,7 @@ export interface EmbeddingResult {
   embedding_id: string;
   vector: Float32Array;
   contentType?: string;
+  metadata?: Record<string, any>;
 }
 
 // Function type for embedding queries - supports different content types and dimensions
@@ -39,6 +40,7 @@ export interface SearchResult {
     source: string;
     title: string;
     contentType: string;
+    contentId?: string;     // Universal content identifier for unified content system
   };
   metadata?: Record<string, any>;
 }
@@ -81,6 +83,7 @@ export interface Document {
   source: string;
   title: string;
   content: string;
+  metadata?: Record<string, any>;
 }
 
 

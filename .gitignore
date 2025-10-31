@@ -61,4 +61,7 @@ coverage/
 tmp/
 temp/
 
+# Test data should be tracked in git
+# test-data/ - keeping this tracked for tests
+
 # Examples should be tracked in git but excluded from npm package

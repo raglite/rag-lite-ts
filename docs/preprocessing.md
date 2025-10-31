@@ -25,7 +25,9 @@ RAG-lite TS includes a powerful preprocessing system that handles various conten
 
 ## Supported File Types
 
-### Markdown (.md)
+### Text-Based Content
+
+#### Markdown (.md)
 Standard Markdown files with full syntax support.
 
 **Processing:**
@@ -33,7 +35,7 @@ Standard Markdown files with full syntax support.
 - Code blocks handled based on configuration
 - Tables converted to structured text
 
-### Text (.txt)
+#### Text (.txt)
 Plain text files processed as-is.
 
 **Processing:**
@@ -41,7 +43,7 @@ Plain text files processed as-is.
 - Line breaks and paragraphs preserved
 - No special syntax handling
 
-### MDX (.mdx)
+#### MDX (.mdx)
 Markdown with JSX components, common in documentation sites.
 
 **Processing:**
@@ -64,7 +66,7 @@ const response = await fetch('/auth/login');
 </CodeExample>
 ```
 
-### PDF (.pdf)
+#### PDF (.pdf)
 Portable Document Format files.
 
 **Processing:**
@@ -73,7 +75,7 @@ Portable Document Format files.
 - Page breaks handled as paragraph boundaries
 - Images and complex layouts simplified
 
-### DOCX (.docx)
+#### DOCX (.docx)
 Microsoft Word documents.
 
 **Processing:**
@@ -81,6 +83,42 @@ Microsoft Word documents.
 - Heading structure preserved
 - Tables converted to text
 - Comments and track changes ignored
+
+### Multimodal Content (Available in Multimodal Mode)
+
+#### Images (.jpg, .jpeg, .png, .gif, .webp)
+Image files processed for multimodal search capabilities.
+
+**Processing:**
+- **Image-to-text conversion**: Automatic description generation using Xenova/vit-gpt2-image-captioning
+- **Metadata extraction**: Dimensions, file size, format, creation date using Sharp
+- **Content-type preservation**: Images stored with content_type='image' for proper handling
+- **Searchable descriptions**: Generated descriptions indexed for text-based search
+
+**Example processing:**
+```
+Input: architecture-diagram.png (1920x1080, 245KB)
+
+Generated description: "A diagram showing system architecture with multiple connected components and data flow arrows"
+
+Extracted metadata:
+{
+  "dimensions": {"width": 1920, "height": 1080},
+  "fileSize": 251392,
+  "format": "png",
+  "originalPath": "./docs/images/architecture-diagram.png",
+  "description": "A diagram showing system architecture..."
+}
+```
+
+#### Mixed Content Directories
+Directories containing both text and image files.
+
+**Processing:**
+- **Automatic content-type detection**: Files processed based on extension
+- **Unified indexing**: Both text and images indexed in same database
+- **Cross-content search**: Text queries can find relevant images through descriptions
+- **Consistent chunking**: Images treated as single chunks with generated descriptions
 
 ## Preprocessing Modes
 
@@ -92,11 +130,13 @@ Maximum cleanup for the cleanest possible embeddings.
 - Strips Mermaid diagrams entirely
 - Removes code blocks
 - Minimal noise in embeddings
+- **Multimodal**: Images processed with minimal metadata, focus on generated descriptions
 
 **Best for:**
 - Pure content search
 - Non-technical documentation
 - When embedding quality is critical
+- Clean multimodal search without metadata noise
 
 **Configuration:**
 ```javascript
@@ -105,7 +145,8 @@ preprocessing: {
   overrides: {
     mdx: 'strip',      // Remove JSX components
     mermaid: 'strip',  // Remove diagrams
-    code: 'strip'      // Remove code blocks
+    code: 'strip',     // Remove code blocks
+    images: 'description-only'  // Only use generated descriptions
   }
 }
 ```
@@ -118,11 +159,13 @@ Practical compromise between information and cleanliness.
 - Replaces diagrams with `[diagram removed]` placeholders
 - Preserves code blocks for technical documentation
 - Good balance for most use cases
+- **Multimodal**: Images processed with descriptions and key metadata
 
 **Best for:**
 - Technical documentation
 - Mixed content types
 - General-purpose search
+- Multimodal content with balanced information retention
 
 **Configuration:**
 ```javascript
@@ -131,7 +174,8 @@ preprocessing: {
   overrides: {
     mdx: 'placeholder',    // Replace with placeholders
     mermaid: 'placeholder', // Replace with placeholders
-    code: 'keep'           // Preserve code blocks
+    code: 'keep',          // Preserve code blocks
+    images: 'description-with-metadata'  // Descriptions + essential metadata
   }
 }
 ```
@@ -144,11 +188,13 @@ Preserves maximum information for comprehensive search.
 - Extracts Mermaid diagram relationships as text
 - Preserves all code blocks
 - Maximum information retention
+- **Multimodal**: Images processed with full metadata, descriptions, and file information
 
 **Best for:**
 - Code documentation
 - Technical specifications
 - When completeness is more important than cleanliness
+- Comprehensive multimodal search with all available information
 
 **Configuration:**
 ```javascript
@@ -157,7 +203,42 @@ preprocessing: {
   overrides: {
     mdx: 'keep',       // Keep JSX components
     mermaid: 'extract', // Extract diagram content
-    code: 'keep'       // Keep all code blocks
+    code: 'keep',      // Keep all code blocks
+    images: 'full-metadata'  // Complete metadata + descriptions + file info
+  }
+}
+```
+
+### Multimodal Mode (New)
+Specialized mode for mixed content with optimized multimodal processing.
+
+**Characteristics:**
+- Optimized for text and image content processing
+- Enhanced image-to-text generation with context
+- Intelligent content-type routing
+- Balanced processing for multimodal search quality
+
+**Best for:**
+- Documentation with diagrams and screenshots
+- Mixed media content collections
+- Visual content search
+- Multimodal RAG applications
+
+**Configuration:**
+```javascript
+preprocessing: {
+  mode: 'multimodal',
+  overrides: {
+    mdx: 'keep',       // Preserve components for context
+    mermaid: 'extract', // Extract diagram relationships
+    code: 'keep',      // Keep code for technical context
+    images: 'enhanced-description'  // Enhanced image processing with context
+  },
+  multimodalOptions: {
+    imageToTextModel: 'Xenova/vit-gpt2-image-captioning',
+    includeImageMetadata: true,
+    contextualDescriptions: true,  // Use surrounding text for better descriptions
+    batchImageProcessing: true     // Process multiple images efficiently
   }
 }
 ```

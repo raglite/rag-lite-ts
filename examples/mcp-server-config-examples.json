@@ -1,0 +1,494 @@
+{
+  "mcp_server_examples": {
+    "description": "Example MCP tool calls for RAG-lite multimodal server",
+    "version": "1.0.0",
+    
+    "basic_text_ingestion": {
+      "description": "Ingest text documents in text mode",
+      "tool": "ingest",
+      "arguments": {
+        "path": "./documents",
+        "mode": "text",
+        "model": "sentence-transformers/all-MiniLM-L6-v2"
+      },
+      "expected_files": [".md", ".txt"],
+      "use_case": "Documentation, articles, text-heavy content"
+    },
+    
+    "multimodal_ingestion": {
+      "description": "Ingest mixed content in multimodal mode with automatic content type detection",
+      "tool": "ingest",
+      "arguments": {
+        "path": "./mixed-content",
+        "mode": "multimodal",
+        "model": "Xenova/clip-vit-base-patch32",
+        "rerank_strategy": "text-derived"
+      },
+      "expected_files": [".md", ".txt", ".jpg", ".jpeg", ".png", ".gif", ".webp"],
+      "processing_features": [
+        "Automatic image-to-text description generation",
+        "Image metadata extraction (dimensions, format, file size)",
+        "Unified embedding space for text and images",
+        "Content-type aware chunk creation"
+      ],
+      "use_case": "Technical documentation with diagrams, visual content, mixed media collections"
+    },
+    
+    "high_accuracy_multimodal": {
+      "description": "Multimodal ingestion optimized for accuracy",
+      "tool": "ingest",
+      "arguments": {
+        "path": "./research-papers",
+        "mode": "multimodal",
+        "model": "Xenova/clip-vit-base-patch16",
+        "rerank_strategy": "hybrid"
+      },
+      "notes": "Higher memory usage but best accuracy for complex content"
+    },
+    
+    "fast_ingestion": {
+      "description": "Fast ingestion with minimal reranking",
+      "tool": "ingest",
+      "arguments": {
+        "path": "./quick-docs",
+        "mode": "text",
+        "model": "sentence-transformers/all-MiniLM-L6-v2",
+        "rerank_strategy": "disabled"
+      },
+      "use_case": "Development, testing, fast iteration"
+    },
+    
+    "basic_search": {
+      "description": "Standard search with automatic mode detection",
+      "tool": "search",
+      "arguments": {
+        "query": "machine learning algorithms",
+        "top_k": 10,
+        "rerank": true
+      },
+      "notes": "Mode automatically detected from database configuration"
+    },
+    
+    "multimodal_search_with_filtering": {
+      "description": "Search with content type filtering and advanced options",
+      "tool": "multimodal_search",
+      "arguments": {
+        "query": "neural network architecture",
+        "top_k": 15,
+        "rerank": true,
+        "content_type": "image"
+      },
+      "features": [
+        "Content-type specific filtering (text, image, pdf, docx)",
+        "Multimodal reranking with text-derived scoring",
+        "Image metadata in results (dimensions, format, description)",
+        "Unified relevance scoring across content types"
+      ],
+      "use_case": "Finding specific content types (diagrams, charts, screenshots, technical illustrations)"
+    },
+    
+    "text_only_search": {
+      "description": "Search filtered to text content only",
+      "tool": "multimodal_search",
+      "arguments": {
+        "query": "implementation details",
+        "top_k": 20,
+        "rerank": false,
+        "content_type": "text"
+      },
+      "use_case": "Fast text-only retrieval from multimodal index"
+    },
+    
+    "get_system_configuration": {
+      "description": "Check current system mode and configuration",
+      "tool": "get_mode_info",
+      "arguments": {},
+      "returns": [
+        "current_mode",
+        "model_name",
+        "reranking_strategy",
+        "supported_content_types",
+        "capabilities"
+      ]
+    },
+    
+    "list_text_models": {
+      "description": "Get all models supporting text content",
+      "tool": "list_supported_models",
+      "arguments": {
+        "content_type": "text"
+      },
+      "use_case": "Model selection for text-only workflows"
+    },
+    
+    "list_multimodal_models": {
+      "description": "Get all models supporting image content",
+      "tool": "list_supported_models",
+      "arguments": {
+        "content_type": "image"
+      },
+      "use_case": "Model selection for multimodal workflows"
+    },
+    
+    "list_sentence_transformer_models": {
+      "description": "Get all sentence-transformer type models",
+      "tool": "list_supported_models",
+      "arguments": {
+        "model_type": "sentence-transformer"
+      },
+      "use_case": "Text-only model comparison"
+    },
+    
+    "list_clip_models": {
+      "description": "Get all CLIP type models",
+      "tool": "list_supported_models",
+      "arguments": {
+        "model_type": "clip"
+      },
+      "use_case": "Multimodal model comparison"
+    },
+    
+    "get_text_reranking_strategies": {
+      "description": "List reranking strategies for text mode",
+      "tool": "list_reranking_strategies",
+      "arguments": {
+        "mode": "text"
+      },
+      "expected_strategies": ["cross-encoder", "disabled"]
+    },
+    
+    "get_multimodal_reranking_strategies": {
+      "description": "List reranking strategies for multimodal mode",
+      "tool": "list_reranking_strategies",
+      "arguments": {
+        "mode": "multimodal"
+      },
+      "expected_strategies": ["text-derived", "metadata", "hybrid", "disabled"]
+    },
+    
+    "get_all_reranking_strategies": {
+      "description": "List all available reranking strategies",
+      "tool": "list_reranking_strategies",
+      "arguments": {},
+      "use_case": "Complete strategy overview and comparison"
+    },
+    
+    "get_basic_stats": {
+      "description": "Get basic system statistics",
+      "tool": "get_stats",
+      "arguments": {},
+      "returns": [
+        "database_exists",
+        "index_exists",
+        "total_documents",
+        "total_chunks",
+        "model_info"
+      ]
+    },
+    
+    "get_detailed_stats": {
+      "description": "Get comprehensive system statistics",
+      "tool": "get_system_stats",
+      "arguments": {
+        "include_performance": true,
+        "include_content_breakdown": true
+      },
+      "returns": [
+        "mode_specific_metrics",
+        "content_breakdown",
+        "performance_metrics"
+      ]
+    },
+    
+    "rebuild_index": {
+      "description": "Rebuild entire vector index",
+      "tool": "rebuild_index",
+      "arguments": {},
+      "use_case": "Model changes, corruption recovery, maintenance",
+      "warning": "This will regenerate all embeddings and may take significant time"
+    }
+  },
+  
+  "workflow_examples": {
+    "text_only_workflow": {
+      "description": "Complete workflow for text-only content with performance optimization",
+      "steps": [
+        {
+          "step": 1,
+          "action": "list_supported_models",
+          "arguments": {
+            "content_type": "text"
+          },
+          "purpose": "Choose optimal text model for use case"
+        },
+        {
+          "step": 2,
+          "action": "ingest",
+          "arguments": {
+            "path": "./docs",
+            "mode": "text",
+            "model": "sentence-transformers/all-MiniLM-L6-v2"
+          },
+          "notes": "Mode configuration automatically stored in database"
+        },
+        {
+          "step": 3,
+          "action": "get_mode_info",
+          "arguments": {},
+          "purpose": "Verify configuration and capabilities"
+        },
+        {
+          "step": 4,
+          "action": "search",
+          "arguments": {
+            "query": "API documentation",
+            "top_k": 10,
+            "rerank": true
+          },
+          "notes": "Mode automatically detected from database"
+        },
+        {
+          "step": 5,
+          "action": "get_system_stats",
+          "arguments": {
+            "include_performance": true
+          },
+          "purpose": "Monitor performance and resource usage"
+        }
+      ]
+    },
+    
+    "multimodal_workflow": {
+      "description": "Complete workflow for multimodal content with comprehensive processing",
+      "steps": [
+        {
+          "step": 1,
+          "action": "list_supported_models",
+          "arguments": {
+            "content_type": "image"
+          },
+          "purpose": "Choose appropriate multimodal model based on accuracy vs performance needs"
+        },
+        {
+          "step": 2,
+          "action": "list_reranking_strategies",
+          "arguments": {
+            "mode": "multimodal"
+          },
+          "purpose": "Select optimal reranking strategy for content type"
+        },
+        {
+          "step": 3,
+          "action": "ingest",
+          "arguments": {
+            "path": "./mixed-content",
+            "mode": "multimodal",
+            "model": "Xenova/clip-vit-base-patch32",
+            "rerank_strategy": "text-derived"
+          },
+          "processing": [
+            "Text documents processed with CLIP text encoder",
+            "Images processed with CLIP vision encoder",
+            "Image-to-text descriptions generated for reranking",
+            "Metadata extracted from images (dimensions, format, etc.)"
+          ]
+        },
+        {
+          "step": 4,
+          "action": "get_system_stats",
+          "arguments": {
+            "include_content_breakdown": true,
+            "include_performance": true
+          },
+          "purpose": "Verify content processing and monitor performance"
+        },
+        {
+          "step": 5,
+          "action": "multimodal_search",
+          "arguments": {
+            "query": "architecture diagram",
+            "content_type": "image",
+            "rerank": true
+          },
+          "purpose": "Test image-specific search with text-derived reranking"
+        },
+        {
+          "step": 6,
+          "action": "multimodal_search",
+          "arguments": {
+            "query": "system design documentation",
+            "top_k": 15,
+            "rerank": true
+          },
+          "purpose": "Test cross-content-type search (finds both text and images)"
+        }
+      ]
+    },
+    
+    "model_comparison_workflow": {
+      "description": "Compare different models and strategies for optimal configuration",
+      "steps": [
+        {
+          "step": 1,
+          "action": "list_supported_models",
+          "arguments": {},
+          "purpose": "See all available models with specifications"
+        },
+        {
+          "step": 2,
+          "action": "list_reranking_strategies",
+          "arguments": {
+            "mode": "multimodal"
+          },
+          "purpose": "Compare reranking options and performance characteristics"
+        },
+        {
+          "step": 3,
+          "action": "ingest",
+          "arguments": {
+            "path": "./test-content",
+            "mode": "multimodal",
+            "model": "Xenova/clip-vit-base-patch32",
+            "rerank_strategy": "hybrid"
+          },
+          "notes": "Test with balanced model and comprehensive reranking"
+        },
+        {
+          "step": 4,
+          "action": "get_system_stats",
+          "arguments": {
+            "include_performance": true,
+            "include_content_breakdown": true
+          },
+          "purpose": "Measure performance impact and content processing efficiency"
+        },
+        {
+          "step": 5,
+          "action": "multimodal_search",
+          "arguments": {
+            "query": "test query for accuracy measurement",
+            "top_k": 10,
+            "rerank": true
+          },
+          "purpose": "Benchmark search accuracy with current configuration"
+        }
+      ]
+    },
+    
+    "chameleon_architecture_demo": {
+      "description": "Demonstrate Chameleon Architecture's polymorphic runtime behavior",
+      "steps": [
+        {
+          "step": 1,
+          "action": "ingest",
+          "arguments": {
+            "path": "./text-docs",
+            "mode": "text",
+            "model": "sentence-transformers/all-MiniLM-L6-v2"
+          },
+          "purpose": "Set up text mode configuration in database"
+        },
+        {
+          "step": 2,
+          "action": "search",
+          "arguments": {
+            "query": "documentation",
+            "top_k": 5
+          },
+          "notes": "Search automatically detects text mode from database"
+        },
+        {
+          "step": 3,
+          "action": "ingest",
+          "arguments": {
+            "path": "./mixed-content",
+            "mode": "multimodal",
+            "model": "Xenova/clip-vit-base-patch32",
+            "rerank_strategy": "text-derived"
+          },
+          "purpose": "Switch to multimodal mode configuration"
+        },
+        {
+          "step": 4,
+          "action": "multimodal_search",
+          "arguments": {
+            "query": "documentation",
+            "top_k": 5
+          },
+          "notes": "Same query, different mode - demonstrates polymorphic behavior"
+        },
+        {
+          "step": 5,
+          "action": "get_mode_info",
+          "arguments": {},
+          "purpose": "Verify automatic mode detection and configuration"
+        }
+      ],
+      "demonstrates": [
+        "Mode persistence across sessions",
+        "Automatic mode detection during search",
+        "Same API interface across different modes",
+        "Runtime adaptation based on stored configuration"
+      ]
+    }
+  },
+  
+  "error_handling_examples": {
+    "model_mismatch_recovery": {
+      "description": "Handle model mismatch errors",
+      "scenario": "Search fails due to model configuration mismatch",
+      "recovery_steps": [
+        {
+          "action": "get_mode_info",
+          "purpose": "Check current configuration"
+        },
+        {
+          "action": "rebuild_index",
+          "purpose": "Rebuild with correct model"
+        },
+        {
+          "action": "search",
+          "purpose": "Retry search operation"
+        }
+      ]
+    },
+    
+    "dimension_mismatch_recovery": {
+      "description": "Handle vector dimension mismatch",
+      "scenario": "Index dimensions don't match current model",
+      "recovery_steps": [
+        {
+          "action": "get_stats",
+          "purpose": "Check model compatibility"
+        },
+        {
+          "action": "rebuild_index",
+          "purpose": "Regenerate embeddings with correct dimensions"
+        }
+      ]
+    }
+  },
+  
+  "performance_optimization": {
+    "fast_configuration": {
+      "description": "Optimized for speed",
+      "model": "sentence-transformers/all-MiniLM-L6-v2",
+      "rerank_strategy": "disabled",
+      "use_case": "Development, testing, fast iteration"
+    },
+    
+    "balanced_configuration": {
+      "description": "Balance of speed and accuracy",
+      "model": "Xenova/clip-vit-base-patch32",
+      "rerank_strategy": "text-derived",
+      "use_case": "Production with mixed content"
+    },
+    
+    "accuracy_configuration": {
+      "description": "Optimized for accuracy",
+      "model": "Xenova/clip-vit-base-patch16",
+      "rerank_strategy": "hybrid",
+      "use_case": "Research, high-quality retrieval"
+    }
+  }
+}

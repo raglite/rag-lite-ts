@@ -1,7 +1,7 @@
 # RAG-lite TS
 *Simple by default, powerful when needed*
 
-A local-first TypeScript retrieval engine for semantic search over static documents. Built to be simple to use, lightweight, and hackable with zero external run-time dependencies.
+A local-first TypeScript retrieval engine for semantic search over static documents with **Chameleon Multimodal Architecture**. Built to be simple to use, lightweight, and hackable with zero external run-time dependencies. Seamlessly adapts between text-only and multimodal modes based on your content.
 
 ![Pipeline](docs/assets/pipeline.jpg)
 
@@ -48,6 +48,42 @@ raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2 --rebuild-if-needed
 raglite search "complex query"
 ```
 
+### Content Retrieval and MCP Integration
+
+```typescript
+import { SearchEngine, IngestionPipeline } from 'rag-lite-ts';
+
+// Memory-based ingestion for AI agents
+const pipeline = new IngestionPipeline('./db.sqlite', './index.bin');
+const content = Buffer.from('Document from AI agent');
+await pipeline.ingestFromMemory(content, {
+  displayName: 'agent-document.txt'
+});
+
+// Format-adaptive content retrieval
+const search = new SearchEngine('./index.bin', './db.sqlite');
+const results = await search.search('query');
+
+// Get file path for CLI clients
+const filePath = await search.getContent(results[0].contentId, 'file');
+
+// Get base64 content for MCP clients
+const base64 = await search.getContent(results[0].contentId, 'base64');
+```
+
+### Multimodal Search (Text + Images)
+
+```bash
+# Enable multimodal processing for text and image content
+raglite ingest ./docs/ --mode multimodal
+
+# Use different reranking strategies for multimodal content
+raglite ingest ./docs/ --mode multimodal --rerank-strategy metadata
+
+# Search works the same - mode is auto-detected
+raglite search "diagram showing architecture"
+```
+
 ### Programmatic Usage
 
 ```typescript
@@ -60,6 +96,33 @@ await ingestion.ingestDirectory('./docs/');
 // Search your documents
 const search = new SearchEngine('./vector-index.bin', './db.sqlite');
 const results = await search.search('machine learning', { top_k: 10 });
+```
+
+### Memory Ingestion & Unified Content System (NEW)
+
+```typescript
+// Ingest content directly from memory (perfect for MCP integration)
+const content = Buffer.from('# AI Guide\n\nComprehensive AI concepts...');
+const contentId = await ingestion.ingestFromMemory(content, {
+  displayName: 'AI Guide.md',
+  contentType: 'text/markdown'
+});
+
+// Retrieve content in different formats based on client needs
+const filePath = await search.getContent(contentId, 'file');     // For CLI clients
+const base64Data = await search.getContent(contentId, 'base64'); // For MCP clients
+
+// Batch content retrieval for efficiency
+const contentIds = ['id1', 'id2', 'id3'];
+const contents = await search.getContentBatch(contentIds, 'base64');
+
+// Content management with deduplication
+const stats = await ingestion.getStorageStats();
+console.log(`Content directory: ${stats.contentDirSize} bytes, ${stats.fileCount} files`);
+
+// Cleanup orphaned content
+const cleanupResult = await ingestion.cleanup();
+console.log(`Removed ${cleanupResult.removedFiles} orphaned files`);
 ```
 
 #### Configuration Options
@@ -90,6 +153,11 @@ const ingestion = new IngestionPipeline('./db.sqlite', './vector-index.bin', {
 - 🏠 **Local-first**: All processing happens offline on your machine
 - 🚀 **Fast**: Sub-100ms queries for typical document collections
 - 🔍 **Semantic**: Uses embeddings for meaning-based search, not just keywords
+- 🦎 **Chameleon Architecture**: Polymorphic runtime that adapts between text and multimodal modes
+- 🖼️ **Multimodal**: Search across text and image content with automatic mode detection
+- 🧠 **Unified Content System**: Process content from filesystem or memory with automatic deduplication
+- 🔄 **Format-Adaptive Retrieval**: Serve content as file paths (CLI) or base64 data (MCP) automatically
+- 📦 **Content Management**: Built-in storage limits, cleanup operations, and orphaned file detection
 - 🛠️ **Flexible**: Simple constructors for basic use, advanced options when you need them
 - 📦 **Complete**: CLI, programmatic API, and MCP server in one package
 - 🎯 **TypeScript**: Full type safety with modern ESM architecture
@@ -99,21 +167,35 @@ const ingestion = new IngestionPipeline('./db.sqlite', './vector-index.bin', {
 
 RAG-lite TS follows a simple pipeline:
 
-1. **Document Ingestion**: Reads `.md`, `.txt`, `.mdx`, `.pdf`, and `.docx` files
-2. **Preprocessing**: Cleans content (JSX components, Mermaid diagrams, code blocks)
+1. **Document Ingestion**: Reads `.md`, `.txt`, `.mdx`, `.pdf`, `.docx` files, and images (`.jpg`, `.png`, `.gif`, `.webp`)
+2. **Preprocessing**: Cleans content (JSX components, Mermaid diagrams, code blocks) and generates image descriptions
 3. **Semantic Chunking**: Splits documents at natural boundaries with token limits
-4. **Embedding Generation**: Uses transformers.js models for semantic vectors
+4. **Embedding Generation**: Uses transformers.js models for semantic vectors (text or multimodal)
 5. **Vector Storage**: Fast similarity search with hnswlib-wasm
-6. **Metadata Storage**: SQLite for document info and model compatibility
+6. **Metadata Storage**: SQLite for document info, model compatibility, and mode persistence
 7. **Search**: Embeds queries and finds similar chunks using cosine similarity
-8. **Reranking** (optional): Cross-encoder models for improved relevance
+8. **Reranking** (optional): Multiple strategies including cross-encoder, text-derived, and metadata-based
 
-### Architecture
+### Chameleon Architecture
+
+The system automatically adapts its behavior based on the mode stored during ingestion:
 
 ```
-Documents → Preprocessor → Chunker → Embedder → Vector Index
-                                        ↓
-Query → Embedder → Vector Search → SQLite Lookup → Results
+Documents → Mode Detection → Polymorphic Pipeline → Vector Index
+                                     ↓
+Query → Auto-Detect Mode → Appropriate Embedder → Vector Search → Results
+```
+
+**Text Mode Pipeline:**
+```
+Text Documents → Text Preprocessor → Sentence Transformer → HNSW Index
+Query → Sentence Transformer → Vector Search → Cross-Encoder Reranking → Results
+```
+
+**Multimodal Mode Pipeline:**
+```
+Mixed Content → Content Router → CLIP Embedder + Image-to-Text → HNSW Index
+Query → CLIP Text Encoder → Vector Search → Text-Derived Reranking → Results
 ```
 
 → **[Document Preprocessing Guide](docs/preprocessing.md)** | **[Model Management Details](models/README.md)**
@@ -122,16 +204,23 @@ Query → Embedder → Vector Search → SQLite Lookup → Results
 
 RAG-lite TS supports multiple embedding models with automatic optimization:
 
+### Text Mode (Default)
 | Model | Dimensions | Speed | Use Case |
 |-------|------------|-------|----------|
 | `sentence-transformers/all-MiniLM-L6-v2` | 384 | Fast | General purpose (default) |
 | `Xenova/all-mpnet-base-v2` | 768 | Slower | Higher quality, complex queries |
 
+### Multimodal Mode (Text + Images)
+| Model | Dimensions | Speed | Use Case |
+|-------|------------|-------|----------|
+| `Xenova/clip-vit-base-patch32` | 512 | Medium | Text and image understanding |
+
 **Model Features:**
 - **Automatic downloads**: Models cached locally on first use
 - **Smart compatibility**: Detects model changes and prompts rebuilds
 - **Offline support**: Pre-download for offline environments
-- **Reranking**: Optional cross-encoder models for better relevance
+- **Mode persistence**: Set once during ingestion, auto-detected during search
+- **Reranking**: Multiple strategies including text-derived and metadata-based
 
 → **[Complete Model Guide](docs/model-guide.md)** | **[Performance Benchmarks](docs/EMBEDDING_MODELS_COMPARISON.md)**
 
@@ -140,6 +229,7 @@ RAG-lite TS supports multiple embedding models with automatic optimization:
 ### 📚 Getting Started
 - **[CLI Reference](docs/cli-reference.md)** - Installation and basic usage
 - **[API Reference](docs/api-reference.md)** - Simple constructors and programmatic usage
+- **[Unified Content System](docs/unified-content-system.md)** - Memory ingestion and format-adaptive retrieval
 
 ### 🔧 Customization & Advanced Usage
 - **[Configuration Guide](docs/configuration.md)** - Custom settings and options
@@ -149,6 +239,7 @@ RAG-lite TS supports multiple embedding models with automatic optimization:
 
 ### 🛠️ Support
 - **[Troubleshooting Guide](docs/troubleshooting.md)** - Common issues and solutions
+- **[Unified Content Troubleshooting](docs/unified-content-troubleshooting.md)** - Memory ingestion and content retrieval issues
 
 ### 📊 Technical References
 - **[Embedding Models Comparison](docs/EMBEDDING_MODELS_COMPARISON.md)** - Detailed benchmarks

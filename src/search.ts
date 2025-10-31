@@ -95,8 +95,12 @@ export class SearchEngine {
         const indexManager = new IndexManager(this.indexPath, this.dbPath, modelDefaults.dimensions, this.options.embeddingModel);
         await indexManager.initialize();
 
+        // Create ContentResolver for unified content system
+        const { ContentResolver } = await import('./core/content-resolver.js');
+        const contentResolver = new ContentResolver(db);
+
         // Create core engine with dependency injection
-        this.coreEngine = new CoreSearchEngine(embedFn, indexManager, db, this.options.rerankFn);
+        this.coreEngine = new CoreSearchEngine(embedFn, indexManager, db, this.options.rerankFn, contentResolver);
       } else {
         // Use factory for standard initialization
         this.coreEngine = await TextSearchFactory.create(
@@ -119,6 +123,60 @@ export class SearchEngine {
       throw new Error('SearchEngine failed to initialize');
     }
     return this.coreEngine.search(query, options);
+  }
+
+  /**
+   * Retrieve content by ID in the specified format
+   * @param contentId - Content ID to retrieve
+   * @param format - Format to return ('file' for CLI clients, 'base64' for MCP clients)
+   * @returns Promise that resolves to content in requested format
+   */
+  async getContent(contentId: string, format: 'file' | 'base64' = 'file'): Promise<string> {
+    await this.initialize();
+    if (!this.coreEngine) {
+      throw new Error('SearchEngine failed to initialize');
+    }
+    return this.coreEngine.getContent(contentId, format);
+  }
+
+  /**
+   * Retrieve multiple content items efficiently in batch
+   * @param contentIds - Array of content IDs to retrieve
+   * @param format - Format to return ('file' for CLI clients, 'base64' for MCP clients)
+   * @returns Promise that resolves to array of content in requested format
+   */
+  async getContentBatch(contentIds: string[], format: 'file' | 'base64' = 'file'): Promise<string[]> {
+    await this.initialize();
+    if (!this.coreEngine) {
+      throw new Error('SearchEngine failed to initialize');
+    }
+    return this.coreEngine.getContentBatch(contentIds, format);
+  }
+
+  /**
+   * Retrieve content metadata for result enhancement
+   * @param contentId - Content ID to get metadata for
+   * @returns Promise that resolves to content metadata
+   */
+  async getContentMetadata(contentId: string): Promise<import('./core/content-resolver.js').ContentMetadata> {
+    await this.initialize();
+    if (!this.coreEngine) {
+      throw new Error('SearchEngine failed to initialize');
+    }
+    return this.coreEngine.getContentMetadata(contentId);
+  }
+
+  /**
+   * Verify that content exists and is accessible
+   * @param contentId - Content ID to verify
+   * @returns Promise that resolves to true if content exists, false otherwise
+   */
+  async verifyContentExists(contentId: string): Promise<boolean> {
+    await this.initialize();
+    if (!this.coreEngine) {
+      throw new Error('SearchEngine failed to initialize');
+    }
+    return this.coreEngine.verifyContentExists(contentId);
   }
 
   /**

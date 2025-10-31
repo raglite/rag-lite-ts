@@ -1,6 +1,6 @@
 # API Reference
 
-This document provides comprehensive documentation for RAG-lite TS APIs, focusing on the clean architecture with simple constructors and optional factory patterns.
+This document provides comprehensive documentation for RAG-lite TS APIs with **Chameleon Multimodal Architecture**, focusing on the clean architecture with simple constructors and polymorphic runtime capabilities.
 
 ## Table of Contents
 
@@ -8,6 +8,10 @@ This document provides comprehensive documentation for RAG-lite TS APIs, focusin
 - [Main Classes](#main-classes)
   - [SearchEngine](#searchengine)
   - [IngestionPipeline](#ingestionpipeline)
+- [Chameleon Architecture](#chameleon-architecture)
+  - [UniversalEmbedder Interface](#universalembedder-interface)
+  - [Polymorphic Factories](#polymorphic-factories)
+  - [Mode Detection](#mode-detection)
 - [Factory Pattern](#factory-pattern)
   - [SearchFactory](#searchfactory)
   - [IngestionFactory](#ingestionfactory)
@@ -27,11 +31,11 @@ The fastest way to get started with RAG-lite TS using simple constructors:
 ```typescript
 import { SearchEngine, IngestionPipeline } from 'rag-lite-ts';
 
-// Initialize and ingest documents
+// Initialize and ingest documents (text mode by default)
 const ingestion = new IngestionPipeline('./db.sqlite', './index.bin');
 await ingestion.ingestDirectory('./docs');
 
-// Search your documents
+// Search your documents (mode auto-detected from database)
 const search = new SearchEngine('./index.bin', './db.sqlite');
 const results = await search.search('your query');
 ```
@@ -41,15 +45,17 @@ const results = await search.search('your query');
 ```typescript
 import { SearchEngine, IngestionPipeline } from 'rag-lite-ts';
 
-// Custom model configuration
+// Text mode with custom model
 const search = new SearchEngine('./index.bin', './db.sqlite', {
   embeddingModel: 'Xenova/all-mpnet-base-v2',
   enableReranking: true
 });
 
-// Ingestion with custom settings
+// Multimodal ingestion with CLIP model
 const ingestion = new IngestionPipeline('./db.sqlite', './index.bin', {
-  embeddingModel: 'Xenova/all-mpnet-base-v2',
+  mode: 'multimodal',
+  embeddingModel: 'Xenova/clip-vit-base-patch32',
+  rerankingStrategy: 'text-derived',
   chunkSize: 400,
   chunkOverlap: 80
 });
@@ -70,6 +76,8 @@ class SearchEngine {
   constructor(indexPath: string, dbPath: string, options?: SearchEngineOptions);
   
   async search(query: string, options?: SearchOptions): Promise<SearchResult[]>;
+  async getContent(contentId: string, format?: 'file' | 'base64'): Promise<string>;
+  async getContentBatch(requests: ContentRequest[]): Promise<ContentResult[]>;
   async getStats(): Promise<SearchStats>;
   async cleanup(): Promise<void>;
 }
@@ -89,6 +97,7 @@ interface SearchEngineOptions {
   batchSize?: number;             // Embedding batch size
   enableReranking?: boolean;      // Enable reranking (default: false)
   rerankingModel?: string;        // Reranking model name
+  rerankingStrategy?: string;     // Reranking strategy for multimodal mode
   // Advanced: Custom functions for dependency injection
   embedFn?: EmbedFunction;        // Custom embedding function
   rerankFn?: RerankFunction;      // Custom reranking function
@@ -187,6 +196,7 @@ class IngestionPipeline {
   
   async ingestDirectory(path: string, options?: IngestionOptions): Promise<IngestionResult>;
   async ingestFile(filePath: string, options?: IngestionOptions): Promise<IngestionResult>;
+  async ingestFromMemory(content: Buffer, metadata: MemoryContentMetadata): Promise<IngestionResult>;
   async cleanup(): Promise<void>;
 }
 ```
@@ -201,7 +211,9 @@ class IngestionPipeline {
 
 ```typescript
 interface IngestionPipelineOptions {
+  mode?: 'text' | 'multimodal';  // Processing mode (default: 'text')
   embeddingModel?: string;        // Model name (default: 'sentence-transformers/all-MiniLM-L6-v2')
+  rerankingStrategy?: 'cross-encoder' | 'text-derived' | 'metadata' | 'hybrid' | 'disabled';
   batchSize?: number;             // Embedding batch size
   chunkSize?: number;             // Chunk size in tokens (default: 250)
   chunkOverlap?: number;          // Overlap between chunks (default: 50)
@@ -280,6 +292,176 @@ try {
 } finally {
   await pipeline.cleanup();
 }
+```
+
+## Chameleon Architecture
+
+*The polymorphic runtime system that adapts between text and multimodal modes*
+
+The Chameleon Multimodal Architecture enables RAG-lite TS to seamlessly switch between text-only and multimodal processing modes based on configuration stored during ingestion. The system automatically detects the mode during search operations and creates appropriate implementations.
+
+### UniversalEmbedder Interface
+
+The unified interface for all embedding models, supporting both text and multimodal capabilities:
+
+```typescript
+interface UniversalEmbedder {
+  // Model identification
+  modelName: string;
+  modelType: 'sentence-transformer' | 'clip';
+  dimensions: number;
+  supportedContentTypes: string[];
+  
+  // Core embedding methods
+  embedText(text: string): Promise<EmbeddingResult>;
+  embedImage?(imagePath: string): Promise<EmbeddingResult>;
+  embedBatch(items: Array<{content: string, type: string}>): Promise<EmbeddingResult[]>;
+  
+  // Model lifecycle
+  loadModel(): Promise<void>;
+  isLoaded(): boolean;
+  cleanup(): Promise<void>;
+}
+```
+
+#### Creating Embedders
+
+The UniversalEmbedder interface is used internally by the system. For most users, the simple constructor API is recommended:
+
+```typescript
+import { SearchEngine, IngestionPipeline } from 'rag-lite-ts';
+
+// Simple API - embedders created automatically based on configuration
+const search = new SearchEngine('./index.bin', './db.sqlite');
+const ingestion = new IngestionPipeline('./db.sqlite', './index.bin', {
+  embeddingModel: 'Xenova/clip-vit-base-patch32'
+});
+```
+
+**Advanced: Direct Embedder Creation**
+
+```typescript
+// Advanced usage - direct embedder creation (internal API)
+import { createEmbedder } from 'rag-lite-ts';
+
+const embedder = await createEmbedder('sentence-transformers/all-MiniLM-L6-v2');
+const result = await embedder.embedText('Hello world');
+```
+
+#### Supported Models
+
+**Text Mode Models:**
+- `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions, fast)
+- `Xenova/all-mpnet-base-v2` (768 dimensions, higher quality)
+
+**Multimodal Mode Models:**
+- `Xenova/clip-vit-base-patch32` (512 dimensions, text + image)
+
+### Polymorphic Factories
+
+The system includes polymorphic factories for advanced use cases, but the main API uses simple constructors with automatic initialization:
+
+```typescript
+import { SearchEngine, IngestionPipeline } from 'rag-lite-ts';
+
+// Main API - simple constructors with automatic mode detection
+const search = new SearchEngine('./index.bin', './db.sqlite');
+const results = await search.search('query'); // Mode auto-detected from database
+
+// Ingestion with mode specification
+const ingestion = new IngestionPipeline('./db.sqlite', './index.bin', {
+  mode: 'multimodal',
+  embeddingModel: 'Xenova/clip-vit-base-patch32'
+});
+```
+
+**Advanced: Direct Polymorphic Factory Usage**
+
+```typescript
+import { PolymorphicSearchFactory } from 'rag-lite-ts';
+
+// Advanced usage - direct factory access
+const search = await PolymorphicSearchFactory.create('./index.bin', './db.sqlite');
+// Automatically detects mode and creates appropriate search engine
+```
+
+### Mode Detection
+
+Mode detection happens automatically when using the main API. For advanced use cases, you can access the mode detection service directly:
+
+```typescript
+// Main API - mode detection is automatic
+import { SearchEngine } from 'rag-lite-ts';
+const search = new SearchEngine('./index.bin', './db.sqlite');
+// Mode is automatically detected from database during search
+
+// Advanced: Direct mode detection access
+import { ModeDetectionService } from 'rag-lite-ts';
+
+const modeService = new ModeDetectionService('./db.sqlite');
+const systemInfo = await modeService.detectMode();
+console.log(`Current mode: ${systemInfo.mode}`);
+```
+
+### Reranking Strategies
+
+Reranking is configured during ingestion and applied automatically during search:
+
+```typescript
+import { IngestionPipeline, SearchEngine } from 'rag-lite-ts';
+
+// Configure reranking during ingestion
+const ingestion = new IngestionPipeline('./db.sqlite', './index.bin', {
+  mode: 'multimodal',
+  rerankingStrategy: 'text-derived'
+});
+
+// Reranking is applied automatically during search
+const search = new SearchEngine('./index.bin', './db.sqlite');
+const results = await search.search('query', { rerank: true });
+```
+
+#### Available Reranking Strategies
+
+**Text Mode:**
+- `cross-encoder` - Cross-encoder model reranking (default)
+
+**Multimodal Mode:**
+- `text-derived` - Convert images to text, then use cross-encoder (default)
+- `metadata` - Filename and metadata-based scoring
+- `hybrid` - Combine multiple scoring signals
+- `disabled` - No reranking, vector similarity only
+
+### Complete Multimodal Example
+
+```typescript
+import { IngestionPipeline, SearchEngine } from 'rag-lite-ts';
+
+// 1. Ingest mixed content (text + images) in multimodal mode
+const ingestion = new IngestionPipeline('./db.sqlite', './index.bin', {
+  mode: 'multimodal',
+  embeddingModel: 'Xenova/clip-vit-base-patch32',
+  rerankingStrategy: 'text-derived'
+});
+
+await ingestion.ingestDirectory('./mixed-content/');
+await ingestion.cleanup();
+
+// 2. Search automatically detects multimodal mode from database
+const search = new SearchEngine('./index.bin', './db.sqlite');
+
+// Search works for both text and image content
+const results = await search.search('diagram showing architecture');
+
+// Results include both text and image matches
+for (const result of results) {
+  console.log(`${result.document.source}: ${result.score.toFixed(2)}`);
+  if (result.metadata?.contentType) {
+    console.log(`Content type: ${result.metadata.contentType}`);
+  }
+}
+
+await search.cleanup();
 ```
 
 ## Factory Pattern
@@ -529,6 +711,84 @@ await indexManager.initialize();
 const search = new CoreSearchEngine(customEmbedFn, indexManager, db);
 ```
 
+## Unified Content System
+
+*For MCP integration and memory-based content ingestion*
+
+The unified content system enables memory-based content ingestion and format-adaptive retrieval, designed for MCP server integration and AI agent workflows.
+
+### Memory Ingestion
+
+Ingest content directly from memory buffers without requiring filesystem access:
+
+```typescript
+import { IngestionPipeline } from 'rag-lite-ts';
+
+const pipeline = new IngestionPipeline('./db.sqlite', './index.bin');
+
+// Ingest content from memory (e.g., from MCP client)
+const content = Buffer.from('Document content from AI agent');
+const result = await pipeline.ingestFromMemory(content, {
+  displayName: 'agent-document.txt',
+  contentType: 'text/plain',
+  originalPath: '/virtual/agent-content'
+});
+
+console.log(`Content ID: ${result.contentId}`);
+console.log(`Storage type: ${result.storageType}`); // 'content_dir'
+```
+
+### Format-Adaptive Content Retrieval
+
+Retrieve content in different formats based on client capabilities:
+
+```typescript
+import { SearchEngine } from 'rag-lite-ts';
+
+const search = new SearchEngine('./index.bin', './db.sqlite');
+
+// Search and get content IDs
+const results = await search.search('query');
+const contentId = results[0].contentId;
+
+// For CLI clients - get file path
+const filePath = await search.getContent(contentId, 'file');
+console.log(`File available at: ${filePath}`);
+
+// For MCP clients - get base64 content
+const base64Content = await search.getContent(contentId, 'base64');
+console.log(`Base64 content: ${base64Content.substring(0, 100)}...`);
+
+// Batch retrieval for multiple items
+const requests = [
+  { contentId: 'id1', format: 'file' as const },
+  { contentId: 'id2', format: 'base64' as const }
+];
+const batchResults = await search.getContentBatch(requests);
+```
+
+### Content Storage Strategy
+
+The system uses a dual storage approach:
+
+- **Filesystem references**: For file-based ingestion, stores references without copying
+- **Content directory**: For memory-based ingestion, stores content with hash-based filenames
+- **Deduplication**: Automatically detects and reuses identical content across both storage types
+
+```typescript
+// Filesystem ingestion - creates reference only
+await pipeline.ingestFile('./document.pdf');
+
+// Memory ingestion - stores in content directory
+const buffer = await fs.readFile('./document.pdf');
+await pipeline.ingestFromMemory(buffer, {
+  displayName: 'document.pdf',
+  contentType: 'application/pdf'
+});
+
+// Both approaches create searchable content with stable content IDs
+```
+
 ## Configuration
 
 ### Global Configuration
@@ -578,13 +838,16 @@ const models = {
 
 ```typescript
 interface SearchResult {
-  content: string;                // Chunk text content
+  content: string;                // Chunk text content or image description
   score: number;                  // Similarity score (0-1)
+  contentType: string;            // Content type ('text', 'image', etc.)
   document: {
     id: number;                   // Document ID
     source: string;               // Document source path
     title: string;                // Document title
+    contentType: string;          // Document content type
   };
+  metadata?: Record<string, any>; // Additional metadata (image dimensions, etc.)
 }
 ```
 
@@ -626,6 +889,43 @@ interface Document {
 interface EmbeddingResult {
   embedding_id: string;           // Unique identifier
   vector: Float32Array;           // Embedding vector
+  contentType: string;            // Content type ('text', 'image', etc.)
+  metadata?: Record<string, any>; // Additional metadata
+}
+```
+
+### Content System Types
+
+#### Content Retrieval
+
+```typescript
+interface ContentRequest {
+  contentId: string;
+  format: 'file' | 'base64';
+}
+
+interface ContentResult {
+  contentId: string;
+  success: boolean;
+  content?: string;
+  error?: string;
+}
+```
+
+#### Memory Ingestion
+
+```typescript
+interface MemoryContentMetadata {
+  displayName: string;
+  contentType?: string;
+  originalPath?: string;
+}
+
+interface ContentIngestionResult {
+  contentId: string;
+  wasDeduped: boolean;
+  storageType: 'filesystem' | 'content_dir';
+  contentPath: string;
 }
 ```
 
@@ -652,6 +952,45 @@ interface CoreConfig {
   // Features
   rerank_enabled: boolean;
 }
+```
+
+#### Multimodal Types
+
+```typescript
+interface SystemInfo {
+  mode: 'text' | 'multimodal';
+  modelName: string;
+  modelType: 'sentence-transformer' | 'clip';
+  modelDimensions: number;
+  supportedContentTypes: string[];
+  rerankingStrategy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface ContentDocument {
+  id: number;
+  source: string;
+  title: string;
+  contentType: 'text' | 'image' | 'pdf' | 'docx';
+  metadata: Record<string, any>;
+  createdAt: Date;
+}
+
+interface ImageMetadata {
+  originalPath: string;
+  dimensions: { width: number; height: number };
+  fileSize: number;
+  format: string;
+  description?: string; // Generated by image-to-text model
+}
+
+type RerankingStrategyType = 
+  | 'cross-encoder'    // Text cross-encoder (text mode default)
+  | 'text-derived'     // Convert images to text, then use cross-encoder
+  | 'metadata'         // Use file metadata for scoring
+  | 'hybrid'           // Combine multiple signals
+  | 'disabled';        // No reranking
 ```
 
 ## Error Handling

@@ -1,23 +1,32 @@
 # RAG-lite API Example
 
-A simple example demonstrating how to use the RAG-lite TypeScript API for document indexing and semantic search.
+A comprehensive example demonstrating how to use the RAG-lite TypeScript API with the new factory pattern and unified content system.
 
 ## What This Example Does
 
-This example shows the basic RAG-lite workflow using the simple constructor API:
+This example demonstrates the complete RAG-lite workflow using the new clean architecture:
 
-1. **Create ingestion pipeline** using `new IngestionPipeline()` (simple constructor)
-2. **Ingest documents** from the docs directory (processes README.md as sample content)
-3. **Create search engine** using `new SearchEngine()` (simple constructor)
-4. **Search** the indexed documents using semantic queries
-5. **Display** search results with relevance scores and content snippets
+1. **Factory Pattern API**: Simple, powerful factory methods for common use cases
+   - Use `SearchFactory.create()` and `IngestionFactory.create()` for easy setup
+   - Automatic model loading, database initialization, and dependency injection
+   - Smart defaults with configuration options for advanced users
 
-The simple constructor API provides an intuitive interface that "just works" with sensible defaults while allowing configuration when needed.
+2. **Simple Constructor API**: Clean, intuitive constructors for basic usage
+   - Create instances with `new SearchEngine()` and `new IngestionPipeline()`
+   - Lazy initialization handles complex setup automatically
+   - Progressive disclosure from simple to advanced usage
+
+3. **Unified Content System**: Seamless handling of different content types
+   - Automatic content type detection and processing
+   - Efficient storage with deduplication and cleanup
+   - Support for both file-based and memory-based content ingestion
+
+The new architecture provides clean separation between simple usage patterns and advanced customization while maintaining high performance and local-first principles.
 
 ## Running the Example
 
 ```bash
-# Run the example (uses existing database if present)
+# Run the complete example (factory + simple API + content system)
 node index.js
 
 # Or use npm scripts
@@ -25,73 +34,245 @@ npm start
 
 # Clean run (removes existing database and index files first)
 npm run clean
+
+# Run specific examples
+npm run factory-example    # Factory pattern usage
+npm run simple-api        # Simple constructor API
+npm run content-system    # Unified content system features
 ```
 
 ## Expected Output
 
-The example will:
-- Index the document using RAG-lite's ingestion pipeline
-- Run several sample search queries:
-  - "How to install raglite?"
-  - "What embedding models are supported?"
-  - "TypeScript API usage examples"
-  - "MCP server integration"
+The example demonstrates three key API patterns:
 
-Each search shows the top 3 results with relevance scores and content snippets.
+### 1. Factory Pattern API
+- Uses `SearchFactory.create()` and `IngestionFactory.create()` for easy setup
+- Handles complex initialization automatically (model loading, database setup)
+- Provides configuration options for advanced users
+- Shows proper resource cleanup
+
+### 2. Simple Constructor API
+- Uses `new SearchEngine()` and `new IngestionPipeline()` for basic usage
+- Demonstrates lazy initialization (setup happens on first use)
+- Shows progressive disclosure from simple to advanced usage
+- Maintains clean, intuitive constructor signatures
+
+### 3. Unified Content System
+- Demonstrates memory-based content ingestion alongside file-based
+- Shows automatic content type detection and processing
+- Illustrates content deduplication and storage management
+- Displays format adaptation for different client types
+
+Each example includes sample search queries with relevance scores, content sources, and system statistics.
 
 ## Key API Components
 
-### IngestionPipeline
+### Factory Pattern API (Recommended)
 ```javascript
-const ingestion = new IngestionPipeline('./db.sqlite', './vector-index.bin');
-await ingestion.ingestDirectory('./docs/');
-```
-Creates an ingestion pipeline and processes documents from a directory. The constructor handles embedding model initialization automatically.
+// Create ingestion pipeline with factory
+const ingestion = await IngestionFactory.create('./db.sqlite', './index.bin', {
+  embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
+  chunkSize: 512,
+  chunkOverlap: 50
+});
 
-### SearchEngine
-```javascript
-const searchEngine = new SearchEngine('./vector-index.bin', './db.sqlite');
-const results = await searchEngine.search(query, { top_k: 3 });
+// Create search engine with factory
+const search = await SearchFactory.create('./index.bin', './db.sqlite', {
+  enableReranking: true,
+  topK: 5
+});
+
+// Create complete RAG system
+const { searchEngine, ingestionPipeline } = await RAGFactory.createBoth(
+  './index.bin', 
+  './db.sqlite'
+);
 ```
-Creates a search engine and performs semantic search over indexed documents. The constructor automatically detects and loads the correct embedding model.
+
+### Simple Constructor API
+```javascript
+// Simple ingestion pipeline
+const pipeline = new IngestionPipeline('./db.sqlite', './index.bin', {
+  embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2'
+});
+
+// Simple search engine
+const searchEngine = new SearchEngine('./index.bin', './db.sqlite', {
+  enableReranking: false // Fast mode
+});
+
+// Lazy initialization happens automatically on first use
+```
+
+### Unified Content System
+```javascript
+// Memory-based content ingestion
+await pipeline.ingestMemoryContent('Content text', {
+  title: 'Document Title',
+  source: 'memory://custom-id'
+});
+
+// File-based content ingestion
+await pipeline.ingestDirectory('./documents/');
+
+// Mixed content search works seamlessly
+const results = await searchEngine.search('query');
+```
 
 ### Search Results Structure
 ```javascript
 interface SearchResult {
-  content: string;        // The text content of the chunk
+  content: string;        // Text content or processed content
   score: number;          // Relevance score (0-1, higher is better)
-  contentType: string;    // Content type (e.g., "text")
+  contentType: string;    // Content type: "text", "markdown", "pdf", etc.
   document: {
     id: number;           // Document ID
-    source: string;       // File path
-    title: string;        // Document title
+    source: string;       // File path or memory reference
+    title: string;        // Document title or filename
     contentType: string;  // Document content type
   };
-  metadata?: Record<string, any>; // Optional metadata
+  metadata?: {            // Content-specific metadata
+    chunkIndex?: number;
+    processingMethod?: string;
+    originalPath?: string;
+    fileSize?: number;
+    // Additional metadata based on content type
+  };
+}
+```
+
+### Factory Options Structure
+```javascript
+interface TextSearchOptions {
+  embeddingModel?: string;     // Override embedding model
+  batchSize?: number;          // Embedding batch size
+  rerankingModel?: string;     // Override reranking model
+  enableReranking?: boolean;   // Enable/disable reranking
+  topK?: number;              // Default top-k results
+}
+
+interface TextIngestionOptions {
+  embeddingModel?: string;     // Override embedding model
+  batchSize?: number;          // Embedding batch size
+  chunkSize?: number;          // Text chunk size
+  chunkOverlap?: number;       // Chunk overlap
+  forceRebuild?: boolean;      // Force index rebuild
+  contentSystemConfig?: {      // Content system options
+    maxFileSize?: number;
+    enableDeduplication?: boolean;
+    enableStorageTracking?: boolean;
+  };
 }
 ```
 
 ## Sample Search Queries
 
-Try these queries to explore the indexed README content:
+### Factory Pattern Queries
+Try these queries with the factory-created engines:
 
 - **Installation**: "npm install", "getting started", "quick start"
-- **Features**: "local first", "semantic search", "typescript"
-- **Models**: "embedding models", "MiniLM", "mpnet", "dimensions"
-- **CLI**: "command line", "ingest", "search options"
-- **API**: "programmatic usage", "SearchEngine", "IngestionPipeline"
-- **Configuration**: "config file", "environment variables"
-- **Performance**: "speed", "memory usage", "requirements"
+- **API Usage**: "factory pattern", "SearchFactory", "IngestionFactory"
+- **Configuration**: "embedding models", "reranking options", "batch size"
+- **Performance**: "optimization", "memory usage", "speed"
+
+### Simple API Queries
+Try these queries with constructor-created engines:
+
+- **Basic Usage**: "simple constructor", "lazy initialization", "basic setup"
+- **Documentation**: "TypeScript usage", "API reference", "examples"
+- **Features**: "local first", "semantic search", "content system"
+
+### Content System Queries
+Try these queries to test mixed content types:
+
+- **Memory Content**: "factory pattern", "local-first system", "content system"
+- **File Content**: "documentation", "installation guide", "configuration"
+- **Mixed Search**: Queries that match both memory and file content
+
+### Search Options
+```javascript
+// Basic search
+const results = await searchEngine.search("query");
+
+// Search with options
+const results = await searchEngine.search("query", { 
+  top_k: 5,
+  rerank: true 
+});
+
+// Get system statistics
+const stats = await searchEngine.getStats();
+console.log(`Total chunks: ${stats.totalChunks}`);
+```
 
 ## Files Created
 
 After running this example, you'll see:
-- `db.sqlite` - Document metadata and chunks
-- `vector-index.bin` - Vector embeddings for search
+- `factory-db.sqlite` / `factory-index.bin` - Factory pattern example files
+- `simple-db.sqlite` / `simple-index.bin` - Simple API example files  
+- `content-db.sqlite` / `content-index.bin` - Content system example files
+- `rag-db.sqlite` / `rag-index.bin` - RAG factory example files
+
+## Configuration Examples
+
+### Factory Configuration
+```javascript
+// Ingestion factory with custom options
+const ingestion = await IngestionFactory.create('./db.sqlite', './index.bin', {
+  embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
+  chunkSize: 512,
+  chunkOverlap: 50,
+  batchSize: 16
+});
+
+// Search factory with reranking
+const search = await SearchFactory.create('./index.bin', './db.sqlite', {
+  enableReranking: true,
+  topK: 10
+});
+```
+
+### Simple Constructor Configuration
+```javascript
+// Simple ingestion pipeline
+const pipeline = new IngestionPipeline('./db.sqlite', './index.bin', {
+  embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
+  chunkSize: 256
+});
+
+// Simple search engine (fast mode)
+const search = new SearchEngine('./index.bin', './db.sqlite', {
+  enableReranking: false
+});
+```
+
+### Content System Configuration
+```javascript
+// Pipeline with content system options
+const pipeline = new IngestionPipeline('./db.sqlite', './index.bin', {
+  contentSystemConfig: {
+    maxFileSize: 10 * 1024 * 1024, // 10MB
+    enableDeduplication: true,
+    enableStorageTracking: true
+  }
+});
+```
+
+## Supported File Types
+
+The unified content system supports:
+- `.md` - Markdown documents
+- `.txt` - Plain text files
+- `.pdf` - PDF documents (with text extraction)
+- `.docx` - Word documents (with text extraction)
+- Memory-based content (programmatic ingestion)
 
 ## Next Steps
 
-- Try indexing your own documents by placing them in the `docs/` folder
-- Experiment with different search queries
-- Explore the CLI commands for more advanced usage
-- Check out the main README.md for comprehensive documentation
+- Try indexing your own documents by placing them in the `./docs/` folder
+- Experiment with different embedding models and configuration options
+- Test memory-based content ingestion with your own programmatic content
+- Explore the CLI commands for batch processing: `raglite ingest` and `raglite search`
+- Check out the MCP server integration for tool-based usage: `raglite-mcp`
+- Review the main documentation for comprehensive API reference and architecture details
+- Try the individual example scripts to focus on specific API patterns

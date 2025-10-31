@@ -130,6 +130,8 @@ export interface Document {
   title: string;
   /** Full text content */
   content: string;
+  /** Optional metadata */
+  metadata?: Record<string, any>;
 }
 
 /**

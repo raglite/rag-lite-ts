@@ -30,7 +30,9 @@ raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2
 
 ## Supported Models
 
-### sentence-transformers/all-MiniLM-L6-v2 (Default)
+### Text Models (Production Ready)
+
+#### sentence-transformers/all-MiniLM-L6-v2 (Default)
 
 **Best for**: Speed, efficiency, general-purpose search
 
@@ -39,13 +41,14 @@ raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2
 - **Speed**: ~127 embeddings/second
 - **Memory**: ~343MB total usage
 - **Quality**: Good for most use cases
+- **Content Types**: Text only
 
 **Auto-configured settings:**
 - Chunk size: 250 tokens
 - Batch size: 16
 - Overlap: 50 tokens
 
-### Xenova/all-mpnet-base-v2 (High Quality)
+#### Xenova/all-mpnet-base-v2 (High Quality)
 
 **Best for**: Complex queries, technical content, research
 
@@ -54,37 +57,89 @@ raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2
 - **Speed**: ~29 embeddings/second
 - **Memory**: ~892MB total usage
 - **Quality**: Excellent semantic understanding
+- **Content Types**: Text only
 
 **Auto-configured settings:**
 - Chunk size: 400 tokens
 - Batch size: 8
 - Overlap: 80 tokens
 
+### Multimodal Models (Text Implementation Ready)
+
+#### Xenova/clip-vit-base-patch32 (Multimodal)
+
+**Best for**: Mixed content (text + images), multimodal search
+
+- **Dimensions**: 512
+- **Model Size**: ~150MB
+- **Speed**: ~45 embeddings/second (text)
+- **Memory**: ~650MB total usage
+- **Quality**: Good for multimodal understanding
+- **Content Types**: Text (ready), Image (prepared for transformers.js updates)
+- **Status**: Text embeddings production-ready, image support infrastructure prepared
+
+**Auto-configured settings:**
+- Chunk size: 300 tokens
+- Batch size: 12
+- Overlap: 60 tokens
+- Image processing: Enabled with image-to-text conversion
+
+#### Xenova/clip-vit-base-patch16 (High Resolution Multimodal)
+
+**Best for**: High-resolution images, detailed visual content
+
+- **Dimensions**: 512
+- **Model Size**: ~350MB
+- **Speed**: ~25 embeddings/second (text)
+- **Memory**: ~950MB total usage
+- **Quality**: Better for detailed visual content
+- **Content Types**: Text (ready), Image (prepared)
+- **Status**: Text embeddings production-ready, image support infrastructure prepared
+
+**Auto-configured settings:**
+- Chunk size: 300 tokens
+- Batch size: 8
+- Overlap: 60 tokens
+- Image processing: Enabled with enhanced image-to-text conversion
+
 ## Performance Comparison
 
 ### Speed Benchmarks
-| Metric | MiniLM-L6-v2 | MPNet-base-v2 | Difference |
-|--------|--------------|---------------|------------|
-| Single embedding | 16ms | 114ms | 7x slower |
-| Batch (10 texts) | 79ms | 341ms | 4.3x slower |
-| Throughput | 127/sec | 29/sec | 4.3x slower |
-| Model loading | 460ms | 6,086ms | 13x slower |
+| Metric | MiniLM-L6-v2 | MPNet-base-v2 | CLIP-patch32 | CLIP-patch16 |
+|--------|--------------|---------------|--------------|--------------|
+| Single embedding | 16ms | 114ms | 65ms | 120ms |
+| Batch (10 texts) | 79ms | 341ms | 180ms | 285ms |
+| Throughput | 127/sec | 29/sec | 45/sec | 25/sec |
+| Model loading | 460ms | 6,086ms | 2,500ms | 4,200ms |
 
 ### Memory Usage
-| Metric | MiniLM-L6-v2 | MPNet-base-v2 | Difference |
-|--------|--------------|---------------|------------|
-| Processing | 1.6MB | 12.3MB | 7.5x more |
-| Total memory | 343MB | 892MB | 2.6x more |
-| Model cache | 23MB | 110MB | 4.8x larger |
+| Metric | MiniLM-L6-v2 | MPNet-base-v2 | CLIP-patch32 | CLIP-patch16 |
+|--------|--------------|---------------|--------------|--------------|
+| Processing | 1.6MB | 12.3MB | 8.5MB | 15.2MB |
+| Total memory | 343MB | 892MB | 650MB | 950MB |
+| Model cache | 23MB | 110MB | 150MB | 350MB |
 
 ### Quality Characteristics
-| Aspect | MiniLM-L6-v2 | MPNet-base-v2 |
-|--------|--------------|---------------|
-| General search | ✅ Excellent | ✅ Excellent |
-| Technical content | ✅ Good | ✅ Superior |
-| Complex queries | ✅ Good | ✅ Excellent |
-| Domain-specific | ✅ Moderate | ✅ Better |
-| Semantic nuance | ✅ Good | ✅ Superior |
+| Aspect | MiniLM-L6-v2 | MPNet-base-v2 | CLIP-patch32 | CLIP-patch16 |
+|--------|--------------|---------------|--------------|--------------|
+| General search | ✅ Excellent | ✅ Excellent | ✅ Good | ✅ Good |
+| Technical content | ✅ Good | ✅ Superior | ✅ Good | ✅ Good |
+| Complex queries | ✅ Good | ✅ Excellent | ✅ Moderate | ✅ Good |
+| Domain-specific | ✅ Moderate | ✅ Better | ✅ Moderate | ✅ Moderate |
+| Semantic nuance | ✅ Good | ✅ Superior | ✅ Moderate | ✅ Good |
+| Multimodal content | ❌ N/A | ❌ N/A | ✅ Good | ✅ Better |
+| Image understanding | ❌ N/A | ❌ N/A | ✅ Good* | ✅ Better* |
+
+*Via image-to-text conversion using Xenova/vit-gpt2-image-captioning
+
+### Multimodal Capabilities Matrix
+| Feature | Text Models | CLIP Models | Implementation Status |
+|---------|-------------|-------------|----------------------|
+| Text embedding | ✅ Production | ✅ Production | Ready |
+| Image embedding | ❌ Not supported | 🔮 Prepared | Awaiting transformers.js |
+| Image-to-text | ❌ Not supported | ✅ Production | Ready |
+| Mixed content | ❌ Text only | ✅ Production | Ready |
+| Reranking | ✅ Cross-encoder | ✅ Text-derived + Metadata | Ready |
 
 ## Model Switching
 
@@ -102,6 +157,20 @@ raglite search "complex query"  # Uses MPNet automatically
 # Automatically rebuilds index if needed
 raglite ingest ./docs/ --model sentence-transformers/all-MiniLM-L6-v2 --rebuild-if-needed
 raglite search "simple query"  # Uses MiniLM automatically
+```
+
+**Switch to multimodal mode:**
+```bash
+# Enable multimodal processing with CLIP model
+raglite ingest ./mixed-content/ --mode multimodal --model Xenova/clip-vit-base-patch32
+raglite search "architecture diagram"  # Searches both text and images
+```
+
+**Multimodal mode with reranking strategy:**
+```bash
+# Use text-derived reranking for better image search
+raglite ingest ./docs-with-images/ --mode multimodal --rerank-strategy text-derived
+raglite search "system architecture"  # Images converted to text for reranking
 ```
 
 ### Configuration File Method

@@ -11,8 +11,19 @@ import { spawn } from 'child_process';
 async function cleanAndRun() {
     console.log('🧹 Cleaning up existing files...');
     
-    // Remove existing files if they exist
-    const filesToRemove = ['db.sqlite', 'vector-index.bin'];
+    // Remove all example database and index files
+    const filesToRemove = [
+        // Main example files
+        'db.sqlite', 'vector-index.bin',
+        // Factory example files
+        'factory-db.sqlite', 'factory-index.bin',
+        // Simple API example files
+        'simple-db.sqlite', 'simple-index.bin',
+        // Content system example files
+        'content-db.sqlite', 'content-index.bin',
+        // RAG factory example files
+        'rag-db.sqlite', 'rag-index.bin'
+    ];
     
     for (const file of filesToRemove) {
         if (existsSync(file)) {

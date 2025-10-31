@@ -155,7 +155,8 @@ export class EmbeddingEngine {
 
           results.push({
             embedding_id,
-            vector
+            vector,
+            contentType: 'text'
           });
         }
 
@@ -225,7 +226,8 @@ export class EmbeddingEngine {
 
       return {
         embedding_id,
-        vector
+        vector,
+        contentType: 'text'
       };
     } catch (error) {
       // Return null to indicate failure
@@ -429,10 +431,10 @@ export function createTextEmbedFunction(modelName?: string, batchSize?: number):
     // Use the existing embedSingle method
     const result = await engine.embedSingle(query);
     
-    // Add contentType to the result
+    // Ensure contentType is present (should already be included from embedSingle)
     return {
       ...result,
-      contentType: 'text'
+      contentType: result.contentType || 'text'
     };
   };
   

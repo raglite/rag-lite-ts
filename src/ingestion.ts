@@ -21,6 +21,7 @@
 import { IngestionPipeline as CoreIngestionPipeline } from './core/ingestion.js';
 import { TextIngestionFactory, type TextIngestionOptions } from './factories/index.js';
 import type { IngestionOptions, IngestionResult } from './core/ingestion.js';
+import type { MemoryContentMetadata } from './core/content-manager.js';
 
 export interface IngestionPipelineOptions extends TextIngestionOptions {}
 
@@ -94,6 +95,32 @@ export class IngestionPipeline {
       throw new Error('IngestionPipeline failed to initialize');
     }
     return this.corePipeline.ingestDirectory(directoryPath, options);
+  }
+
+  /**
+   * Ingest content from memory buffer
+   * Enables MCP integration and real-time content processing
+   * 
+   * @example
+   * ```typescript
+   * const pipeline = new IngestionPipeline('./db.sqlite', './index.bin');
+   * const contentId = await pipeline.ingestFromMemory(buffer, {
+   *   displayName: 'uploaded-file.txt',
+   *   contentType: 'text/plain'
+   * });
+   * console.log('Content ingested with ID:', contentId);
+   * ```
+   */
+  async ingestFromMemory(
+    content: Buffer, 
+    metadata: MemoryContentMetadata, 
+    options?: IngestionOptions
+  ): Promise<string> {
+    await this.initialize();
+    if (!this.corePipeline) {
+      throw new Error('IngestionPipeline failed to initialize');
+    }
+    return this.corePipeline.ingestFromMemory(content, metadata, options);
   }
 
   /**

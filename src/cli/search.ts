@@ -1,5 +1,6 @@
 import { existsSync } from 'fs';
-import { TextSearchFactory } from '../factories/text-factory.js';
+import { PolymorphicSearchFactory } from '../core/polymorphic-search-factory.js';
+import { withCLIDatabaseAccess, setupCLICleanup } from '../core/cli-database-utils.js';
 import { config, EXIT_CODES, ConfigurationError } from '../core/config.js';
 import type { SearchOptions } from '../core/types.js';
 
@@ -62,20 +63,24 @@ export async function runSearch(query: string, options: Record<string, any> = {}
     console.log(`Searching for: "${query}"`);
     console.log('');
 
-    // Initialize search engine using factory
+    // Setup graceful cleanup
+    setupCLICleanup(effectiveConfig.db_file);
+
+    // Initialize search engine using polymorphic factory with database protection
     let searchEngine;
     
     try {
-      // Prepare factory options
-      const factoryOptions = {
-        enableReranking: options.rerank !== undefined ? options.rerank : effectiveConfig.rerank_enabled
-      };
-
-      // Create search engine using TextSearchFactory
-      searchEngine = await TextSearchFactory.create(
-        effectiveConfig.index_file,
+      // Create search engine using PolymorphicSearchFactory (auto-detects mode)
+      searchEngine = await withCLIDatabaseAccess(
         effectiveConfig.db_file,
-        factoryOptions
+        () => PolymorphicSearchFactory.create(
+          effectiveConfig.index_file,
+          effectiveConfig.db_file
+        ),
+        {
+          commandName: 'Search command',
+          showProgress: true
+        }
       );
       
       // Prepare search options
@@ -127,6 +132,15 @@ export async function runSearch(query: string, options: Record<string, any> = {}
       if (searchEngine) {
         await searchEngine.cleanup();
       }
+      
+      // Ensure clean exit for CLI commands
+      const { DatabaseConnectionManager } = await import('../core/database-connection-manager.js');
+      await DatabaseConnectionManager.closeAllConnections();
+      
+      // Force exit for CLI commands to prevent hanging
+      setTimeout(() => {
+        process.exit(0);
+      }, 100);
     }
     
   } catch (error) {
