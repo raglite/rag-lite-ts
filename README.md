@@ -1,23 +1,112 @@
-# RAG-lite TS
-*Simple by default, powerful when needed*
+<div align="center">
 
-A local-first TypeScript retrieval engine for semantic search over static documents with **Chameleon Multimodal Architecture**. Built to be simple to use, lightweight, and hackable with zero external run-time dependencies. Seamlessly adapts between text-only and multimodal modes based on your content.
+# 🦎 RAG-lite TS
 
-![Pipeline](docs/assets/pipeline.jpg)
+### *Simple by default, powerful when needed*
 
-## Table of Contents
+**Local-first semantic search that actually works**
 
-- [Quick Start](#quick-start)
-- [Features](#features)
-- [How It Works](#how-it-works)
-- [Supported Models](#supported-models)
-- [Documentation](#documentation)
-- [MCP Server Integration](#mcp-server-integration)
-- [Development](#development)
-- [Contributing](#contributing)
-- [License](#license)
+[![npm version](https://img.shields.io/npm/v/rag-lite-ts.svg?style=flat-square)](https://www.npmjs.com/package/rag-lite-ts)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg?style=flat-square)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg?style=flat-square)](https://nodejs.org/)
 
-## Quick Start
+[Quick Start](#quick-start) • [Features](#features) • [Documentation](#documentation) • [Examples](#examples) • [MCP Integration](#mcp-server-integration)
+
+</div>
+
+---
+
+## 🎯 Why RAG-lite TS?
+
+**Stop fighting with complex RAG frameworks.** Get semantic search running in 30 seconds:
+
+```bash
+npm install -g rag-lite-ts
+raglite ingest ./docs/
+raglite search "your query here"
+```
+
+**That's it.** No API keys, no cloud services, no configuration hell.
+
+### 🎬 See It In Action
+
+```typescript
+// 1. Ingest your docs
+const pipeline = new IngestionPipeline('./db.sqlite', './index.bin');
+await pipeline.ingestDirectory('./docs/');
+
+// 2. Search semantically
+const search = new SearchEngine('./index.bin', './db.sqlite');
+const results = await search.search('authentication flow');
+
+// 3. Get relevant results instantly
+console.log(results[0].text);
+// "To authenticate users, first obtain a JWT token from the /auth endpoint..."
+```
+
+**Real semantic understanding** - not just keyword matching. Finds "JWT token" when you search for "authentication flow".
+
+### What Makes It Different?
+
+- 🏠 **100% Local** - Your data never leaves your machine
+- 🚀 **Actually Fast** - Sub-100ms queries, not "eventually consistent"
+- 🦎 **Chameleon Architecture** - Automatically adapts between text and multimodal modes
+- 🖼️ **True Multimodal** - Search images with text, text with images (CLIP unified space)
+- 📦 **Zero Runtime Dependencies** - No Python, no Docker, no external services
+- 🎯 **TypeScript Native** - Full type safety, modern ESM architecture
+- 🔌 **MCP Ready** - Built-in Model Context Protocol server for AI agents
+
+![Pipeline](docs/assets/pipeline.png)
+
+---
+
+## 🎉 What's New in 2.0
+
+**Chameleon Multimodal Architecture** - RAG-lite TS now seamlessly adapts between text-only and multimodal search:
+
+### 🖼️ Multimodal Search
+- **CLIP Integration** - Unified 512D embedding space for text and images
+- **Cross-Modal Search** - Find images with text queries, text with image queries
+- **Image-to-Text Generation** - Automatic descriptions using vision-language models
+- **Smart Reranking** - Text-derived, metadata-based, and hybrid strategies
+
+### 🏗️ Architecture Improvements
+- **Layered Architecture** - Clean separation: core (model-agnostic) → implementation (text/multimodal) → public API
+- **Mode Persistence** - Configuration stored in database, auto-detected during search
+- **Unified Content System** - Memory-based ingestion for AI agents, format-adaptive retrieval
+- **Simplified APIs** - `createEmbedder()` and `createReranker()` replace complex factory patterns
+
+### 🤖 MCP Server Enhancements
+- **Multimodal Tools** - `multimodal_search`, `ingest_image` with URL download
+- **Base64 Image Delivery** - Automatic encoding for AI agent integration
+- **Content-Type Filtering** - Filter results by text, image, pdf, docx
+- **Dynamic Tool Descriptions** - Context-aware tool documentation
+
+### 📦 Migration from 1.x
+Existing databases need schema updates for multimodal support. Two options:
+1. **Automatic Migration**: Use `migrateToRagLiteStructure()` function
+2. **Fresh Start**: Re-ingest content with v2.0.0
+
+See [CHANGELOG.md](CHANGELOG.md) for complete details.
+
+---
+
+## 📋 Table of Contents
+
+- [Why RAG-lite TS?](#-why-rag-lite-ts)
+- [Quick Start](#-quick-start)
+- [Features](#-features)
+- [Real-World Examples](#-real-world-examples)
+- [How It Works](#-how-it-works)
+- [Supported Models](#-supported-models)
+- [Documentation](#-documentation)
+- [MCP Server Integration](#-mcp-server-integration)
+- [Development](#-development)
+- [Contributing](#-contributing)
+- [License](#-license)
+
+## 🚀 Quick Start
 
 ### Installation
 
@@ -73,29 +162,59 @@ const base64 = await search.getContent(results[0].contentId, 'base64');
 
 ### Multimodal Search (Text + Images)
 
+RAG-lite TS now supports true multimodal search using CLIP's unified embedding space, enabling cross-modal search between text and images:
+
 ```bash
 # Enable multimodal processing for text and image content
 raglite ingest ./docs/ --mode multimodal
 
-# Use different reranking strategies for multimodal content
-raglite ingest ./docs/ --mode multimodal --rerank-strategy metadata
+# Cross-modal search: Find images using text queries
+raglite search "architecture diagram" --content-type image
+raglite search "red sports car" --content-type image
 
-# Search works the same - mode is auto-detected
-raglite search "diagram showing architecture"
+# Find text documents about visual concepts
+raglite search "user interface design" --content-type text
+
+# Search across both content types (default)
+raglite search "system overview"
+
+# Use different reranking strategies for optimal results
+raglite ingest ./docs/ --mode multimodal --rerank-strategy text-derived
 ```
+
+**Key Features:**
+- **Unified embedding space**: Text and images embedded in the same 512-dimensional CLIP space
+- **Cross-modal search**: Text queries find semantically similar images
+- **Automatic mode detection**: Set mode once during ingestion, automatically detected during search
+- **Multiple reranking strategies**: text-derived, metadata, hybrid, or disabled
+- **Seamless experience**: Same CLI commands work for both text-only and multimodal content
+
+→ **[Complete Multimodal Tutorial](docs/multimodal-tutorial.md)**
 
 ### Programmatic Usage
 
 ```typescript
 import { SearchEngine, IngestionPipeline } from 'rag-lite-ts';
 
-// Initialize and ingest documents
+// Text-only mode (default)
 const ingestion = new IngestionPipeline('./db.sqlite', './vector-index.bin');
 await ingestion.ingestDirectory('./docs/');
 
-// Search your documents
+// Multimodal mode (text + images)
+const multimodalIngestion = new IngestionPipeline('./db.sqlite', './index.bin', {
+  mode: 'multimodal',
+  embeddingModel: 'Xenova/clip-vit-base-patch32',
+  rerankingStrategy: 'text-derived'
+});
+await multimodalIngestion.ingestDirectory('./mixed-content/');
+
+// Search (mode auto-detected from database)
 const search = new SearchEngine('./vector-index.bin', './db.sqlite');
 const results = await search.search('machine learning', { top_k: 10 });
+
+// Cross-modal search in multimodal mode
+const imageResults = results.filter(r => r.contentType === 'image');
+const textResults = results.filter(r => r.contentType === 'text');
 ```
 
 ### Memory Ingestion & Unified Content System (NEW)
@@ -147,122 +266,335 @@ const ingestion = new IngestionPipeline('./db.sqlite', './vector-index.bin', {
 
 → **[Complete CLI Reference](docs/cli-reference.md)** | **[API Documentation](docs/api-reference.md)**
 
-## Features
+---
 
-- 📝 **Simple**: Get started with just `new SearchEngine()` - no complex setup required
-- 🏠 **Local-first**: All processing happens offline on your machine
-- 🚀 **Fast**: Sub-100ms queries for typical document collections
-- 🔍 **Semantic**: Uses embeddings for meaning-based search, not just keywords
-- 🦎 **Chameleon Architecture**: Polymorphic runtime that adapts between text and multimodal modes
-- 🖼️ **Multimodal**: Search across text and image content with automatic mode detection
-- 🧠 **Unified Content System**: Process content from filesystem or memory with automatic deduplication
-- 🔄 **Format-Adaptive Retrieval**: Serve content as file paths (CLI) or base64 data (MCP) automatically
-- 📦 **Content Management**: Built-in storage limits, cleanup operations, and orphaned file detection
-- 🛠️ **Flexible**: Simple constructors for basic use, advanced options when you need them
-- 📦 **Complete**: CLI, programmatic API, and MCP server in one package
-- 🎯 **TypeScript**: Full type safety with modern ESM architecture
-- 🧠 **Smart**: Automatic model management and compatibility checking
+## 💡 Real-World Examples
 
-## How It Works
+<details>
+<summary><b>🔍 Build a Documentation Search Engine</b></summary>
 
-RAG-lite TS follows a simple pipeline:
+```typescript
+import { SearchEngine, IngestionPipeline } from 'rag-lite-ts';
 
-1. **Document Ingestion**: Reads `.md`, `.txt`, `.mdx`, `.pdf`, `.docx` files, and images (`.jpg`, `.png`, `.gif`, `.webp`)
-2. **Preprocessing**: Cleans content (JSX components, Mermaid diagrams, code blocks) and generates image descriptions
-3. **Semantic Chunking**: Splits documents at natural boundaries with token limits
-4. **Embedding Generation**: Uses transformers.js models for semantic vectors (text or multimodal)
-5. **Vector Storage**: Fast similarity search with hnswlib-wasm
-6. **Metadata Storage**: SQLite for document info, model compatibility, and mode persistence
-7. **Search**: Embeds queries and finds similar chunks using cosine similarity
-8. **Reranking** (optional): Multiple strategies including cross-encoder, text-derived, and metadata-based
+// Ingest your docs once
+const pipeline = new IngestionPipeline('./db.sqlite', './index.bin');
+await pipeline.ingestDirectory('./docs/');
 
-### Chameleon Architecture
+// Search instantly
+const search = new SearchEngine('./index.bin', './db.sqlite');
+const results = await search.search('authentication flow');
 
-The system automatically adapts its behavior based on the mode stored during ingestion:
-
-```
-Documents → Mode Detection → Polymorphic Pipeline → Vector Index
-                                     ↓
-Query → Auto-Detect Mode → Appropriate Embedder → Vector Search → Results
+results.forEach(r => {
+  console.log(`${r.metadata.title}: ${r.text}`);
+  console.log(`Relevance: ${r.score.toFixed(3)}\n`);
+});
 ```
 
-**Text Mode Pipeline:**
-```
-Text Documents → Text Preprocessor → Sentence Transformer → HNSW Index
-Query → Sentence Transformer → Vector Search → Cross-Encoder Reranking → Results
+**Use case:** Internal documentation, API references, knowledge bases
+
+</details>
+
+<details>
+<summary><b>🖼️ Search Images with Natural Language</b></summary>
+
+```bash
+# Ingest mixed content (text + images)
+raglite ingest ./assets/ --mode multimodal
+
+# Find images using text descriptions
+raglite search "architecture diagram" --content-type image
+raglite search "team photo" --content-type image
+raglite search "product screenshot" --content-type image
 ```
 
-**Multimodal Mode Pipeline:**
+**Use case:** Digital asset management, photo libraries, design systems
+
+</details>
+
+<details>
+<summary><b>🤖 AI Agent with Memory</b></summary>
+
+```typescript
+// Agent ingests conversation context
+const content = Buffer.from('User prefers dark mode. Uses TypeScript.');
+await pipeline.ingestFromMemory(content, {
+  displayName: 'user-preferences.txt'
+});
+
+// Later, agent retrieves relevant context
+const context = await search.search('user interface preferences');
+// Agent now knows: "User prefers dark mode"
 ```
-Mixed Content → Content Router → CLIP Embedder + Image-to-Text → HNSW Index
-Query → CLIP Text Encoder → Vector Search → Text-Derived Reranking → Results
+
+**Use case:** Chatbots, AI assistants, context-aware agents
+
+</details>
+
+<details>
+<summary><b>📊 Semantic Code Search</b></summary>
+
+```typescript
+// Index your codebase
+await pipeline.ingestDirectory('./src/', {
+  chunkSize: 500,  // Larger chunks for code
+  chunkOverlap: 100
+});
+
+// Find code by intent, not keywords
+const results = await search.search('authentication middleware');
+// Finds relevant code even if it doesn't contain those exact words
 ```
+
+**Use case:** Code navigation, refactoring, onboarding
+
+</details>
+
+<details>
+<summary><b>🔌 MCP Server for Claude/AI Tools</b></summary>
+
+```json
+{
+  "mcpServers": {
+    "my-docs": {
+      "command": "raglite-mcp",
+      "env": {
+        "RAG_DB_FILE": "./docs/db.sqlite",
+        "RAG_INDEX_FILE": "./docs/index.bin"
+      }
+    }
+  }
+}
+```
+
+Now Claude can search your docs directly! Works with any MCP-compatible AI tool.
+
+**Use case:** AI-powered documentation, intelligent assistants
+
+</details>
+
+---
+
+## ✨ Features
+
+<table>
+<tr>
+<td width="50%">
+
+### 🎯 Developer Experience
+- **One-line setup** - `new SearchEngine()` just works
+- **TypeScript native** - Full type safety
+- **Zero config** - Sensible defaults everywhere
+- **Hackable** - Clean architecture, easy to extend
+
+</td>
+<td width="50%">
+
+### 🚀 Performance
+- **Sub-100ms queries** - Fast vector search
+- **Offline-first** - No network calls
+- **Efficient chunking** - Smart semantic boundaries
+- **Optimized models** - Multiple quality/speed options
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 🦎 Chameleon Architecture
+- **Auto-adapting** - Text or multimodal mode
+- **Mode persistence** - Set once, auto-detected
+- **No fallbacks** - Reliable or clear failure
+- **Polymorphic runtime** - Same API, different modes
+
+</td>
+<td width="50%">
+
+### 🖼️ Multimodal Search
+- **CLIP unified space** - Text and images together
+- **Cross-modal queries** - Text finds images, vice versa
+- **Multiple strategies** - Text-derived, metadata, hybrid
+- **Seamless experience** - Same commands, more power
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 🔌 Integration Ready
+- **MCP server included** - AI agent integration
+- **Memory ingestion** - Direct buffer processing
+- **Format-adaptive** - File paths or base64 data
+- **Multi-instance** - Run multiple databases
+
+</td>
+<td width="50%">
+
+### 🛠️ Production Ready
+- **Content management** - Deduplication, cleanup
+- **Model compatibility** - Auto-detection, rebuilds
+- **Error recovery** - Clear messages, helpful hints
+- **Battle-tested** - Used in real applications
+
+</td>
+</tr>
+</table>
+
+## 🔧 How It Works
+
+RAG-lite TS follows a clean, efficient pipeline:
+
+```
+📄 Documents → 🧹 Preprocessing → ✂️ Chunking → 🧠 Embedding → 💾 Storage
+                                                                      ↓
+🎯 Results ← 🔄 Reranking ← 🔍 Vector Search ← 🧠 Query Embedding ← ❓ Query
+```
+
+### Pipeline Steps
+
+| Step | What Happens | Technologies |
+|------|--------------|--------------|
+| **1. Ingestion** | Reads `.md`, `.txt`, `.pdf`, `.docx`, images | Native parsers |
+| **2. Preprocessing** | Cleans JSX, Mermaid, code blocks, generates image descriptions | Custom processors |
+| **3. Chunking** | Splits at natural boundaries with token limits | Semantic chunking |
+| **4. Embedding** | Converts text/images to vectors | transformers.js |
+| **5. Storage** | Indexes vectors, stores metadata | hnswlib + SQLite |
+| **6. Search** | Finds similar chunks via cosine similarity | HNSW algorithm |
+| **7. Reranking** | Re-scores results for relevance | Cross-encoder/metadata |
+
+### 🦎 Chameleon Architecture
+
+The system **automatically adapts** based on your content:
+
+<table>
+<tr>
+<td width="50%">
+
+#### 📝 Text Mode
+```
+Text Docs → Sentence Transformer
+              ↓
+         384D Vectors
+              ↓
+      HNSW Index + SQLite
+              ↓
+    Cross-Encoder Reranking
+```
+
+**Best for:** Documentation, articles, code
+
+</td>
+<td width="50%">
+
+#### 🖼️ Multimodal Mode
+```
+Text + Images → CLIP Embedder
+                    ↓
+              512D Unified Space
+                    ↓
+          HNSW Index + SQLite
+                    ↓
+        Text-Derived Reranking
+```
+
+**Best for:** Mixed content, visual search
+
+</td>
+</tr>
+</table>
+
+**🎯 Key Benefits:**
+- Set mode **once** during ingestion → Auto-detected during search
+- **Cross-modal search** - Text queries find images, image queries find text
+- **No fallback complexity** - Each mode works reliably or fails clearly
+- **Same API** - Your code doesn't change between modes
 
 → **[Document Preprocessing Guide](docs/preprocessing.md)** | **[Model Management Details](models/README.md)**
 
-## Supported Models
+## 🧠 Supported Models
 
-RAG-lite TS supports multiple embedding models with automatic optimization:
+Choose the right model for your use case:
 
-### Text Mode (Default)
-| Model | Dimensions | Speed | Use Case |
-|-------|------------|-------|----------|
-| `sentence-transformers/all-MiniLM-L6-v2` | 384 | Fast | General purpose (default) |
-| `Xenova/all-mpnet-base-v2` | 768 | Slower | Higher quality, complex queries |
+### 📝 Text Mode Models
 
-### Multimodal Mode (Text + Images)
-| Model | Dimensions | Speed | Use Case |
-|-------|------------|-------|----------|
-| `Xenova/clip-vit-base-patch32` | 512 | Medium | Text and image understanding |
+| Model | Dims | Speed | Quality | Best For |
+|-------|------|-------|---------|----------|
+| `sentence-transformers/all-MiniLM-L6-v2` ⭐ | 384 | ⚡⚡⚡ | ⭐⭐⭐ | General purpose (default) |
+| `Xenova/all-mpnet-base-v2` | 768 | ⚡⚡ | ⭐⭐⭐⭐ | Complex queries, higher accuracy |
 
-**Model Features:**
-- **Automatic downloads**: Models cached locally on first use
-- **Smart compatibility**: Detects model changes and prompts rebuilds
-- **Offline support**: Pre-download for offline environments
-- **Mode persistence**: Set once during ingestion, auto-detected during search
-- **Reranking**: Multiple strategies including text-derived and metadata-based
+### 🖼️ Multimodal Models
+
+| Model | Dims | Speed | Quality | Best For |
+|-------|------|-------|---------|----------|
+| `Xenova/clip-vit-base-patch32` ⭐ | 512 | ⚡⚡ | ⭐⭐⭐ | Text + images (default) |
+| `Xenova/clip-vit-base-patch16` | 512 | ⚡ | ⭐⭐⭐⭐ | Higher visual quality |
+
+### ✨ Model Features
+
+- ✅ **Auto-download** - Models cached locally on first use
+- ✅ **Smart compatibility** - Detects model changes, prompts rebuilds
+- ✅ **Offline support** - Pre-download for air-gapped environments
+- ✅ **Zero config** - Works out of the box with sensible defaults
+- ✅ **Cross-modal** - CLIP enables text ↔ image search
 
 → **[Complete Model Guide](docs/model-guide.md)** | **[Performance Benchmarks](docs/EMBEDDING_MODELS_COMPARISON.md)**
 
-## Documentation
+## 📚 Documentation
 
-### 📚 Getting Started
-- **[CLI Reference](docs/cli-reference.md)** - Installation and basic usage
-- **[API Reference](docs/api-reference.md)** - Simple constructors and programmatic usage
-- **[Unified Content System](docs/unified-content-system.md)** - Memory ingestion and format-adaptive retrieval
+<table>
+<tr>
+<td width="33%">
 
-### 🔧 Customization & Advanced Usage
-- **[Configuration Guide](docs/configuration.md)** - Custom settings and options
-- **[Model Selection Guide](docs/model-guide.md)** - Choose the right model for your needs
-- **[Path Storage Strategies](docs/path-strategies.md)** - Document path management
-- **[Document Preprocessing](docs/preprocessing.md)** - Content processing options
+### 🚀 Getting Started
+- [CLI Reference](docs/cli-reference.md)
+- [API Reference](docs/api-reference.md)
+- [Multimodal Tutorial](docs/multimodal-tutorial.md)
+- [Unified Content System](docs/unified-content-system.md)
+
+</td>
+<td width="33%">
+
+### 🔧 Advanced
+- [Configuration Guide](docs/configuration.md)
+- [Model Selection](docs/model-guide.md)
+- [Multimodal Config](docs/multimodal-configuration.md)
+- [Path Strategies](docs/path-strategies.md)
+
+</td>
+<td width="33%">
 
 ### 🛠️ Support
-- **[Troubleshooting Guide](docs/troubleshooting.md)** - Common issues and solutions
-- **[Unified Content Troubleshooting](docs/unified-content-troubleshooting.md)** - Memory ingestion and content retrieval issues
+- [Troubleshooting](docs/troubleshooting.md)
+- [Multimodal Issues](docs/multimodal-troubleshooting.md)
+- [Content Issues](docs/unified-content-troubleshooting.md)
+- [Benchmarks](docs/EMBEDDING_MODELS_COMPARISON.md)
 
-### 📊 Technical References
-- **[Embedding Models Comparison](docs/EMBEDDING_MODELS_COMPARISON.md)** - Detailed benchmarks
-- **[Documentation Hub](docs/README.md)** - Complete documentation index
+</td>
+</tr>
+</table>
 
-### Quick Links by User Type
+### 🎯 Quick Start by Role
 
-| User Type | Start Here | Next Steps |
-|-----------|------------|------------|
-| **New Users** | [CLI Reference](docs/cli-reference.md) | [API Reference](docs/api-reference.md) |
-| **App Developers** | [API Reference](docs/api-reference.md) | [Configuration Guide](docs/configuration.md) |
-| **Performance Optimizers** | [Model Guide](docs/model-guide.md) | [Performance Benchmarks](docs/EMBEDDING_MODELS_COMPARISON.md) |
-| **Production Deployers** | [Configuration Guide](docs/configuration.md) | [Path Strategies](docs/path-strategies.md) |
-| **Troubleshooters** | [Troubleshooting Guide](docs/troubleshooting.md) | [Preprocessing Guide](docs/preprocessing.md) |
+| I want to... | Start here |
+|--------------|------------|
+| 🆕 Try it out | [CLI Reference](docs/cli-reference.md) → `npm i -g rag-lite-ts` |
+| 🖼️ Search images | [Multimodal Tutorial](docs/multimodal-tutorial.md) → `--mode multimodal` |
+| 💻 Build an app | [API Reference](docs/api-reference.md) → `new SearchEngine()` |
+| 🤖 Integrate with AI | [MCP Guide](docs/mcp-server-multimodal-guide.md) → `raglite-mcp` |
+| ⚡ Optimize performance | [Model Guide](docs/model-guide.md) → Choose your model |
+| 🐛 Fix an issue | [Troubleshooting](docs/troubleshooting.md) → Common solutions |
 
-## MCP Server Integration
+**📖 [Complete Documentation Hub](docs/README.md)**
 
-RAG-lite TS includes a Model Context Protocol (MCP) server for integration with AI agents.
+## 🔌 MCP Server Integration
+
+**Give your AI agents semantic memory.** RAG-lite TS includes a built-in Model Context Protocol (MCP) server.
 
 ```bash
-# Start MCP server
+# Start MCP server (works with Claude, Cline, and other MCP clients)
 raglite-mcp
 ```
+
+### Single Instance Configuration
 
 **MCP Configuration:**
 ```json
@@ -276,11 +608,54 @@ raglite-mcp
 }
 ```
 
-**Available Tools:** `search_documents`, `ingest_documents`, `rebuild_index`, `get_stats`
+### Multiple Instance Configuration (NEW)
 
-→ **[Complete MCP Integration Guide](docs/cli-reference.md#mcp-server)**
+Run multiple MCP server instances for different databases with **intelligent routing**:
 
-## Development
+```json
+{
+  "mcpServers": {
+    "rag-lite-text-docs": {
+      "command": "npx",
+      "args": ["rag-lite-mcp"],
+      "env": {
+        "RAG_DB_FILE": "./text-docs/db.sqlite",
+        "RAG_INDEX_FILE": "./text-docs/index.bin"
+      }
+    },
+    "rag-lite-multimodal-images": {
+      "command": "npx",
+      "args": ["rag-lite-mcp"],
+      "env": {
+        "RAG_DB_FILE": "./mixed-content/db.sqlite",
+        "RAG_INDEX_FILE": "./mixed-content/index.bin"
+      }
+    }
+  }
+}
+```
+
+**Dynamic Tool Descriptions:**
+Each server automatically detects and advertises its capabilities:
+- `[TEXT MODE]` - Text-only databases clearly indicate supported file types
+- `[MULTIMODAL MODE]` - Multimodal databases advertise image support and cross-modal search
+- AI assistants can intelligently route queries to the appropriate database
+
+**Available Tools:** `search`, `ingest`, `ingest_image`, `multimodal_search`, `rebuild_index`, `get_stats`, `get_mode_info`, `list_supported_models`, `list_reranking_strategies`, `get_system_stats`
+
+**Multimodal Features:**
+- Search across text and image content
+- Retrieve image content as base64 data
+- Cross-modal search capabilities (text queries find images)
+- Automatic mode detection from database
+- Content type filtering
+- Multiple reranking strategies
+
+→ **[Complete MCP Integration Guide](docs/cli-reference.md#mcp-server)** | **[MCP Multimodal Guide](docs/mcp-server-multimodal-guide.md)** | **[Multi-Instance Setup](docs/mcp-server-multimodal-guide.md#running-multiple-mcp-server-instances)**
+
+---
+
+## 🛠️ Development
 
 ### Building from Source
 
@@ -311,13 +686,17 @@ src/
 │   ├── ingestion.ts      # Core ingestion pipeline
 │   ├── db.ts             # SQLite operations
 │   ├── config.ts         # Configuration system
+│   ├── content-manager.ts # Content storage and management
 │   └── types.ts          # Core type definitions
-├── factories/            # Factory functions for easy setup
-│   └── text-factory.ts   # Text-specific factories
 ├── text/                 # Text-specific implementations
-│   ├── embedder.ts       # Text embedding generation
-│   ├── reranker.ts       # Text reranking
+│   ├── embedder.ts       # Sentence-transformer embedder
+│   ├── reranker.ts       # Cross-encoder reranking
 │   └── tokenizer.ts      # Text tokenization
+├── multimodal/           # Multimodal implementations
+│   ├── embedder.ts       # CLIP embedder (text + images)
+│   ├── reranker.ts       # Text-derived and metadata reranking
+│   ├── image-processor.ts # Image description and metadata
+│   └── content-types.ts  # Content type detection
 ├── cli.ts                # CLI interface
 ├── mcp-server.ts         # MCP server
 └── preprocessors/        # Content type processors
@@ -337,24 +716,67 @@ dist/                     # Compiled output
 
 This approach ensures that basic usage is effortless while providing the flexibility needed for advanced scenarios.
 
+---
 
+## 🤝 Contributing
 
-## Contributing
+We welcome contributions! Whether it's:
 
+- 🐛 Bug fixes
+- ✨ New features
+- 📝 Documentation improvements
+- 🧪 Test coverage
+- 💡 Ideas and suggestions
+
+**Guidelines:**
 1. Fork the repository
-2. Create a feature branch  
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass
-6. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes with tests
+4. Ensure all tests pass (`npm test`)
+5. Submit a pull request
 
-We welcome contributions that maintain our clean architecture principles while enhancing functionality and developer experience.
+We maintain clean architecture principles while enhancing functionality and developer experience.
 
-## License
+---
+
+## 🎯 Why We Built This
+
+Existing RAG solutions are either:
+- 🔴 **Too complex** - Require extensive setup and configuration
+- 🔴 **Cloud-dependent** - Need API keys and external services
+- 🔴 **Python-only** - Not ideal for TypeScript/Node.js projects
+- 🔴 **Heavy** - Massive dependencies and slow startup
+
+**RAG-lite TS is different:**
+- ✅ **Simple** - Works out of the box with zero config
+- ✅ **Local-first** - Your data stays on your machine
+- ✅ **TypeScript native** - Built for modern JS/TS projects
+- ✅ **Lightweight** - Fast startup, minimal dependencies
+
+---
+
+## 🙏 Acknowledgments
+
+Built with amazing open-source projects:
+
+- **[transformers.js](https://github.com/xenova/transformers.js)** - Client-side ML models by Xenova
+- **[hnswlib](https://github.com/nmslib/hnswlib)** - Fast approximate nearest neighbor search
+- **[better-sqlite3](https://github.com/WiseLibs/better-sqlite3)** - Fast SQLite3 bindings
+
+---
+
+## 📄 License
 
 MIT License - see [LICENSE](LICENSE) file for details.
 
-## Related Projects
+---
 
-- **[transformers.js](https://github.com/xenova/transformers.js)** - Client-side ML models
-- **[hnswlib](https://github.com/nmslib/hnswlib)** - Fast approximate nearest neighbor search
+<div align="center">
+
+**⭐ Star us on GitHub — it helps!**
+
+[Report Bug](https://github.com/your-username/rag-lite-ts/issues) • [Request Feature](https://github.com/your-username/rag-lite-ts/issues) • [Documentation](docs/README.md)
+
+Made with ❤️ by developers, for developers
+
+</div>
