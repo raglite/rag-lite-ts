@@ -20,7 +20,9 @@
     }
   },
   "files": [
-    "dist/**/*",
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "!dist/**/*.map",
     "README.md",
     "LICENSE"
   ],
