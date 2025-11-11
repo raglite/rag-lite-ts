@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] - 2.0.0 - Chameleon Multimodal Architecture
+## [2.0.0] - 2025-01-15 - Chameleon Multimodal Architecture
 
 ### Release Summary
 
