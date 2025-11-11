@@ -121,6 +121,79 @@ await search.cleanup();
 
 ## Multimodal Examples
 
+### Cross-Modal Search: Text Queries Finding Images
+
+The power of multimodal mode is the ability to find images using text descriptions:
+
+```typescript
+import { IngestionPipeline, SearchEngine } from 'rag-lite-ts';
+
+// 1. Ingest mixed content in multimodal mode
+const ingestion = new IngestionPipeline('./multimodal.sqlite', './multimodal.bin', {
+  mode: 'multimodal',
+  embeddingModel: 'Xenova/clip-vit-base-patch32'
+});
+
+await ingestion.ingestDirectory('./content/'); // Contains both text and images
+await ingestion.cleanup();
+
+// 2. Search for images using text descriptions
+const search = new SearchEngine('./multimodal.bin', './multimodal.sqlite');
+
+// Find images of red vehicles
+const results = await search.search('red sports car', { top_k: 5 });
+
+// Filter to only image results
+const imageResults = results.filter(r => r.contentType === 'image');
+
+console.log('Images matching "red sports car":');
+imageResults.forEach((result, i) => {
+  console.log(`${i + 1}. ${result.document.source} (${result.score.toFixed(2)})`);
+  console.log(`   Description: ${result.content}`);
+  if (result.metadata?.dimensions) {
+    console.log(`   Size: ${result.metadata.dimensions.width}x${result.metadata.dimensions.height}`);
+  }
+});
+
+await search.cleanup();
+```
+
+### Cross-Modal Search: Finding Related Content
+
+Search across both text and images simultaneously:
+
+```typescript
+import { SearchEngine } from 'rag-lite-ts';
+
+const search = new SearchEngine('./multimodal.bin', './multimodal.sqlite');
+
+// Search for content about ocean landscapes
+const results = await search.search('blue ocean water landscape', {
+  top_k: 10,
+  rerank: true
+});
+
+// Separate by content type
+const textResults = results.filter(r => r.contentType === 'text');
+const imageResults = results.filter(r => r.contentType === 'image');
+
+console.log(`Found ${textResults.length} text documents and ${imageResults.length} images`);
+
+console.log('\nText Documents:');
+textResults.forEach((result, i) => {
+  console.log(`${i + 1}. ${result.document.source} (${result.score.toFixed(2)})`);
+  console.log(`   ${result.content.substring(0, 100)}...`);
+});
+
+console.log('\nImages:');
+imageResults.forEach((result, i) => {
+  console.log(`${i + 1}. ${result.document.source} (${result.score.toFixed(2)})`);
+  console.log(`   ${result.content}`);
+});
+
+await search.cleanup();
+```
+
 ### Documentation with Screenshots
 
 Search across documentation that includes UI screenshots and diagrams:
@@ -420,3 +493,182 @@ node search-my-docs.js "configuration options"
 ```
 
 This simple approach is perfect for RAG-lite's local-first philosophy - no complex infrastructure needed, just your documents and a simple script.
+
+## Mi
+gration Guide: Upgrading to Fixed CLIP Implementation
+
+### What Changed
+
+The CLIP multimodal implementation has been significantly improved:
+
+**Before (Complex Fallback Approach):**
+- CLIP text embedding had technical issues requiring fallback logic
+- Mixed embedding approaches that didn't deliver true cross-modal benefits
+- Complex error handling throughout the codebase
+- Unpredictable behavior when fallbacks triggered
+
+**After (Simplified Two-Mode Approach):**
+- CLIP text embedding works reliably without fallbacks
+- True cross-modal search between text and images
+- Clear, predictable behavior for each mode
+- Simplified architecture with better error messages
+
+### Migration Steps
+
+#### 1. Existing Text Mode Users (No Changes Required)
+
+If you're using text mode, nothing changes:
+
+```typescript
+// This continues to work exactly as before
+const ingestion = new IngestionPipeline('./docs.sqlite', './docs.bin', {
+  mode: 'text', // or omit for default text mode
+  embeddingModel: 'Xenova/all-mpnet-base-v2'
+});
+
+await ingestion.ingestDirectory('./docs/');
+await ingestion.cleanup();
+```
+
+#### 2. Upgrading to Multimodal Mode
+
+If you want to enable cross-modal search capabilities:
+
+```typescript
+// Old approach (if you were trying multimodal before)
+const ingestion = new IngestionPipeline('./docs.sqlite', './docs.bin', {
+  // May have had issues with CLIP text embedding
+  embeddingModel: 'Xenova/clip-vit-base-patch32'
+});
+
+// New approach (reliable multimodal mode)
+const ingestion = new IngestionPipeline('./docs.sqlite', './docs.bin', {
+  mode: 'multimodal', // Explicitly enable multimodal mode
+  embeddingModel: 'Xenova/clip-vit-base-patch32',
+  rerankingStrategy: 'text-derived' // Optional: improve result quality
+});
+
+await ingestion.ingestDirectory('./content/'); // Text + images
+await ingestion.cleanup();
+
+// Now you can search across both content types
+const search = new SearchEngine('./docs.bin', './docs.sqlite');
+const results = await search.search('red sports car'); // Finds both text and images
+```
+
+#### 3. Re-ingesting Existing Content
+
+If you have existing multimodal content that was ingested with the old implementation:
+
+```typescript
+import { IngestionPipeline } from 'rag-lite-ts';
+import fs from 'fs';
+
+// Backup your old database (optional but recommended)
+if (fs.existsSync('./old-content.sqlite')) {
+  fs.copyFileSync('./old-content.sqlite', './old-content.sqlite.backup');
+}
+
+// Re-ingest with the improved implementation
+const ingestion = new IngestionPipeline('./content.sqlite', './content.bin', {
+  mode: 'multimodal',
+  embeddingModel: 'Xenova/clip-vit-base-patch32',
+  rerankingStrategy: 'text-derived'
+});
+
+await ingestion.ingestDirectory('./your-content/');
+await ingestion.cleanup();
+
+console.log('Content re-ingested with improved CLIP implementation');
+```
+
+#### 4. Choosing the Right Mode
+
+**Use Text Mode When:**
+- You only have text documents
+- You want the fastest performance for text search
+- You don't need cross-modal capabilities
+- You're using image-to-text conversion for images
+
+```typescript
+const ingestion = new IngestionPipeline('./docs.sqlite', './docs.bin', {
+  mode: 'text',
+  embeddingModel: 'Xenova/all-mpnet-base-v2'
+});
+```
+
+**Use Multimodal Mode When:**
+- You have both text and images
+- You want to find images using text queries
+- You want to find text using image descriptions
+- You need semantic similarity across content types
+
+```typescript
+const ingestion = new IngestionPipeline('./docs.sqlite', './docs.bin', {
+  mode: 'multimodal',
+  embeddingModel: 'Xenova/clip-vit-base-patch32'
+});
+```
+
+### Breaking Changes
+
+**None!** The improvements are backward compatible:
+- Existing text mode functionality unchanged
+- Existing APIs remain the same
+- Database schema unchanged
+- Configuration options preserved
+
+### New Capabilities
+
+**Cross-Modal Search:**
+```typescript
+// Find images using text queries
+const search = new SearchEngine('./multimodal.bin', './multimodal.sqlite');
+const results = await search.search('mountain sunset');
+
+// Results include both text documents and images
+const images = results.filter(r => r.contentType === 'image');
+const text = results.filter(r => r.contentType === 'text');
+```
+
+**Reliable CLIP Text Embedding:**
+```typescript
+// This now works reliably without fallbacks
+const ingestion = new IngestionPipeline('./docs.sqlite', './docs.bin', {
+  mode: 'multimodal',
+  embeddingModel: 'Xenova/clip-vit-base-patch32'
+});
+
+// Text embedding works without pixel_values errors
+await ingestion.ingestText('This is a test document');
+```
+
+**Simplified Error Messages:**
+```typescript
+// Before: Technical error
+// "Error: pixel_values is required for CLIP models"
+
+// After: Clear guidance
+// "CLIP model requires multimodal mode. Use mode: 'multimodal' in options."
+```
+
+### Troubleshooting
+
+**Q: My existing text mode searches are slower after upgrading**
+A: Text mode performance should be unchanged. If you notice issues, ensure you're not accidentally using multimodal mode.
+
+**Q: How do I know which mode my database is using?**
+A: The mode is stored in the database and automatically detected during search. You can check the system_info table.
+
+**Q: Can I mix text and multimodal modes in the same database?**
+A: No, each database uses a single mode. Create separate databases for different modes.
+
+**Q: Do I need to re-ingest my content?**
+A: Only if you want to use the new multimodal capabilities. Existing text mode content works without changes.
+
+### Getting Help
+
+- Check the [Multimodal Tutorial](./multimodal-tutorial.md) for detailed examples
+- See [CLI Reference](./cli-reference.md) for command-line usage
+- Review [Troubleshooting Guide](./multimodal-troubleshooting.md) for common issues
+- Explore [CLI Multimodal Workflows](../examples/cli-multimodal-workflows/) for practical examples

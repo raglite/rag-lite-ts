@@ -71,13 +71,16 @@ class RagLiteMCPServer {
    * Add proper MCP tool definitions for search and indexing capabilities
    */
   private setupToolHandlers(): void {
-    // List available tools
+    // List available tools - with dynamic descriptions based on database mode
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+      // Detect current mode and capabilities from database
+      const capabilities = await this.detectCapabilities();
+      
       return {
         tools: [
           {
             name: 'search',
-            description: 'Search indexed documents using semantic similarity. Returns relevant document chunks with scores and metadata.',
+            description: this.generateSearchDescription(capabilities),
             inputSchema: {
               type: 'object',
               properties: {
@@ -146,6 +149,44 @@ class RagLiteMCPServer {
             }
           } as Tool,
           {
+            name: 'ingest_image',
+            description: 'Ingest image files or image URLs into the multimodal index. Automatically sets mode to multimodal and uses CLIP embeddings. Supports local image files and remote image URLs (http/https).',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                source: {
+                  type: 'string',
+                  description: 'Image file path or URL. Can be a local file path (e.g., ./image.jpg) or a remote URL (e.g., https://example.com/image.jpg). Supported formats: jpg, jpeg, png, gif, webp.'
+                },
+                model: {
+                  type: 'string',
+                  description: 'CLIP model to use for image embedding (default: Xenova/clip-vit-base-patch32)',
+                  enum: [
+                    'Xenova/clip-vit-base-patch32',
+                    'Xenova/clip-vit-base-patch16'
+                  ],
+                  default: 'Xenova/clip-vit-base-patch32'
+                },
+                rerank_strategy: {
+                  type: 'string',
+                  description: 'Reranking strategy for multimodal mode. Options: text-derived (default), metadata, hybrid, disabled',
+                  enum: ['text-derived', 'metadata', 'hybrid', 'disabled'],
+                  default: 'text-derived'
+                },
+                title: {
+                  type: 'string',
+                  description: 'Optional title for the image. If not provided, will use filename or URL.'
+                },
+                metadata: {
+                  type: 'object',
+                  description: 'Optional metadata to associate with the image (e.g., tags, description, source info)'
+                }
+              },
+              required: ['source'],
+              additionalProperties: false
+            }
+          } as Tool,
+          {
             name: 'rebuild_index',
             description: 'Rebuild the entire vector index from scratch. Useful when model version changes or for maintenance. This will regenerate all embeddings.',
             inputSchema: {
@@ -174,13 +215,13 @@ class RagLiteMCPServer {
           } as Tool,
           {
             name: 'multimodal_search',
-            description: 'Search indexed documents with multimodal capabilities and content type filtering. Returns relevant document chunks with content type information.',
+            description: 'Search indexed documents with multimodal capabilities and content type filtering. Returns relevant document chunks with content type information. Image results include base64-encoded image data for display in MCP clients. Supports cross-modal search in multimodal mode (text queries can find images, image queries can find text).',
             inputSchema: {
               type: 'object',
               properties: {
                 query: {
                   type: 'string',
-                  description: 'Search query string to find relevant documents',
+                  description: 'Search query string to find relevant documents. In multimodal mode, text queries can find semantically similar images.',
                   minLength: 1,
                   maxLength: 500
                 },
@@ -198,7 +239,7 @@ class RagLiteMCPServer {
                 },
                 content_type: {
                   type: 'string',
-                  description: 'Filter results by content type (text, image, pdf, docx). If not specified, returns all content types.',
+                  description: 'Filter results by content type (text, image, pdf, docx). If not specified, returns all content types. Use "image" to find only images, "text" for only text.',
                   enum: ['text', 'image', 'pdf', 'docx']
                 }
               },
@@ -275,6 +316,8 @@ class RagLiteMCPServer {
             return await this.handleSearch(args);
           case 'ingest':
             return await this.handleIngest(args);
+          case 'ingest_image':
+            return await this.handleIngestImage(args);
           case 'rebuild_index':
             return await this.handleRebuildIndex(args);
           case 'get_stats':
@@ -361,20 +404,43 @@ class RagLiteMCPServer {
       const results = await this.searchEngine!.search(args.query, searchOptions);
       const searchTime = Date.now() - startTime;
 
-      // Format results for MCP response
+      // Format results for MCP response with content type information
       const formattedResults = {
         query: args.query,
         results_count: results.length,
         search_time_ms: searchTime,
-        results: results.map((result, index) => ({
-          rank: index + 1,
-          score: Math.round(result.score * 100) / 100, // Round to 2 decimal places
-          document: {
-            id: result.document.id,
-            title: result.document.title,
-            source: result.document.source
-          },
-          text: result.content
+        results: await Promise.all(results.map(async (result, index) => {
+          const formattedResult: any = {
+            rank: index + 1,
+            score: Math.round(result.score * 100) / 100, // Round to 2 decimal places
+            content_type: result.contentType,
+            document: {
+              id: result.document.id,
+              title: result.document.title,
+              source: result.document.source,
+              content_type: result.document.contentType
+            },
+            text: result.content
+          };
+
+          // For image content, include base64-encoded image data for MCP clients
+          if (result.contentType === 'image' && result.document.contentId) {
+            try {
+              const imageData = await this.searchEngine!.getContent(result.document.contentId, 'base64');
+              formattedResult.image_data = imageData;
+              formattedResult.image_format = 'base64';
+            } catch (error) {
+              // If image retrieval fails, include error but don't fail the entire search
+              formattedResult.image_error = error instanceof Error ? error.message : 'Failed to retrieve image';
+            }
+          }
+
+          // Include metadata if available
+          if (result.metadata) {
+            formattedResult.metadata = result.metadata;
+          }
+
+          return formattedResult;
         }))
       };
 
@@ -686,6 +752,245 @@ class RagLiteMCPServer {
             ],
           };
         }
+      }
+
+      // Re-throw other errors to be handled by the main error handler
+      throw error;
+    }
+  }
+
+  /**
+   * Handle ingest image tool calls
+   * Specialized tool for ingesting images from local files or URLs
+   */
+  private async handleIngestImage(args: any) {
+    try {
+      // Validate arguments
+      if (!args.source || typeof args.source !== 'string') {
+        throw new Error('Source parameter is required and must be a string (file path or URL)');
+      }
+
+      const source = args.source.trim();
+      if (source.length === 0) {
+        throw new Error('Source cannot be empty');
+      }
+
+      // Check if source is a URL or local file
+      const isUrl = source.startsWith('http://') || source.startsWith('https://');
+      
+      let resolvedPath: string;
+      let isTemporaryFile = false;
+      let tempFilePath: string | null = null;
+
+      if (isUrl) {
+        // Download image from URL to temporary location
+        console.error(`📥 Downloading image from URL: ${source}`);
+        
+        try {
+          // Import required modules for URL download
+          const https = await import('https');
+          const http = await import('http');
+          const { promises: fs } = await import('fs');
+          const { join } = await import('path');
+          const { tmpdir } = await import('os');
+          const { randomBytes } = await import('crypto');
+
+          // Generate temporary file path
+          const tempDir = tmpdir();
+          const randomName = randomBytes(16).toString('hex');
+          const urlExt = source.split('.').pop()?.split('?')[0] || 'jpg';
+          tempFilePath = join(tempDir, `mcp-image-${randomName}.${urlExt}`);
+
+          // Download the image
+          await new Promise<void>((resolve, reject) => {
+            const protocol = source.startsWith('https://') ? https : http;
+            
+            protocol.get(source, (response) => {
+              if (response.statusCode === 301 || response.statusCode === 302) {
+                // Handle redirects
+                const redirectUrl = response.headers.location;
+                if (redirectUrl) {
+                  const redirectProtocol = redirectUrl.startsWith('https://') ? https : http;
+                  redirectProtocol.get(redirectUrl, (redirectResponse) => {
+                    if (redirectResponse.statusCode !== 200) {
+                      reject(new Error(`Failed to download image: HTTP ${redirectResponse.statusCode}`));
+                      return;
+                    }
+                    
+                    const fileStream = require('fs').createWriteStream(tempFilePath);
+                    redirectResponse.pipe(fileStream);
+                    
+                    fileStream.on('finish', () => {
+                      fileStream.close();
+                      resolve();
+                    });
+                    
+                    fileStream.on('error', reject);
+                  }).on('error', reject);
+                }
+              } else if (response.statusCode !== 200) {
+                reject(new Error(`Failed to download image: HTTP ${response.statusCode}`));
+                return;
+              } else {
+                const fileStream = require('fs').createWriteStream(tempFilePath);
+                response.pipe(fileStream);
+                
+                fileStream.on('finish', () => {
+                  fileStream.close();
+                  resolve();
+                });
+                
+                fileStream.on('error', reject);
+              }
+            }).on('error', reject);
+          });
+
+          resolvedPath = tempFilePath;
+          isTemporaryFile = true;
+          console.error(`✅ Image downloaded to: ${tempFilePath}`);
+
+        } catch (downloadError) {
+          throw new Error(`Failed to download image from URL: ${downloadError instanceof Error ? downloadError.message : 'Unknown error'}`);
+        }
+
+      } else {
+        // Local file path
+        resolvedPath = resolve(source);
+        
+        if (!existsSync(resolvedPath)) {
+          throw new Error(`Image file does not exist: ${source}`);
+        }
+
+        // Validate it's a file
+        try {
+          const stats = statSync(resolvedPath);
+          if (!stats.isFile()) {
+            throw new Error(`Source is not a file: ${source}`);
+          }
+        } catch (error) {
+          throw new Error(`Cannot access image file: ${source}. Check permissions.`);
+        }
+      }
+
+      // Validate image file extension
+      const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+      const hasValidExtension = validExtensions.some(ext =>
+        resolvedPath.toLowerCase().endsWith(ext)
+      );
+
+      if (!hasValidExtension) {
+        if (isTemporaryFile && tempFilePath) {
+          // Clean up temp file
+          try {
+            const { promises: fs } = await import('fs');
+            await fs.unlink(tempFilePath);
+          } catch {}
+        }
+        throw new Error(`Unsupported image format. Supported formats: ${validExtensions.join(', ')}`);
+      }
+
+      // Prepare factory options for multimodal mode
+      const factoryOptions: any = {
+        mode: 'multimodal' // Always use multimodal mode for image ingestion
+      };
+      
+      if (args.model) {
+        factoryOptions.embeddingModel = args.model;
+      } else {
+        factoryOptions.embeddingModel = 'Xenova/clip-vit-base-patch32'; // Default CLIP model
+      }
+      
+      if (args.rerank_strategy) {
+        factoryOptions.rerankingStrategy = args.rerank_strategy;
+      } else {
+        factoryOptions.rerankingStrategy = 'text-derived'; // Default for multimodal
+      }
+
+      // Create and run ingestion pipeline
+      const pipeline = await TextIngestionFactory.create(
+        config.db_file,
+        config.index_file,
+        factoryOptions
+      );
+
+      try {
+        const result = await pipeline.ingestFile(resolvedPath);
+
+        // Reset search engine initialization flag since index may have changed
+        this.isSearchEngineInitialized = false;
+        this.searchEngine = null;
+
+        // Format results for MCP response
+        const ingestionSummary = {
+          source: isUrl ? source : resolvedPath,
+          source_type: isUrl ? 'url' : 'file',
+          mode: 'multimodal',
+          model: args.model || 'Xenova/clip-vit-base-patch32',
+          reranking_strategy: args.rerank_strategy || 'text-derived',
+          documents_processed: result.documentsProcessed,
+          chunks_created: result.chunksCreated,
+          embeddings_generated: result.embeddingsGenerated,
+          document_errors: result.documentErrors,
+          embedding_errors: result.embeddingErrors,
+          processing_time_ms: result.processingTimeMs,
+          processing_time_seconds: Math.round(result.processingTimeMs / 1000 * 100) / 100,
+          content_type: 'image',
+          title: args.title || (isUrl ? source.split('/').pop() : resolvedPath.split(/[/\\]/).pop()),
+          metadata: args.metadata || {},
+          success: true
+        };
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(ingestionSummary, null, 2),
+            },
+          ],
+        };
+
+      } finally {
+        await pipeline.cleanup();
+        
+        // Clean up temporary file if it was downloaded
+        if (isTemporaryFile && tempFilePath) {
+          try {
+            const { promises: fs } = await import('fs');
+            await fs.unlink(tempFilePath);
+            console.error(`🧹 Cleaned up temporary file: ${tempFilePath}`);
+          } catch (cleanupError) {
+            console.error(`⚠️  Failed to clean up temporary file: ${cleanupError}`);
+          }
+        }
+      }
+
+    } catch (error) {
+      // Handle model mismatch errors specifically
+      if (error instanceof Error && error.message.includes('Model mismatch detected')) {
+        const modelMismatchError = {
+          error: 'MODEL_MISMATCH',
+          message: 'Cannot perform image ingestion due to model mismatch',
+          details: error.message,
+          resolution: {
+            action: 'manual_intervention_required',
+            explanation: 'The embedding model configuration does not match the indexed data. Please verify your setup before proceeding.',
+            options: [
+              'Check if the model mismatch is intentional',
+              'If you want to use a different model, manually run the rebuild_index tool',
+              'Verify your model configuration matches your indexing setup'
+            ],
+            warning: 'Rebuilding will regenerate all embeddings and may take significant time'
+          }
+        };
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(modelMismatchError, null, 2),
+            },
+          ],
+        };
       }
 
       // Re-throw other errors to be handled by the main error handler
@@ -1051,24 +1356,40 @@ class RagLiteMCPServer {
       const results = await this.searchEngine!.search(args.query, searchOptions);
       const searchTime = Date.now() - startTime;
 
-      // Format results for MCP response with content type information
+      // Format results for MCP response with content type information and image data
       const formattedResults = {
         query: args.query,
         content_type_filter: args.content_type || 'all',
         results_count: results.length,
         search_time_ms: searchTime,
-        results: results.map((result, index) => ({
-          rank: index + 1,
-          score: Math.round(result.score * 100) / 100,
-          content_type: result.contentType,
-          document: {
-            id: result.document.id,
-            title: result.document.title,
-            source: result.document.source,
-            content_type: result.document.contentType
-          },
-          text: result.content,
-          metadata: result.metadata
+        results: await Promise.all(results.map(async (result, index) => {
+          const formattedResult: any = {
+            rank: index + 1,
+            score: Math.round(result.score * 100) / 100,
+            content_type: result.contentType,
+            document: {
+              id: result.document.id,
+              title: result.document.title,
+              source: result.document.source,
+              content_type: result.document.contentType
+            },
+            text: result.content,
+            metadata: result.metadata
+          };
+
+          // For image content, include base64-encoded image data for MCP clients
+          if (result.contentType === 'image' && result.document.contentId) {
+            try {
+              const imageData = await this.searchEngine!.getContent(result.document.contentId, 'base64');
+              formattedResult.image_data = imageData;
+              formattedResult.image_format = 'base64';
+            } catch (error) {
+              // If image retrieval fails, include error but don't fail the entire search
+              formattedResult.image_error = error instanceof Error ? error.message : 'Failed to retrieve image';
+            }
+          }
+
+          return formattedResult;
         }))
       };
 
@@ -1466,6 +1787,99 @@ class RagLiteMCPServer {
       console.error('❌ MCP Server: Search engine initialization failed');
       throw new Error(`Failed to initialize search engine: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  /**
+   * Detect capabilities of the current database
+   * Returns information about mode, content types, and features
+   */
+  private async detectCapabilities(): Promise<{
+    mode: 'text' | 'multimodal' | 'unknown';
+    contentTypes: string[];
+    modelName: string;
+    hasImages: boolean;
+    documentCount: number;
+  }> {
+    // Default capabilities if database doesn't exist
+    if (!existsSync(config.db_file)) {
+      return {
+        mode: 'unknown',
+        contentTypes: [],
+        modelName: 'none',
+        hasImages: false,
+        documentCount: 0
+      };
+    }
+
+    try {
+      const { ModeDetectionService } = await import('./core/mode-detection-service.js');
+      const modeService = new ModeDetectionService(config.db_file);
+      const systemInfo = await modeService.detectMode();
+      
+      // Check if database has any images
+      const db = await openDatabase(config.db_file);
+      let hasImages = false;
+      let documentCount = 0;
+      
+      try {
+        const imageCount = await db.get(
+          "SELECT COUNT(*) as count FROM documents WHERE content_type = 'image'"
+        );
+        hasImages = (imageCount?.count || 0) > 0;
+        
+        const docCount = await db.get('SELECT COUNT(*) as count FROM documents');
+        documentCount = docCount?.count || 0;
+      } finally {
+        await db.close();
+      }
+
+      return {
+        mode: systemInfo.mode,
+        contentTypes: systemInfo.supportedContentTypes,
+        modelName: systemInfo.modelName,
+        hasImages,
+        documentCount
+      };
+    } catch (error) {
+      // If detection fails, return unknown
+      return {
+        mode: 'unknown',
+        contentTypes: [],
+        modelName: 'unknown',
+        hasImages: false,
+        documentCount: 0
+      };
+    }
+  }
+
+  /**
+   * Generate dynamic search tool description based on actual capabilities
+   */
+  private generateSearchDescription(capabilities: {
+    mode: 'text' | 'multimodal' | 'unknown';
+    contentTypes: string[];
+    hasImages: boolean;
+    documentCount: number;
+  }): string {
+    const baseDesc = 'Search indexed documents using semantic similarity.';
+    
+    if (capabilities.mode === 'unknown' || capabilities.documentCount === 0) {
+      return `${baseDesc} Database not initialized - ingest documents first.`;
+    }
+    
+    if (capabilities.mode === 'text') {
+      return `[TEXT MODE] ${baseDesc} This database contains ${capabilities.documentCount} text documents. Supports .md and .txt files only.`;
+    }
+    
+    if (capabilities.mode === 'multimodal') {
+      const imageInfo = capabilities.hasImages 
+        ? 'Contains both text and image content. Image results include base64-encoded data for display.'
+        : 'Configured for multimodal but currently contains only text.';
+      
+      return `[MULTIMODAL MODE] ${baseDesc} This database contains ${capabilities.documentCount} documents. ${imageInfo} Supports cross-modal search (text queries can find images).`;
+    }
+    
+    return baseDesc;
   }
 
   /**

@@ -21,12 +21,6 @@ export class CrossEncoderReranker {
   private model: any = null; // Use any to avoid complex transformers.js typing issues
   private tokenizer: any = null;
   private modelName: string = 'Xenova/ms-marco-MiniLM-L-6-v2'; // Use working cross-encoder model
-  // Alternative models in case the primary fails
-  private static readonly FALLBACK_MODELS = [
-    'Xenova/ms-marco-MiniLM-L-6-v2', // Primary - proven to work in standalone test
-    'cross-encoder/ms-marco-MiniLM-L-6-v2', // Original (may have issues)
-    'cross-encoder/ms-marco-MiniLM-L-2-v2', // Smaller original (may have issues)
-  ];
 
   /**
    * Ensure DOM polyfills are set up for transformers.js
@@ -45,61 +39,36 @@ export class CrossEncoderReranker {
   }
 
   /**
-   * Load the embedding model with graceful fallback
+   * Load the embedding model
    */
   async loadModel(): Promise<void> {
-    // Try primary model first (should work since it's Xenova)
-    if (await this.tryLoadModel(this.modelName)) {
-      return;
-    }
-
-    // Try fallback models if primary fails
-    console.warn(`Primary model ${this.modelName} failed, trying fallbacks...`);
-    for (const fallbackModel of CrossEncoderReranker.FALLBACK_MODELS) {
-      if (fallbackModel === this.modelName) continue; // Skip already tried model
-
-      console.warn(`Trying fallback model: ${fallbackModel}`);
-      if (await this.tryLoadModel(fallbackModel)) {
-        this.modelName = fallbackModel;
-        return;
-      }
-    }
-
-    console.warn('All embedding models failed to load. Reranking will be disabled.');
-    this.model = null;
-    this.tokenizer = null;
+    await this.tryLoadModel(this.modelName);
   }
 
   /**
    * Try to load a specific model
    */
-  private async tryLoadModel(modelName: string): Promise<boolean> {
-    try {
-      console.log(`Loading cross-encoder model: ${modelName}`);
+  private async tryLoadModel(modelName: string): Promise<void> {
+    console.log(`Loading cross-encoder model: ${modelName}`);
 
-      // Ensure polyfills are set up exactly like the working standalone version
-      this.ensurePolyfills();
+    // Ensure polyfills are set up exactly like the working standalone version
+    this.ensurePolyfills();
 
-      // Use the exact same approach as the working standalone test
-      const { AutoTokenizer, AutoModelForSequenceClassification } = await import('@huggingface/transformers');
+    // Use the exact same approach as the working standalone test
+    const { AutoTokenizer, AutoModelForSequenceClassification } = await import('@huggingface/transformers');
 
-      console.log('Loading model...');
-      this.model = await AutoModelForSequenceClassification.from_pretrained(modelName, {
-        cache_dir: config.model_cache_path,
-        dtype: 'fp32'
-      });
+    console.log('Loading model...');
+    this.model = await AutoModelForSequenceClassification.from_pretrained(modelName, {
+      cache_dir: config.model_cache_path,
+      dtype: 'fp32'
+    });
 
-      console.log('Loading tokenizer...');
-      this.tokenizer = await AutoTokenizer.from_pretrained(modelName, {
-        cache_dir: config.model_cache_path
-      });
+    console.log('Loading tokenizer...');
+    this.tokenizer = await AutoTokenizer.from_pretrained(modelName, {
+      cache_dir: config.model_cache_path
+    });
 
-      console.log(`Cross-encoder model loaded successfully: ${modelName}`);
-      return true;
-    } catch (error) {
-      console.warn(`Failed to load model ${modelName}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      return false;
-    }
+    console.log(`Cross-encoder model loaded successfully: ${modelName}`);
   }
 
   /**

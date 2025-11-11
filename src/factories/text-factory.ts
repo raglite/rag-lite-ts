@@ -5,9 +5,20 @@
  * FACTORY PATTERN BENEFITS:
  * - Abstracts complex initialization (model loading, database setup, index initialization)
  * - Provides simple API for common use cases while preserving access to dependency injection
- * - Handles error recovery and validation
+ * - Clear validation and error handling without fallback mechanisms
  * - Supports different embedding models and configurations
  * - Enables clean separation between simple usage and advanced customization
+ * 
+ * MODE SELECTION GUIDE:
+ * - Text Mode (default): Optimized for text-only content
+ *   - Uses sentence-transformer models (fast, accurate for text)
+ *   - Images converted to text descriptions
+ *   - Best for: document search, text clustering, semantic similarity
+ * 
+ * - Multimodal Mode: Optimized for mixed text/image content
+ *   - Uses CLIP models (unified embedding space)
+ *   - True cross-modal search (text finds images, images find text)
+ *   - Best for: image search, visual QA, multimodal retrieval
  * 
  * USAGE PATTERNS:
  * 
@@ -43,14 +54,30 @@
  * const results = await searchEngine.search('query');
  * ```
  * 
- * 4. Error Recovery:
+ * 4. Clear Error Handling:
  * ```typescript
- * // Create with automatic fallback options
- * const search = await TextFactoryHelpers.createSearchWithFallback(
+ * // Create with clear validation and error reporting
+ * const search = await TextFactoryHelpers.createSearchWithValidation(
  *   './index.bin', 
  *   './db.sqlite',
- *   { enableReranking: true } // Will fallback to disabled if reranking fails
+ *   { enableReranking: true } // Clear errors if issues occur
  * );
+ * ```
+ * 
+ * 5. Mode Selection:
+ * ```typescript
+ * // Text mode (default) - optimized for text-only content
+ * const textIngestion = await TextIngestionFactory.create('./db.sqlite', './index.bin', {
+ *   mode: 'text',
+ *   embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2'
+ * });
+ * 
+ * // Multimodal mode - enables cross-modal search
+ * const multimodalIngestion = await TextIngestionFactory.create('./db.sqlite', './index.bin', {
+ *   mode: 'multimodal',
+ *   embeddingModel: 'Xenova/clip-vit-base-patch32',
+ *   rerankingStrategy: 'text-derived'
+ * });
  * ```
  */
 
@@ -66,6 +93,13 @@ import { existsSync } from 'fs';
 import { dirname } from 'path';
 import { mkdirSync } from 'fs';
 import { ContentManager } from '../core/content-manager.js';
+import { validateModeModelCompatibilityOrThrow } from '../core/mode-model-validator.js';
+import {
+  createMissingFileError,
+  createInvalidPathError,
+  createFactoryCreationError,
+  createModeMismatchError
+} from '../core/actionable-error-messages.js';
 
 /**
  * Options for text search factory
@@ -126,11 +160,18 @@ export interface TextIngestionOptions {
  * Handles model loading, database initialization, and index setup
  * 
  * This factory abstracts the complex initialization process required for text search:
- * 1. Loads and validates text embedding models
- * 2. Optionally loads reranking models with fallback handling
- * 3. Establishes database connections and initializes schema
- * 4. Loads vector indexes with proper model compatibility checking
- * 5. Creates SearchEngine with proper dependency injection
+ * 1. Auto-detects embedding model from database configuration
+ * 2. Validates mode-model compatibility (no fallback mechanisms)
+ * 3. Loads embedding models with clear error reporting
+ * 4. Optionally loads reranking models based on configuration
+ * 5. Establishes database connections and initializes schema
+ * 6. Loads vector indexes with proper model compatibility checking
+ * 7. Creates SearchEngine with proper dependency injection
+ * 
+ * Mode Support:
+ * - Automatically detects mode from database (text or multimodal)
+ * - Each mode uses its optimal implementation without fallbacks
+ * - Clear validation ensures mode-model compatibility
  * 
  * @example
  * ```typescript
@@ -158,7 +199,7 @@ export class TextSearchFactory {
    * This method handles the complete initialization process:
    * - Validates that required files exist
    * - Loads text embedding model (with lazy initialization)
-   * - Optionally loads reranking model (with graceful fallback)
+   * - Optionally loads reranking model (with clear error reporting)
    * - Opens database connection and initializes schema
    * - Loads vector index with compatibility validation
    * - Creates SearchEngine with dependency injection
@@ -198,24 +239,23 @@ export class TextSearchFactory {
 
       // Validate input paths
       if (!indexPath || !dbPath) {
-        throw new Error('Both indexPath and dbPath are required');
+        throw createInvalidPathError([
+          { name: 'indexPath', value: indexPath },
+          { name: 'dbPath', value: dbPath }
+        ], { operationContext: 'TextSearchFactory.create' });
       }
 
       // Check if required files exist
       if (!existsSync(indexPath)) {
-        throw new Error(
-          `Vector index not found at: ${indexPath}\n` +
-          'Run ingestion first to create the index, or check the path.\n' +
-          'Example: const ingestion = await IngestionFactory.create(dbPath, indexPath);'
-        );
+        throw createMissingFileError(indexPath, 'index', {
+          operationContext: 'TextSearchFactory.create'
+        });
       }
 
       if (!existsSync(dbPath)) {
-        throw new Error(
-          `Database not found at: ${dbPath}\n` +
-          'Run ingestion first to create the database, or check the path.\n' +
-          'Example: const ingestion = await IngestionFactory.create(dbPath, indexPath);'
-        );
+        throw createMissingFileError(dbPath, 'database', {
+          operationContext: 'TextSearchFactory.create'
+        });
       }
 
       // Step 1: Auto-detect embedding model from database
@@ -250,6 +290,11 @@ export class TextSearchFactory {
         console.log(`📊 Using specified embedding model: ${embeddingModel} (${modelDimensions} dimensions)`);
       }
 
+      // Step 1.5: Validate mode-model compatibility at creation time
+      console.log('🔍 Validating mode-model compatibility...');
+      validateModeModelCompatibilityOrThrow('text', embeddingModel);
+      console.log('✓ Mode-model compatibility validated');
+
       // Step 2: Initialize embedding function
       console.log('📊 Loading text embedding model...');
       const embedFn = createTextEmbedFunction(
@@ -263,19 +308,12 @@ export class TextSearchFactory {
       // Step 3: Initialize reranking function (optional)
       let rerankFn;
       if (options.enableReranking === true) { // Default to disabled for local-first, fast RAG-lite
-        try {
-          console.log('🔄 Loading text reranking model...');
-          rerankFn = createTextRerankFunction(options.rerankingModel);
+        console.log('🔄 Loading text reranking model...');
+        rerankFn = createTextRerankFunction(options.rerankingModel);
 
-          // Test reranking function
-          await rerankFn('test query', []);
-          console.log('✓ Text reranking model loaded successfully');
-        } catch (error) {
-          console.warn(
-            `Failed to load reranking model, continuing without reranking: ${error instanceof Error ? error.message : 'Unknown error'}`
-          );
-          rerankFn = undefined;
-        }
+        // Test reranking function - fail clearly if there are issues
+        await rerankFn('test query', []);
+        console.log('✓ Text reranking model loaded successfully');
       } else {
         console.log('🔄 Reranking disabled by default (local-first, fast mode)');
       }
@@ -313,8 +351,10 @@ export class TextSearchFactory {
 
     } catch (error) {
       console.error('❌ TextSearchFactory: Failed to create search engine');
-      throw new Error(
-        `TextSearchFactory.create failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      throw createFactoryCreationError(
+        'TextSearchFactory',
+        error instanceof Error ? error.message : 'Unknown error',
+        { operationContext: 'search engine creation' }
       );
     }
   }
@@ -359,10 +399,18 @@ export class TextSearchFactory {
  * 
  * This factory abstracts the complex initialization process required for text ingestion:
  * 1. Creates necessary directories if they don't exist
- * 2. Loads and validates text embedding models
- * 3. Establishes database connections and initializes schema
- * 4. Creates or loads vector indexes with proper configuration
- * 5. Creates IngestionPipeline with proper dependency injection
+ * 2. Validates mode-model compatibility (no fallback mechanisms)
+ * 3. Loads and validates embedding models with clear error reporting
+ * 4. Establishes database connections and initializes schema
+ * 5. Stores mode configuration in database for automatic detection
+ * 6. Creates or loads vector indexes with proper configuration
+ * 7. Creates IngestionPipeline with proper dependency injection
+ * 
+ * Mode Configuration:
+ * - Text Mode (default): Uses sentence-transformer models for text-only content
+ * - Multimodal Mode: Uses CLIP models for mixed text/image content
+ * - Mode is stored in database and auto-detected during search
+ * - Clear validation prevents mode-model mismatches
  * 
  * @example
  * ```typescript
@@ -452,7 +500,10 @@ export class TextIngestionFactory {
 
       // Validate input paths
       if (!dbPath || !indexPath) {
-        throw new Error('Both dbPath and indexPath are required');
+        throw createInvalidPathError([
+          { name: 'dbPath', value: dbPath },
+          { name: 'indexPath', value: indexPath }
+        ], { operationContext: 'TextIngestionFactory.create' });
       }
 
       // Ensure directories exist
@@ -475,16 +526,41 @@ export class TextIngestionFactory {
       const effectiveChunkSize = options.chunkSize ?? modelDefaults.chunk_size;
       const effectiveChunkOverlap = options.chunkOverlap ?? modelDefaults.chunk_overlap;
 
-      // Step 2: Initialize embedding function
-      console.log('📊 Loading text embedding model...');
-      const embedFn = createTextEmbedFunction(
-        options.embeddingModel,
-        effectiveBatchSize
-      );
+      // Step 1.5: Validate mode-model compatibility at creation time
+      const effectiveMode = options.mode || 'text';
+      const effectiveModel = options.embeddingModel || config.embedding_model;
+      console.log('🔍 Validating mode-model compatibility...');
+      validateModeModelCompatibilityOrThrow(effectiveMode, effectiveModel);
+      console.log('✓ Mode-model compatibility validated');
 
-      // Test embedding function to ensure it works
-      // Embedding function created successfully (will be tested on first use)
-      console.log('✓ Text embedding function created successfully');
+      // Step 2: Initialize embedding function based on mode
+      let embedFn: (query: string, contentType?: string) => Promise<any>;
+
+      if (effectiveMode === 'multimodal') {
+        console.log('📊 Loading CLIP embedding model for multimodal mode...');
+        const { createEmbedder } = await import('../core/embedder-factory.js');
+        const clipEmbedder = await createEmbedder(effectiveModel);
+        
+        // Wrap CLIP embedder to match EmbedFunction signature
+        embedFn = async (content: string, contentType?: string) => {
+          if (contentType === 'image') {
+            // Use CLIP image embedding for image content
+            return await clipEmbedder.embedImage!(content);
+          }
+          // Use CLIP text embedding for text content
+          return await clipEmbedder.embedText(content);
+        };
+        
+        console.log('✓ CLIP embedder created for multimodal mode');
+      } else {
+        // Text mode: use sentence-transformer embedder (existing behavior)
+        console.log('📊 Loading text embedding model...');
+        embedFn = createTextEmbedFunction(
+          options.embeddingModel,
+          effectiveBatchSize
+        );
+        console.log('✓ Text embedding function created successfully');
+      }
 
       // Step 3: Initialize database connection
       console.log('💾 Opening database connection...');
@@ -568,8 +644,21 @@ export class TextIngestionFactory {
 
     } catch (error) {
       console.error('❌ TextIngestionFactory: Failed to create ingestion pipeline');
-      throw new Error(
-        `TextIngestionFactory.create failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      
+      // Preserve custom error messages for model mismatch and mode mismatch
+      if (error instanceof Error && (
+        error.message.includes('Model mismatch') || 
+        error.message.includes('Mode mismatch') ||
+        error.message.includes('--force-rebuild') ||
+        error.message.includes('--rebuild-if-needed')
+      )) {
+        throw error; // Re-throw custom validation errors as-is
+      }
+      
+      throw createFactoryCreationError(
+        'TextIngestionFactory',
+        error instanceof Error ? error.message : 'Unknown error',
+        { operationContext: 'ingestion pipeline creation' }
       );
     }
   }
@@ -630,9 +719,10 @@ export class TextIngestionFactory {
             console.log('🔄 Force rebuild enabled, updating mode configuration...');
             await this.updateSystemInfo(db, effectiveMode, effectiveModel, modelType, modelDefaults, effectiveRerankingStrategy, supportedContentTypes);
           } else {
-            throw new Error(
-              `Mode mismatch: Database is configured for '${existingSystemInfo.mode}' mode, but '${effectiveMode}' mode was requested. ` +
-              `Use --force-rebuild to change modes, or omit the --mode parameter to use the existing mode.`
+            throw createModeMismatchError(
+              existingSystemInfo.mode,
+              effectiveMode,
+              { operationContext: 'TextIngestionFactory.create' }
             );
           }
         } else if (existingSystemInfo.modelName !== effectiveModel) {
@@ -643,10 +733,25 @@ export class TextIngestionFactory {
             console.log('🔄 Force rebuild enabled, updating model configuration...');
             await this.updateSystemInfo(db, effectiveMode, effectiveModel, modelType, modelDefaults, effectiveRerankingStrategy, supportedContentTypes);
           } else {
-            throw new Error(
-              `Model mismatch: Database is configured for '${existingSystemInfo.modelName}', but '${effectiveModel}' was requested. ` +
-              `Use --force-rebuild to change models, or omit the --embedding-model parameter to use the existing model.`
-            );
+            // Create a specific error message for model mismatch with rebuild suggestions
+            const errorMessage = [
+              `❌ Model mismatch: Database is configured for '${existingSystemInfo.modelName}', but '${effectiveModel}' was requested.`,
+              '',
+              '🛠️  How to fix this:',
+              '   1. Use --force-rebuild to change models:',
+              '      raglite ingest <path> --model ' + effectiveModel + ' --force-rebuild',
+              '',
+              '   2. Or use --rebuild-if-needed for automatic handling:',
+              '      raglite ingest <path> --model ' + effectiveModel + ' --rebuild-if-needed',
+              '',
+              '   3. Or continue using the existing model:',
+              '      raglite ingest <path>  # Uses ' + existingSystemInfo.modelName,
+              '',
+              '🔍 Model switching requires rebuilding the vector index because different models',
+              '   produce embeddings with different dimensions and characteristics.'
+            ].join('\n');
+            
+            throw new Error(errorMessage);
           }
         } else {
           console.log(`✅ Mode consistency validated: ${effectiveMode} mode with ${effectiveModel}`);
@@ -664,8 +769,8 @@ export class TextIngestionFactory {
         console.log('✅ System configuration stored successfully');
       }
     } catch (error) {
-      if (error instanceof Error && error.message.includes('Mode mismatch')) {
-        throw error; // Re-throw validation errors
+      if (error instanceof Error && (error.message.includes('Mode mismatch') || error.message.includes('Model mismatch'))) {
+        throw error; // Re-throw validation errors with custom messages
       }
       console.error('❌ Failed to handle mode storage:', error);
       throw new Error(`Mode storage failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -899,9 +1004,9 @@ export class TextRAGFactory {
  * const { searchOptions, ingestionOptions } = TextFactoryHelpers.getRecommendedConfig('quality');
  * const search = await TextSearchFactory.create('./index.bin', './db.sqlite', searchOptions);
  * 
- * // Create with automatic error recovery
- * const search = await TextFactoryHelpers.createSearchWithFallback('./index.bin', './db.sqlite', {
- *   enableReranking: true // Will fallback to disabled if reranking fails
+ * // Create with clear validation and error reporting
+ * const search = await TextFactoryHelpers.createSearchWithValidation('./index.bin', './db.sqlite', {
+ *   enableReranking: true // Will fail clearly if reranking has issues
  * });
  * ```
  */
@@ -932,21 +1037,15 @@ export class TextFactoryHelpers {
    */
   static validateSearchFiles(indexPath: string, dbPath: string): void {
     if (!existsSync(indexPath)) {
-      throw new Error(
-        `Vector index not found: ${indexPath}\n` +
-        'Run ingestion first: raglite ingest <directory>\n' +
-        'Or use: const ingestion = await IngestionFactory.create(dbPath, indexPath);\n' +
-        'Or check if the path is correct.'
-      );
+      throw createMissingFileError(indexPath, 'index', {
+        operationContext: 'search file validation'
+      });
     }
 
     if (!existsSync(dbPath)) {
-      throw new Error(
-        `Database not found: ${dbPath}\n` +
-        'Run ingestion first: raglite ingest <directory>\n' +
-        'Or use: const ingestion = await IngestionFactory.create(dbPath, indexPath);\n' +
-        'Or check if the path is correct.'
-      );
+      throw createMissingFileError(dbPath, 'database', {
+        operationContext: 'search file validation'
+      });
     }
   }
 
@@ -1028,61 +1127,39 @@ export class TextFactoryHelpers {
   }
 
   /**
-   * Create a search engine with automatic error recovery
+   * Create a search engine with clear error reporting
    * 
-   * This method attempts to create a search engine with the provided options,
-   * and if that fails, it tries again with fallback options (primarily
-   * disabling reranking, which is a common source of initialization failures).
-   * This provides a more robust way to create search engines in environments
-   * where reranking models might not be available or might fail to load.
+   * This method creates a search engine with the provided options and fails
+   * clearly if there are any issues, providing actionable error messages.
    * 
    * @param indexPath - Path to vector index file
    * @param dbPath - Path to database file
-   * @param options - Initial options to try
-   * @returns Promise resolving to SearchEngine (possibly with fallback options)
-   * @throws {Error} If both original and fallback creation attempts fail
+   * @param options - Configuration options
+   * @returns Promise resolving to SearchEngine
+   * @throws {Error} If creation fails with clear error message
    * 
    * @example
    * ```typescript
-   * // Try to create with reranking, fallback to without if it fails
-   * const search = await TextFactoryHelpers.createSearchWithFallback(
+   * // Create search engine with clear error handling
+   * const search = await TextFactoryHelpers.createSearchWithValidation(
    *   './index.bin',
    *   './db.sqlite',
    *   { enableReranking: true, topK: 20 }
    * );
    * 
-   * // The search engine will work even if reranking model fails to load
    * const results = await search.search('query');
    * console.log(`Search created successfully with ${results.length} results`);
    * ```
    */
-  static async createSearchWithFallback(
+  static async createSearchWithValidation(
     indexPath: string,
     dbPath: string,
     options: TextSearchOptions = {}
   ): Promise<SearchEngine> {
-    try {
-      // Try with original options
-      return await TextSearchFactory.create(indexPath, dbPath, options);
-    } catch (error) {
-      console.warn(`Initial search creation failed, trying fallback options: ${error instanceof Error ? error.message : 'Unknown error'}`);
-
-      // Try with reranking disabled as fallback
-      const fallbackOptions: TextSearchOptions = {
-        ...options,
-        enableReranking: false
-      };
-
-      try {
-        return await TextSearchFactory.create(indexPath, dbPath, fallbackOptions);
-      } catch (fallbackError) {
-        console.error('Fallback search creation also failed');
-        throw new Error(
-          `Failed to create search engine with both original and fallback options:\n` +
-          `Original error: ${error instanceof Error ? error.message : 'Unknown error'}\n` +
-          `Fallback error: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}`
-        );
-      }
-    }
+    // Validate files first
+    this.validateSearchFiles(indexPath, dbPath);
+    
+    // Create with clear error reporting
+    return await TextSearchFactory.create(indexPath, dbPath, options);
   }
 }

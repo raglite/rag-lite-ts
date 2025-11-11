@@ -1,5 +1,5 @@
 /**
- * CORE MODULE — Sentence Transformer Embedder Implementation
+ * TEXT IMPLEMENTATION — Sentence Transformer Embedder Implementation
  * Implements UniversalEmbedder interface for sentence-transformer models
  * Adapts existing text embedding logic to the universal interface
  */
@@ -7,10 +7,10 @@
 // Ensure DOM polyfills are set up before any other imports
 import '../dom-polyfills.js';
 
-import { BaseUniversalEmbedder, type EmbedderOptions } from './base-embedder.js';
+import { BaseUniversalEmbedder, type EmbedderOptions } from '../core/abstract-embedder.js';
 import type { EmbeddingResult } from '../types.js';
-import { EmbeddingEngine } from '../text/embedder.js';
-import { getResourceManager } from './resource-manager.js';
+import { EmbeddingEngine } from './embedder.js';
+import { getResourceManager } from '../core/resource-manager.js';
 
 // =============================================================================
 // SENTENCE TRANSFORMER EMBEDDER IMPLEMENTATION
@@ -131,7 +131,7 @@ export class SentenceTransformerEmbedder extends BaseUniversalEmbedder {
       
       // Remove from lazy loading cache to ensure fresh instances
       try {
-        const { LazyEmbedderLoader } = await import('./lazy-dependency-loader.js');
+        const { LazyEmbedderLoader } = await import('../core/lazy-dependency-loader.js');
         LazyEmbedderLoader.removeEmbedderFromCache(this.modelName, 'sentence-transformer');
       } catch (error) {
         console.warn('Failed to remove embedder from cache:', error);
@@ -260,7 +260,7 @@ export class SentenceTransformerEmbedder extends BaseUniversalEmbedder {
     
     // For larger batches, use the BatchProcessingOptimizer
     try {
-      const { createTextBatchProcessor } = await import('./batch-processing-optimizer.js');
+      const { createTextBatchProcessor } = await import('../core/batch-processing-optimizer.js');
       const batchProcessor = createTextBatchProcessor();
       
       // Convert to EmbeddingBatchItem format

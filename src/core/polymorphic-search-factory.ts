@@ -1,7 +1,15 @@
 /**
  * CORE MODULE — Polymorphic Search Factory for Chameleon Architecture
- * Simple conditional logic for creating search engines based on detected mode
- * Uses direct embedder creation instead of complex factory patterns
+ * 
+ * Automatically detects mode from database and creates the appropriate search engine.
+ * No fallback mechanisms - each mode uses its optimal implementation reliably.
+ * 
+ * Mode Behavior:
+ * - Text Mode: Uses sentence-transformer models for fast text-only search
+ * - Multimodal Mode: Uses CLIP models for cross-modal text/image search
+ * 
+ * The mode is determined during ingestion and stored in the database, then
+ * automatically detected during search - no manual configuration needed.
  */
 
 // Ensure DOM polyfills are set up before any transformers.js usage
@@ -14,6 +22,11 @@ import { openDatabase } from './db.js';
 import { DatabaseConnectionManager } from './database-connection-manager.js';
 import { createEmbedder } from './embedder-factory.js';
 import { ContentResolver } from './content-resolver.js';
+import { validateModeModelCompatibilityOrThrow } from './mode-model-validator.js';
+import {
+  createMissingFileError,
+  createFactoryCreationError
+} from './actionable-error-messages.js';
 
 import type { SystemInfo, ModeType } from '../types.js';
 import type { RerankFunction } from './interfaces.js';
@@ -26,34 +39,64 @@ import { existsSync } from 'fs';
 
 /**
  * Factory for creating search engines with automatic mode detection
- * Uses simple conditional logic based on stored mode configuration
- * Supports both text and multimodal modes with appropriate implementations
+ * 
+ * Detects the mode from database configuration and creates the appropriate
+ * search engine without fallback mechanisms. Each mode uses its optimal
+ * implementation for predictable, reliable behavior.
+ * 
+ * Mode Selection (configured during ingestion):
+ * - Text Mode: Optimized for text-only content
+ *   - Uses sentence-transformer models
+ *   - Fast text similarity search
+ *   - Images converted to text descriptions
+ * 
+ * - Multimodal Mode: Optimized for mixed text/image content
+ *   - Uses CLIP models
+ *   - Unified embedding space for text and images
+ *   - True cross-modal search capabilities
+ *   - Text queries find images, image queries find text
  */
 export class PolymorphicSearchFactory {
   /**
    * Create a SearchEngine with automatic mode detection and configuration
    * 
-   * This method:
-   * 1. Detects the current mode from the database
-   * 2. Creates appropriate embedder based on detected model
-   * 3. Creates appropriate reranker based on mode and strategy
-   * 4. Creates ContentResolver for unified content system
+   * Automatically detects the mode from database configuration and creates
+   * the appropriate search engine. No fallback mechanisms - each mode works
+   * reliably with its optimal implementation.
+   * 
+   * Process:
+   * 1. Detects mode from database (text or multimodal)
+   * 2. Validates mode-model compatibility
+   * 3. Creates appropriate embedder (sentence-transformer or CLIP)
+   * 4. Creates appropriate reranker based on mode and strategy
    * 5. Initializes SearchEngine with proper dependency injection
+   * 
+   * Mode Behavior:
+   * - Text Mode: Fast text-only search with sentence-transformers
+   *   - Optimized for text similarity
+   *   - Optional cross-encoder reranking
+   * 
+   * - Multimodal Mode: Cross-modal search with CLIP
+   *   - Unified embedding space for text and images
+   *   - Text queries find images, image queries find text
+   *   - Optional text-derived or metadata reranking
    * 
    * @param indexPath - Path to the vector index file (must exist)
    * @param dbPath - Path to the SQLite database file (must exist)
    * @returns Promise resolving to configured SearchEngine
-   * @throws {Error} If files don't exist or initialization fails
+   * @throws {Error} If files don't exist, mode-model incompatible, or initialization fails
    * 
    * @example
    * ```typescript
    * // Automatic mode detection and engine creation
    * const search = await PolymorphicSearchFactory.create('./index.bin', './db.sqlite');
-   * const results = await search.search('query');
    * 
-   * // Mode is automatically detected from database:
-   * // - Text mode: uses sentence transformer + cross-encoder reranking
-   * // - Multimodal mode: uses CLIP + text-derived reranking
+   * // Search works based on detected mode:
+   * // Text mode: fast text similarity search
+   * const textResults = await search.search('machine learning');
+   * 
+   * // Multimodal mode: cross-modal search
+   * const imageResults = await search.search('red sports car'); // Finds images
    * ```
    */
   static async create(indexPath: string, dbPath: string): Promise<SearchEngine> {
@@ -76,6 +119,11 @@ export class PolymorphicSearchFactory {
       const systemInfo = await modeService.detectMode(db);
       
       console.log(`🎯 Detected mode: ${systemInfo.mode} (model: ${systemInfo.modelName})`);
+
+      // Step 4.5: Validate mode-model compatibility at creation time
+      console.log('🔍 Validating mode-model compatibility...');
+      validateModeModelCompatibilityOrThrow(systemInfo.mode, systemInfo.modelName);
+      console.log('✓ Mode-model compatibility validated');
 
       // Step 5: Create search engine based on detected mode
       switch (systemInfo.mode) {
@@ -223,14 +271,11 @@ export class PolymorphicSearchFactory {
         return LazyRerankerLoader.loadTextReranker();
       }
 
-      // Fallback to cross-encoder for unknown strategies in text mode
-      console.warn(`Unknown text reranking strategy '${strategy}', falling back to cross-encoder`);
-      return LazyRerankerLoader.loadTextReranker();
+      // Fail clearly for unknown strategies in text mode
+      throw createError.validation(`Unknown text reranking strategy '${strategy}'. Supported strategies: cross-encoder, disabled`);
 
     } catch (error) {
-      console.warn(`Failed to create text reranker with strategy '${strategy}': ${error instanceof Error ? error.message : 'Unknown error'}`);
-      console.log('Disabling reranking due to errors');
-      return undefined;
+      throw createError.model(`Failed to create text reranker with strategy '${strategy}': ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -251,9 +296,7 @@ export class PolymorphicSearchFactory {
       return LazyDependencyManager.loadReranker(strategy);
 
     } catch (error) {
-      console.warn(`Failed to create multimodal reranker with strategy '${strategy}': ${error instanceof Error ? error.message : 'Unknown error'}`);
-      console.log('Disabling reranking due to errors');
-      return undefined;
+      throw createError.model(`Failed to create multimodal reranker with strategy '${strategy}': ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -269,21 +312,15 @@ export class PolymorphicSearchFactory {
    */
   private static validateRequiredFiles(indexPath: string, dbPath: string): void {
     if (!existsSync(indexPath)) {
-      throw createError.fileSystem(
-        `Vector index not found: ${indexPath}\n` +
-        'Run ingestion first to create the index:\n' +
-        '  raglite ingest <directory>\n' +
-        'Or check if the path is correct.'
-      );
+      throw createMissingFileError(indexPath, 'index', {
+        operationContext: 'PolymorphicSearchFactory.create'
+      });
     }
 
     if (!existsSync(dbPath)) {
-      throw createError.fileSystem(
-        `Database not found: ${dbPath}\n` +
-        'Run ingestion first to create the database:\n' +
-        '  raglite ingest <directory>\n' +
-        'Or check if the path is correct.'
-      );
+      throw createMissingFileError(dbPath, 'database', {
+        operationContext: 'PolymorphicSearchFactory.create'
+      });
     }
   }
 

@@ -157,21 +157,30 @@ export function getModelDefaults(modelName?: string): ModelDefaults {
     batch_size: 16
   };
 
-  // Model-specific overrides
+  // Model-specific overrides based on model name heuristics
   if (modelName) {
     const normalizedName = modelName.toLowerCase();
     
-    // Specific model configurations
-    if (normalizedName.includes('all-mpnet-base-v2')) {
+    // CLIP models - 512 dimensions
+    if (normalizedName.includes('clip')) {
+      defaults.dimensions = 512;
+      defaults.batch_size = 8;
+    }
+    // MPNet models - 768 dimensions
+    else if (normalizedName.includes('all-mpnet-base-v2')) {
       defaults.dimensions = 768;
       defaults.chunk_size = 400;
       defaults.chunk_overlap = 80;
       defaults.batch_size = 8;
     } else if (normalizedName.includes('mpnet') || normalizedName.includes('768')) {
       defaults.dimensions = 768;
-    } else if (normalizedName.includes('512')) {
+    }
+    // Models with 512 in the name
+    else if (normalizedName.includes('512')) {
       defaults.dimensions = 512;
-    } else if (normalizedName.includes('384') || normalizedName.includes('minilm')) {
+    }
+    // MiniLM and other 384-dimensional models (default)
+    else if (normalizedName.includes('384') || normalizedName.includes('minilm')) {
       defaults.dimensions = 384;
     }
   }

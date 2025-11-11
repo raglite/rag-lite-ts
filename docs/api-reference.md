@@ -61,6 +61,75 @@ const ingestion = new IngestionPipeline('./db.sqlite', './index.bin', {
 });
 ```
 
+### Multimodal Mode Examples
+
+#### Cross-Modal Search: Text Queries Finding Images
+
+```typescript
+import { IngestionPipeline, SearchEngine } from 'rag-lite-ts';
+
+// 1. Ingest mixed content in multimodal mode
+const ingestion = new IngestionPipeline('./multimodal.sqlite', './multimodal.bin', {
+  mode: 'multimodal',
+  embeddingModel: 'Xenova/clip-vit-base-patch32'
+});
+
+await ingestion.ingestDirectory('./content/'); // Contains text and images
+await ingestion.cleanup();
+
+// 2. Search for images using text descriptions
+const search = new SearchEngine('./multimodal.bin', './multimodal.sqlite');
+const results = await search.search('red sports car', { top_k: 5 });
+
+// Filter to only image results
+const imageResults = results.filter(r => r.contentType === 'image');
+
+console.log('Images matching "red sports car":');
+imageResults.forEach((result, i) => {
+  console.log(`${i + 1}. ${result.document.source} (${result.score.toFixed(2)})`);
+  console.log(`   Description: ${result.content}`);
+  if (result.metadata?.dimensions) {
+    console.log(`   Size: ${result.metadata.dimensions.width}x${result.metadata.dimensions.height}`);
+  }
+});
+
+await search.cleanup();
+```
+
+#### Searching Across Both Text and Images
+
+```typescript
+import { SearchEngine } from 'rag-lite-ts';
+
+const search = new SearchEngine('./multimodal.bin', './multimodal.sqlite');
+
+// Search for content about ocean landscapes
+const results = await search.search('blue ocean water landscape', {
+  top_k: 10,
+  rerank: true
+});
+
+// Separate by content type
+const textResults = results.filter(r => r.contentType === 'text');
+const imageResults = results.filter(r => r.contentType === 'image');
+
+console.log(`Found ${textResults.length} text documents and ${imageResults.length} images`);
+
+console.log('\nText Documents:');
+textResults.forEach((result, i) => {
+  console.log(`${i + 1}. ${result.document.source} (${result.score.toFixed(2)})`);
+  console.log(`   ${result.content.substring(0, 100)}...`);
+});
+
+console.log('\nImages:');
+imageResults.forEach((result, i) => {
+  console.log(`${i + 1}. ${result.document.source} (${result.score.toFixed(2)})`);
+  console.log(`   ${result.content}`);
+});
+
+await search.cleanup();
+```
+
 ## Main Classes
 
 *For application developers - the primary API*
@@ -403,6 +472,38 @@ const systemInfo = await modeService.detectMode();
 console.log(`Current mode: ${systemInfo.mode}`);
 ```
 
+### Mode Selection Guide
+
+Choose the right mode for your use case:
+
+```typescript
+import { IngestionPipeline } from 'rag-lite-ts';
+
+// Text Mode - for text-only content
+const textPipeline = new IngestionPipeline('./docs.sqlite', './docs.bin', {
+  mode: 'text',
+  embeddingModel: 'Xenova/all-mpnet-base-v2'
+});
+
+// Multimodal Mode - for text and images
+const multimodalPipeline = new IngestionPipeline('./content.sqlite', './content.bin', {
+  mode: 'multimodal',
+  embeddingModel: 'Xenova/clip-vit-base-patch32'
+});
+```
+
+**Use Text Mode When:**
+- You only have text documents
+- You want the fastest performance for text search
+- You don't need cross-modal capabilities
+- You're using image-to-text conversion for images
+
+**Use Multimodal Mode When:**
+- You have both text and images
+- You want to find images using text queries
+- You want to find text using image descriptions
+- You need semantic similarity across content types
+
 ### Reranking Strategies
 
 Reranking is configured during ingestion and applied automatically during search:
@@ -462,6 +563,155 @@ for (const result of results) {
 }
 
 await search.cleanup();
+```
+
+### Multimodal API Patterns
+
+#### Visual Asset Management
+
+```typescript
+import { IngestionPipeline, SearchEngine } from 'rag-lite-ts';
+
+class VisualAssetManager {
+  private search: SearchEngine;
+  
+  async indexAssets(assetsPath: string) {
+    const ingestion = new IngestionPipeline('./assets.sqlite', './assets.bin', {
+      mode: 'multimodal',
+      embeddingModel: 'Xenova/clip-vit-base-patch32',
+      rerankingStrategy: 'metadata', // Use filename-based matching
+      batchSize: 4 // Conservative for large images
+    });
+    
+    const result = await ingestion.ingestDirectory(assetsPath);
+    await ingestion.cleanup();
+    return result;
+  }
+  
+  async findAssetsByDescription(description: string) {
+    if (!this.search) {
+      this.search = new SearchEngine('./assets.bin', './assets.sqlite');
+    }
+    
+    const results = await this.search.search(description, {
+      top_k: 20,
+      rerank: true
+    });
+    
+    return results
+      .filter(r => r.contentType === 'image')
+      .map(r => ({
+        filename: r.document.source.split('/').pop(),
+        path: r.document.source,
+        description: r.content,
+        score: r.score,
+        dimensions: r.metadata?.dimensions
+      }));
+  }
+  
+  async cleanup() {
+    if (this.search) {
+      await this.search.cleanup();
+    }
+  }
+}
+
+// Usage
+const assetManager = new VisualAssetManager();
+await assetManager.indexAssets('./images/');
+
+const redCars = await assetManager.findAssetsByDescription('red sports car');
+console.log('Found assets:');
+redCars.forEach((asset, i) => {
+  console.log(`${i + 1}. ${asset.filename} (${asset.score.toFixed(2)})`);
+  if (asset.dimensions) {
+    console.log(`   Size: ${asset.dimensions.width}x${asset.dimensions.height}`);
+  }
+});
+
+await assetManager.cleanup();
+```
+
+#### Technical Documentation with Diagrams
+
+```typescript
+import { IngestionPipeline, SearchEngine } from 'rag-lite-ts';
+
+class TechnicalDocsSearch {
+  private search: SearchEngine;
+  
+  async ingestDocs(docsPath: string) {
+    const ingestion = new IngestionPipeline('./tech-docs.sqlite', './tech-docs.bin', {
+      mode: 'multimodal',
+      embeddingModel: 'Xenova/clip-vit-base-patch32',
+      rerankingStrategy: 'text-derived',
+      chunkSize: 300,
+      chunkOverlap: 60
+    });
+    
+    const result = await ingestion.ingestDirectory(docsPath);
+    await ingestion.cleanup();
+    return result;
+  }
+  
+  async searchDocs(query: string) {
+    if (!this.search) {
+      this.search = new SearchEngine('./tech-docs.bin', './tech-docs.sqlite');
+    }
+    
+    const results = await this.search.search(query, {
+      top_k: 10,
+      rerank: true
+    });
+    
+    return {
+      text: results.filter(r => r.contentType === 'text'),
+      diagrams: results.filter(r => r.contentType === 'image')
+    };
+  }
+  
+  async findDiagrams(topic: string) {
+    if (!this.search) {
+      this.search = new SearchEngine('./tech-docs.bin', './tech-docs.sqlite');
+    }
+    
+    const results = await this.search.search(`${topic} diagram`, {
+      top_k: 8,
+      rerank: true
+    });
+    
+    return results
+      .filter(r => r.contentType === 'image')
+      .map(r => ({
+        filename: r.document.source.split('/').pop(),
+        path: r.document.source,
+        description: r.content,
+        score: r.score
+      }));
+  }
+  
+  async cleanup() {
+    if (this.search) {
+      await this.search.cleanup();
+    }
+  }
+}
+
+// Usage
+const techDocs = new TechnicalDocsSearch();
+await techDocs.ingestDocs('./technical-docs/');
+
+const authResults = await techDocs.searchDocs('authentication and authorization');
+console.log(`Text sections: ${authResults.text.length}`);
+console.log(`Diagrams: ${authResults.diagrams.length}`);
+
+const architectureDiagrams = await techDocs.findDiagrams('system architecture');
+console.log('\nArchitecture Diagrams:');
+architectureDiagrams.forEach((diagram, i) => {
+  console.log(`${i + 1}. ${diagram.filename} (${diagram.score.toFixed(2)})`);
+});
+
+await techDocs.cleanup();
 ```
 
 ## Factory Pattern

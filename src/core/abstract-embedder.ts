@@ -1,7 +1,30 @@
 /**
- * CORE MODULE — Base Universal Embedder Implementation
- * Abstract base class providing common functionality for all embedder implementations
- * Model-agnostic base class supporting lifecycle management and validation
+ * CORE MODULE — Abstract Base Embedder
+ * 
+ * Provides model-agnostic base functionality for all embedder implementations.
+ * This is an abstract base class, not a concrete implementation.
+ * 
+ * ARCHITECTURAL NOTE:
+ * While this contains implementation logic, it remains in the core layer because:
+ * 1. It's model-agnostic (no knowledge of specific models or transformers.js)
+ * 2. It's shared by multiple implementation layers (text, multimodal)
+ * 3. It provides common infrastructure (lifecycle, validation, batch processing)
+ * 4. Moving it would create awkward cross-layer dependencies
+ * 
+ * This follows the "shared base class" pattern common in framework design,
+ * similar to React.Component, Django Model, or other framework base classes.
+ * 
+ * RESPONSIBILITIES:
+ * - Model lifecycle management (loading, cleanup, disposal)
+ * - Batch processing coordination
+ * - Input validation and text truncation
+ * - Error handling with helpful messages
+ * - Embedding ID generation
+ * - Common utility methods
+ * 
+ * IMPLEMENTATION LAYERS:
+ * - Text: SentenceTransformerEmbedder extends this class
+ * - Multimodal: CLIPEmbedder extends this class
  */
 
 import type { 

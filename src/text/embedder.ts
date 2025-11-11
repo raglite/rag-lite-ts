@@ -3,6 +3,11 @@ import { createHash } from 'crypto';
 import { config } from '../core/config.js';
 import { handleError, ErrorCategory, ErrorSeverity, createError, safeExecute } from '../core/error-handler.js';
 import type { EmbeddingResult, EmbedFunction } from '../core/types.js';
+import {
+  createModelLoadingError,
+  createInvalidContentError,
+  createMissingDependencyError
+} from '../core/actionable-error-messages.js';
 
 /**
  * List of supported embedding models
@@ -27,9 +32,10 @@ export class EmbeddingEngine {
     
     // Validate that the model is supported
     if (!SUPPORTED_MODELS.includes(this.modelName)) {
-      throw new Error(
-        `Unsupported model: ${this.modelName}\n` +
-        `Supported models: ${SUPPORTED_MODELS.join(', ')}`
+      throw createModelLoadingError(
+        this.modelName,
+        `Model not in supported list. Supported models: ${SUPPORTED_MODELS.join(', ')}`,
+        { operationContext: 'EmbeddingEngine constructor' }
       );
     }
     
@@ -111,7 +117,10 @@ export class EmbeddingEngine {
    */
   async embedBatch(texts: string[]): Promise<EmbeddingResult[]> {
     if (!this.model) {
-      throw new Error('Model not loaded. Call loadModel() first.');
+      throw createMissingDependencyError('model', 'object', {
+        operationContext: 'embedBatch',
+        includeTroubleshooting: true
+      });
     }
 
     if (texts.length === 0) {
@@ -243,7 +252,9 @@ export class EmbeddingEngine {
   async embedSingle(text: string): Promise<EmbeddingResult> {
     const results = await this.embedBatch([text]);
     if (results.length === 0) {
-      throw new Error('Failed to generate embedding for single text');
+      throw createInvalidContentError('text', 'empty', {
+        operationContext: 'embedText'
+      });
     }
     return results[0];
   }

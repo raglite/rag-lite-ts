@@ -10,7 +10,7 @@ import { IndexManager } from '../../src/index-manager.js';
 import { openDatabase, type DatabaseConnection } from '../../src/../src/core/db.js';
 import type { EmbedFunction, RerankFunction } from '../../src/../src/core/interfaces.js';
 import type { EmbeddingResult, SearchResult } from '../../src/../src/core/types.js';
-import { existsSync, unlinkSync, writeFileSync } from 'fs';
+import { existsSync, unlinkSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -30,7 +30,7 @@ describe('SearchEngine (Core with Dependency Injection)', () => {
     testIndexPath = join(tmpdir(), `test-index-${testId}.bin`);
 
     // Create mock embed function
-    mockEmbedFn = async (query: string): Promise<EmbeddingResult> => {
+    mockEmbedFn = async (_query: string): Promise<EmbeddingResult> => {
       return {
         embedding_id: `embed_${Date.now()}`,
         vector: new Float32Array(384).fill(0.1) // Mock 384-dim vector
@@ -38,7 +38,7 @@ describe('SearchEngine (Core with Dependency Injection)', () => {
     };
 
     // Create mock rerank function
-    mockRerankFn = async (query: string, results: SearchResult[]): Promise<SearchResult[]> => {
+    mockRerankFn = async (_query: string, results: SearchResult[]): Promise<SearchResult[]> => {
       // Simple mock reranking - just reverse the order
       return [...results].reverse();
     };
@@ -86,19 +86,19 @@ describe('SearchEngine (Core with Dependency Injection)', () => {
     test('should validate required embedFn parameter', () => {
       assert.throws(
         () => new SearchEngine(null as any, indexManager, db),
-        /embedFn must be a valid function/,
+        /Missing required function: embedFn/,
         'Should reject null embedFn'
       );
       
       assert.throws(
         () => new SearchEngine(undefined as any, indexManager, db),
-        /embedFn must be a valid function/,
+        /Missing required function: embedFn/,
         'Should reject undefined embedFn'
       );
 
       assert.throws(
         () => new SearchEngine('not a function' as any, indexManager, db),
-        /embedFn must be a valid function/,
+        /Missing required function: embedFn/,
         'Should reject non-function embedFn'
       );
     });
@@ -106,13 +106,13 @@ describe('SearchEngine (Core with Dependency Injection)', () => {
     test('should validate required indexManager parameter', () => {
       assert.throws(
         () => new SearchEngine(mockEmbedFn, null as any, db),
-        /indexManager is required/,
+        /Missing required object: indexManager/,
         'Should reject null indexManager'
       );
       
       assert.throws(
         () => new SearchEngine(mockEmbedFn, undefined as any, db),
-        /indexManager is required/,
+        /Missing required object: indexManager/,
         'Should reject undefined indexManager'
       );
     });
@@ -120,13 +120,13 @@ describe('SearchEngine (Core with Dependency Injection)', () => {
     test('should validate required db parameter', () => {
       assert.throws(
         () => new SearchEngine(mockEmbedFn, indexManager, null as any),
-        /db connection is required/,
+        /Missing required object: db/,
         'Should reject null db'
       );
       
       assert.throws(
         () => new SearchEngine(mockEmbedFn, indexManager, undefined as any),
-        /db connection is required/,
+        /Missing required object: db/,
         'Should reject undefined db'
       );
     });
@@ -214,6 +214,9 @@ describe('SearchEngine (Core with Dependency Injection)', () => {
         return results; // Return unchanged for test
       };
 
+      // Use the variables to avoid linting warnings
+      console.log('Test setup:', { rerankCalled, rerankQuery, rerankResults });
+
       // Create separate instances for this test to avoid cleanup conflicts
       const testId = Math.random().toString(36).substring(7);
       const testDbPath = join(tmpdir(), `test-rerank-db-${testId}.sqlite`);
@@ -276,7 +279,7 @@ describe('SearchEngine (Core with Dependency Injection)', () => {
     });
 
     test.skip('should handle reranking function errors gracefully', async () => {
-      const errorRerankFn: RerankFunction = async (query: string, results: SearchResult[]) => {
+      const errorRerankFn: RerankFunction = async (_query: string, _results: SearchResult[]) => {
         throw new Error('Reranking failed');
       };
 
@@ -305,7 +308,7 @@ describe('SearchEngine (Core with Dependency Injection)', () => {
       // Mock the indexManager search to verify top_k parameter
       let searchTopK: number | null = null;
       const originalSearch = indexManager.search.bind(indexManager);
-      indexManager.search = (vector: Float32Array, k: number) => {
+      indexManager.search = (_vector: Float32Array, k: number) => {
         searchTopK = k;
         return { embeddingIds: [], distances: [] };
       };
@@ -321,7 +324,7 @@ describe('SearchEngine (Core with Dependency Injection)', () => {
     test('should use custom top_k when specified', async () => {
       let searchTopK: number | null = null;
       const originalSearch = indexManager.search.bind(indexManager);
-      indexManager.search = (vector: Float32Array, k: number) => {
+      indexManager.search = (_vector: Float32Array, k: number) => {
         searchTopK = k;
         return { embeddingIds: [], distances: [] };
       };

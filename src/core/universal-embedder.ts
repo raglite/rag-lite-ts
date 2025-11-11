@@ -1,7 +1,24 @@
 /**
  * CORE MODULE — Universal Embedder Interface for Chameleon Architecture
- * Model-agnostic interfaces supporting both text and multimodal models
- * Designed for runtime polymorphism and extensibility
+ * 
+ * Model-agnostic interfaces supporting both text and multimodal models.
+ * Designed for runtime polymorphism and extensibility.
+ * 
+ * ARCHITECTURAL ROLE:
+ * This file contains ONLY interfaces, types, and utility functions - no implementation logic.
+ * It defines the contract that all embedder implementations must follow.
+ * 
+ * CONTENTS:
+ * - UniversalEmbedder interface: Core contract for all embedders
+ * - Type definitions: ModelType, ContentType, etc.
+ * - Error classes: ModelValidationError, ContentTypeError, etc.
+ * - Utility functions: Type guards and validation helpers
+ * - Constants: Default capabilities and content types
+ * 
+ * USAGE:
+ * - Implementation layers (text, multimodal) implement these interfaces
+ * - Core layer uses these types for dependency injection
+ * - Public API exports these types for external use
  */
 
 import type { EmbeddingResult } from '../types.js';
@@ -75,6 +92,11 @@ export interface ModelCapabilities {
   maxBatchSize?: number;
   maxTextLength?: number;
   supportedImageFormats?: readonly string[];
+  // Enhanced capabilities for fixed CLIP implementation
+  supportsMultimodal?: boolean; // True cross-modal capabilities
+  supportsCrossModalSearch?: boolean; // Text queries can find images and vice versa
+  unifiedEmbeddingSpace?: boolean; // Text and image embeddings are directly comparable
+  reliableImplementation?: boolean; // No fallback mechanisms required
 }
 
 /**
@@ -270,6 +292,11 @@ export const DEFAULT_CAPABILITIES: Record<ModelType, ModelCapabilities> = {
     supportsMetadata: true,
     maxBatchSize: 16,
     maxTextLength: 77,
-    supportedImageFormats: ['jpg', 'jpeg', 'png', 'webp', 'gif'] as const
+    supportedImageFormats: ['jpg', 'jpeg', 'png', 'webp', 'gif'] as const,
+    // Enhanced capabilities for fixed CLIP implementation
+    supportsMultimodal: true,
+    supportsCrossModalSearch: true,
+    unifiedEmbeddingSpace: true,
+    reliableImplementation: true
   }
 } as const;

@@ -9,6 +9,7 @@ This guide shows simple ways to integrate RAG-lite TS into your local developmen
 - [Local Development Patterns](#local-development-patterns)
 - [Simple Web Integration](#simple-web-integration)
 - [CLI and Script Patterns](#cli-and-script-patterns)
+- [Multimodal Integration Patterns](#multimodal-integration-patterns)
 - [Basic Optimization](#basic-optimization)
 
 ## Local Development Patterns
@@ -252,6 +253,389 @@ Make it executable:
 ```bash
 chmod +x search-notes.js
 ln -s $(pwd)/search-notes.js /usr/local/bin/search-notes
+```
+
+## Multimodal Integration Patterns
+
+### Cross-Modal Document Search
+
+Search across text documents and images in a unified embedding space:
+
+```typescript
+// multimodal-search.ts
+import { IngestionPipeline, SearchEngine } from 'rag-lite-ts';
+import path from 'path';
+
+class MultimodalDocumentSearch {
+  private dbPath = './multimodal-docs.sqlite';
+  private indexPath = './multimodal-docs.bin';
+  private search: SearchEngine;
+  
+  async ingestContent(contentPath: string) {
+    const ingestion = new IngestionPipeline(this.dbPath, this.indexPath, {
+      mode: 'multimodal',
+      embeddingModel: 'Xenova/clip-vit-base-patch32',
+      rerankingStrategy: 'text-derived'
+    });
+    
+    console.log('Ingesting multimodal content...');
+    const result = await ingestion.ingestDirectory(contentPath);
+    await ingestion.cleanup();
+    
+    console.log(`Processed ${result.documentsProcessed} documents`);
+    console.log(`Text chunks: ${result.chunksCreated - (result.imageChunks || 0)}`);
+    console.log(`Image chunks: ${result.imageChunks || 0}`);
+    
+    return result;
+  }
+  
+  async searchAcrossContentTypes(query: string, options = {}) {
+    if (!this.search) {
+      this.search = new SearchEngine(this.indexPath, this.dbPath);
+    }
+    
+    const results = await this.search.search(query, {
+      top_k: 10,
+      rerank: true,
+      ...options
+    });
+    
+    // Separate results by content type
+    const textResults = results.filter(r => r.contentType === 'text');
+    const imageResults = results.filter(r => r.contentType === 'image');
+    
+    return {
+      all: results,
+      text: textResults,
+      images: imageResults
+    };
+  }
+  
+  async findImages(textQuery: string) {
+    if (!this.search) {
+      this.search = new SearchEngine(this.indexPath, this.dbPath);
+    }
+    
+    const results = await this.search.search(textQuery, {
+      top_k: 10,
+      rerank: true
+    });
+    
+    return results
+      .filter(r => r.contentType === 'image')
+      .map(r => ({
+        path: r.document.source,
+        description: r.content,
+        score: r.score,
+        metadata: r.metadata
+      }));
+  }
+  
+  async cleanup() {
+    if (this.search) {
+      await this.search.cleanup();
+    }
+  }
+}
+
+// Usage
+const multimodalSearch = new MultimodalDocumentSearch();
+
+// Ingest documentation with images
+await multimodalSearch.ingestContent('./docs-with-images/');
+
+// Search across both text and images
+const results = await multimodalSearch.searchAcrossContentTypes('authentication flow');
+console.log(`Found ${results.text.length} text results and ${results.images.length} image results`);
+
+// Find images using text query
+const diagrams = await multimodalSearch.findImages('system architecture diagram');
+console.log('Found diagrams:');
+diagrams.forEach((diagram, i) => {
+  console.log(`${i + 1}. ${diagram.path} (${diagram.score.toFixed(2)})`);
+  console.log(`   ${diagram.description}`);
+});
+
+await multimodalSearch.cleanup();
+```
+
+### Visual Asset Management
+
+Organize and search visual assets with text descriptions:
+
+```typescript
+// asset-manager.ts
+import { IngestionPipeline, SearchEngine } from 'rag-lite-ts';
+import fs from 'fs';
+import path from 'path';
+
+class VisualAssetManager {
+  private dbPath: string;
+  private indexPath: string;
+  private search: SearchEngine;
+  
+  constructor(assetLibraryPath: string) {
+    this.dbPath = path.join(assetLibraryPath, 'assets.sqlite');
+    this.indexPath = path.join(assetLibraryPath, 'assets.bin');
+  }
+  
+  async indexAssets(assetsPath: string) {
+    const ingestion = new IngestionPipeline(this.dbPath, this.indexPath, {
+      mode: 'multimodal',
+      embeddingModel: 'Xenova/clip-vit-base-patch32',
+      rerankingStrategy: 'metadata', // Use filename-based matching
+      batchSize: 4 // Conservative for large images
+    });
+    
+    const result = await ingestion.ingestDirectory(assetsPath);
+    await ingestion.cleanup();
+    
+    return result;
+  }
+  
+  async findAssetsByDescription(description: string, options = {}) {
+    if (!this.search) {
+      this.search = new SearchEngine(this.indexPath, this.dbPath);
+    }
+    
+    const results = await this.search.search(description, {
+      top_k: 20,
+      rerank: true,
+      ...options
+    });
+    
+    return results
+      .filter(r => r.contentType === 'image')
+      .map(r => ({
+        filename: path.basename(r.document.source),
+        path: r.document.source,
+        description: r.content,
+        score: r.score,
+        dimensions: r.metadata?.dimensions,
+        format: r.metadata?.format
+      }));
+  }
+  
+  async findSimilarAssets(referencePath: string, topK = 10) {
+    // In a real implementation, you would embed the reference image
+    // and search for similar vectors. For now, use filename as query.
+    const filename = path.basename(referencePath, path.extname(referencePath));
+    return await this.findAssetsByDescription(filename, { top_k: topK });
+  }
+  
+  async searchByTags(tags: string[]) {
+    const results = new Map();
+    
+    for (const tag of tags) {
+      const tagResults = await this.findAssetsByDescription(tag, { top_k: 10 });
+      
+      tagResults.forEach(asset => {
+        if (!results.has(asset.path)) {
+          results.set(asset.path, {
+            ...asset,
+            matchingTags: [],
+            maxScore: 0
+          });
+        }
+        
+        const existing = results.get(asset.path);
+        existing.matchingTags.push({ tag, score: asset.score });
+        existing.maxScore = Math.max(existing.maxScore, asset.score);
+      });
+    }
+    
+    return Array.from(results.values())
+      .sort((a, b) => b.maxScore - a.maxScore);
+  }
+  
+  async cleanup() {
+    if (this.search) {
+      await this.search.cleanup();
+    }
+  }
+}
+
+// Usage
+const assetManager = new VisualAssetManager('./asset-library');
+
+// Index your visual assets
+await assetManager.indexAssets('./images/');
+
+// Find assets by description
+const redCars = await assetManager.findAssetsByDescription('red sports car');
+console.log('Red car images:');
+redCars.forEach((asset, i) => {
+  console.log(`${i + 1}. ${asset.filename} (${asset.score.toFixed(2)})`);
+  if (asset.dimensions) {
+    console.log(`   Size: ${asset.dimensions.width}x${asset.dimensions.height}`);
+  }
+});
+
+// Search by multiple tags
+const natureAssets = await assetManager.searchByTags(['ocean', 'sunset', 'landscape']);
+console.log('\nNature-themed assets:');
+natureAssets.forEach((asset, i) => {
+  console.log(`${i + 1}. ${asset.filename}`);
+  console.log(`   Tags: ${asset.matchingTags.map(t => t.tag).join(', ')}`);
+  console.log(`   Score: ${asset.maxScore.toFixed(2)}`);
+});
+
+await assetManager.cleanup();
+```
+
+### Technical Documentation with Diagrams
+
+Search technical documentation that includes diagrams and screenshots:
+
+```typescript
+// tech-docs-search.ts
+import { IngestionPipeline, SearchEngine } from 'rag-lite-ts';
+
+class TechnicalDocsSearch {
+  private search: SearchEngine;
+  
+  constructor(
+    private dbPath = './tech-docs.sqlite',
+    private indexPath = './tech-docs.bin'
+  ) {}
+  
+  async ingestDocs(docsPath: string) {
+    const ingestion = new IngestionPipeline(this.dbPath, this.indexPath, {
+      mode: 'multimodal',
+      embeddingModel: 'Xenova/clip-vit-base-patch32',
+      rerankingStrategy: 'text-derived',
+      chunkSize: 300,
+      chunkOverlap: 60
+    });
+    
+    const result = await ingestion.ingestDirectory(docsPath);
+    await ingestion.cleanup();
+    
+    return result;
+  }
+  
+  async searchDocs(query: string) {
+    if (!this.search) {
+      this.search = new SearchEngine(this.indexPath, this.dbPath);
+    }
+    
+    const results = await this.search.search(query, {
+      top_k: 10,
+      rerank: true
+    });
+    
+    return {
+      text: results.filter(r => r.contentType === 'text'),
+      diagrams: results.filter(r => r.contentType === 'image')
+    };
+  }
+  
+  async findDiagrams(topic: string) {
+    if (!this.search) {
+      this.search = new SearchEngine(this.indexPath, this.dbPath);
+    }
+    
+    const results = await this.search.search(`${topic} diagram`, {
+      top_k: 8,
+      rerank: true
+    });
+    
+    return results
+      .filter(r => r.contentType === 'image')
+      .map(r => ({
+        filename: r.document.source.split('/').pop(),
+        path: r.document.source,
+        description: r.content,
+        score: r.score
+      }));
+  }
+  
+  async cleanup() {
+    if (this.search) {
+      await this.search.cleanup();
+    }
+  }
+}
+
+// Usage
+const techDocs = new TechnicalDocsSearch();
+
+// Ingest technical documentation
+await techDocs.ingestDocs('./technical-docs/');
+
+// Search for specific topics
+const authResults = await techDocs.searchDocs('authentication and authorization');
+console.log('Authentication Documentation:');
+console.log(`Text sections: ${authResults.text.length}`);
+console.log(`Diagrams: ${authResults.diagrams.length}`);
+
+// Find specific diagrams
+const architectureDiagrams = await techDocs.findDiagrams('system architecture');
+console.log('\nArchitecture Diagrams:');
+architectureDiagrams.forEach((diagram, i) => {
+  console.log(`${i + 1}. ${diagram.filename} (${diagram.score.toFixed(2)})`);
+  console.log(`   ${diagram.description}`);
+});
+
+await techDocs.cleanup();
+```
+
+### Mode Selection Pattern
+
+Choose the right mode for your use case:
+
+```typescript
+// mode-selection.ts
+import { IngestionPipeline } from 'rag-lite-ts';
+
+class AdaptiveContentPipeline {
+  static async createForContent(contentPath: string, dbPath: string, indexPath: string) {
+    // Detect content types in directory
+    const hasImages = await this.detectImages(contentPath);
+    const hasText = await this.detectText(contentPath);
+    
+    if (hasImages && hasText) {
+      // Mixed content: use multimodal mode
+      console.log('Detected mixed content, using multimodal mode');
+      return new IngestionPipeline(dbPath, indexPath, {
+        mode: 'multimodal',
+        embeddingModel: 'Xenova/clip-vit-base-patch32',
+        rerankingStrategy: 'text-derived'
+      });
+    } else if (hasText) {
+      // Text only: use text mode
+      console.log('Detected text-only content, using text mode');
+      return new IngestionPipeline(dbPath, indexPath, {
+        mode: 'text',
+        embeddingModel: 'Xenova/all-mpnet-base-v2'
+      });
+    } else {
+      throw new Error('No supported content found');
+    }
+  }
+  
+  private static async detectImages(contentPath: string): Promise<boolean> {
+    // Implementation to detect image files
+    // Return true if .jpg, .png, etc. files found
+    return false; // Placeholder
+  }
+  
+  private static async detectText(contentPath: string): Promise<boolean> {
+    // Implementation to detect text files
+    // Return true if .txt, .md, etc. files found
+    return false; // Placeholder
+  }
+}
+
+// Usage
+const pipeline = await AdaptiveContentPipeline.createForContent(
+  './my-content/',
+  './content.sqlite',
+  './content.bin'
+);
+
+await pipeline.ingestDirectory('./my-content/');
+await pipeline.cleanup();
 ```
 
 ### Batch Processing Script

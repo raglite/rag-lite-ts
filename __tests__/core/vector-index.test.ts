@@ -3,7 +3,7 @@ import { strict as assert } from 'node:assert';
 import { VectorIndex } from '../../src/../src/core/vector-index.js';
 import { unlinkSync, existsSync } from 'fs';
 import { join } from 'path';
-import { TEST_MODELS } from '../../src/../src/test-utils.js';
+import { TEST_MODELS } from '../../src/test-utils.js';
 
 // Clean up test files
 function cleanup(indexPath: string) {
@@ -176,7 +176,7 @@ describe('VectorIndex', () => {
         // Try to search with wrong dimensions
         assert.throws(() => {
           index.search(wrongVector, 1);
-        }, /Query vector dimension mismatch/);
+        }, /Vector dimension mismatch in vector search/);
         
         cleanup(TEST_INDEX_PATH);
       });

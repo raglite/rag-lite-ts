@@ -139,7 +139,7 @@ describe('Performance Validation', () => {
       
       const { result: ingestionPipeline, timeMs: initTime } = await measureTime(async () => {
         return await TextIngestionFactory.create(TEST_DB_PATH, TEST_INDEX_PATH, {
-          embeddingModel: 'Xenova/all-MiniLM-L6-v2', // Use smaller model for faster tests
+          embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2', // Use smaller model for faster tests
           batchSize: 8
         });
       });
@@ -177,7 +177,7 @@ describe('Performance Validation', () => {
     before(async () => {
       // First ingest the documents
       const ingestionPipeline = await TextIngestionFactory.create(TEST_DB_PATH, TEST_INDEX_PATH, {
-        embeddingModel: 'Xenova/all-MiniLM-L6-v2',
+        embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
         batchSize: 8
       });
 
@@ -190,7 +190,7 @@ describe('Performance Validation', () => {
 
       // Create search engine
       searchEngine = await TextSearchFactory.create(TEST_INDEX_PATH, TEST_DB_PATH, {
-        embeddingModel: 'Xenova/all-MiniLM-L6-v2',
+        embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
         enableReranking: false // Disable reranking for consistent timing
       });
     });
@@ -286,7 +286,7 @@ describe('Performance Validation', () => {
       // Test factory creation time
       const { timeMs: factoryTime } = await measureTime(async () => {
         const searchEngine = await TextSearchFactory.create(TEST_INDEX_PATH, TEST_DB_PATH, {
-          embeddingModel: 'Xenova/all-MiniLM-L6-v2'
+          embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2'
         });
         await searchEngine.cleanup();
       });
@@ -300,7 +300,7 @@ describe('Performance Validation', () => {
 
     test('should maintain consistent performance across multiple operations', async () => {
       const searchEngine = await TextSearchFactory.create(TEST_INDEX_PATH, TEST_DB_PATH, {
-        embeddingModel: 'Xenova/all-MiniLM-L6-v2',
+        embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
         enableReranking: false
       });
 

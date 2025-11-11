@@ -15,13 +15,21 @@ import type { SidebarsConfig } from '@docusaurus/plugin-content-docs';
 const sidebars: SidebarsConfig = {
   // Manual sidebar configuration for custom ordering
   docsSidebar: [
-    'README',
-    'cli-reference',
-    'api-reference',
-    'configuration',
+    {
+      type: 'category',
+      label: 'Getting Started',
+      collapsed: false,
+      items: [
+        'README',
+        'cli-reference',
+        'api-reference',
+        'configuration',
+      ],
+    },
     {
       type: 'category',
       label: 'Multimodal Capabilities',
+      collapsed: false,
       items: [
         'multimodal-tutorial',
         'multimodal-configuration',
@@ -33,15 +41,23 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Integration & Examples',
+      collapsed: false,
       items: [
         'mcp-server-multimodal-guide',
+        'dynamic-tool-descriptions',
         'examples-gallery',
         'integration-patterns',
       ],
     },
-    'path-strategies',
+    {
+      type: 'category',
+      label: 'Advanced Topics',
+      items: [
+        'path-strategies',
+        'EMBEDDING_MODELS_COMPARISON',
+      ],
+    },
     'troubleshooting',
-    'EMBEDDING_MODELS_COMPARISON',
   ],
 };
 

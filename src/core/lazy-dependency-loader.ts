@@ -98,7 +98,7 @@ export class LazyEmbedderLoader {
         console.log(`🔄 Lazy loading sentence transformer embedder: ${modelName}`);
         
         // Dynamic import - only loaded when text mode is used
-        const { SentenceTransformerEmbedder } = await import('./sentence-transformer-embedder.js');
+        const { SentenceTransformerEmbedder } = await import('../text/sentence-transformer-embedder.js');
         
         const embedder = new SentenceTransformerEmbedder(modelName, options);
         await embedder.loadModel();
@@ -136,7 +136,7 @@ export class LazyEmbedderLoader {
         console.log(`🔄 Lazy loading CLIP embedder: ${modelName}`);
         
         // Dynamic import - only loaded when multimodal mode is used
-        const { CLIPEmbedder } = await import('./clip-embedder.js');
+        const { CLIPEmbedder } = await import('../multimodal/clip-embedder.js');
         
         const embedder = new CLIPEmbedder(modelName, options);
         await embedder.loadModel();
@@ -251,24 +251,15 @@ export class LazyRerankerLoader {
     const cacheKey = 'reranker:text-derived';
     
     return this.cache.getOrLoad(cacheKey, async () => {
-      try {
-        console.log('🔄 Lazy loading text-derived reranker (multimodal)');
-        
-        // Dynamic import - only loaded when multimodal mode uses text-derived reranking
-        const { TextDerivedRerankingStrategy } = await import('./reranking-strategies.js');
-        
-        const reranker = new TextDerivedRerankingStrategy();
-        
-        console.log('✅ Text-derived reranker loaded');
-        return reranker.rerank.bind(reranker);
-        
-      } catch (error) {
-        console.warn(`Failed to load text-derived reranker: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        console.log('🔄 Falling back to text reranker');
-        
-        // Fallback to text reranker
-        return this.loadTextReranker();
-      }
+      console.log('🔄 Lazy loading text-derived reranker (multimodal)');
+      
+      // Dynamic import - only loaded when multimodal mode uses text-derived reranking
+      const { TextDerivedRerankingStrategy } = await import('./reranking-strategies.js');
+      
+      const reranker = new TextDerivedRerankingStrategy();
+      
+      console.log('✅ Text-derived reranker loaded');
+      return reranker.rerank.bind(reranker);
     });
   }
 
@@ -280,51 +271,33 @@ export class LazyRerankerLoader {
     const cacheKey = 'reranker:metadata';
     
     return this.cache.getOrLoad(cacheKey, async () => {
-      try {
-        console.log('🔄 Lazy loading metadata reranker (multimodal)');
-        
-        // Dynamic import - only loaded when multimodal mode uses metadata reranking
-        const { MetadataRerankingStrategy } = await import('./reranking-strategies.js');
-        
-        const reranker = new MetadataRerankingStrategy();
-        
-        console.log('✅ Metadata reranker loaded');
-        return reranker.rerank.bind(reranker);
-        
-      } catch (error) {
-        console.warn(`Failed to load metadata reranker: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        console.log('🔄 Falling back to text reranker');
-        
-        // Fallback to text reranker
-        return this.loadTextReranker();
-      }
+      console.log('🔄 Lazy loading metadata reranker (multimodal)');
+      
+      // Dynamic import - only loaded when multimodal mode uses metadata reranking
+      const { MetadataRerankingStrategy } = await import('./reranking-strategies.js');
+      
+      const reranker = new MetadataRerankingStrategy();
+      
+      console.log('✅ Metadata reranker loaded');
+      return reranker.rerank.bind(reranker);
     });
   }
 
   /**
    * Lazily load hybrid reranker for multimodal mode
-   * Combines multiple reranking strategies (fallback to text-derived for now)
+   * Combines multiple reranking strategies (uses text-derived for now)
    */
   static async loadHybridReranker(): Promise<RerankFunction> {
     const cacheKey = 'reranker:hybrid';
     
     return this.cache.getOrLoad(cacheKey, async () => {
-      try {
-        console.log('🔄 Lazy loading hybrid reranker (multimodal)');
-        
-        // For now, hybrid reranking falls back to text-derived
-        // TODO: Implement proper hybrid reranking in future tasks
-        console.log('🔄 Hybrid reranking not yet implemented, falling back to text-derived');
-        
-        return this.loadTextDerivedReranker();
-        
-      } catch (error) {
-        console.warn(`Failed to load hybrid reranker: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        console.log('🔄 Falling back to text reranker');
-        
-        // Final fallback to text reranker
-        return this.loadTextReranker();
-      }
+      console.log('🔄 Lazy loading hybrid reranker (multimodal)');
+      
+      // For now, hybrid reranking uses text-derived
+      // TODO: Implement proper hybrid reranking in future tasks
+      console.log('🔄 Hybrid reranking not yet implemented, using text-derived');
+      
+      return this.loadTextDerivedReranker();
     });
   }
 
@@ -520,8 +493,7 @@ export class LazyDependencyManager {
         return LazyRerankerLoader.loadHybridReranker();
       
       default:
-        console.warn(`Unknown reranking strategy '${strategy}', falling back to cross-encoder`);
-        return LazyRerankerLoader.loadTextReranker();
+        throw new Error(`Unknown reranking strategy '${strategy}'. Supported strategies: cross-encoder, text-derived, metadata, hybrid, disabled`);
     }
   }
 

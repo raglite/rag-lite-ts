@@ -110,6 +110,31 @@ export type {
 // Interface validation utilities
 export { InterfaceValidator } from './core/interfaces.js';
 
+// Mode-model compatibility validation
+export {
+  validateModeModelCompatibility,
+  validateModeModelCompatibilityOrThrow,
+  getRecommendedModelsForMode,
+  isModeModelCompatible,
+  getCompatibleModelsForMode,
+  type ModeModelValidationResult
+} from './core/mode-model-validator.js';
+
+// Actionable error messages
+export {
+  createMissingFileError,
+  createInvalidPathError,
+  createModelLoadingError,
+  createDimensionMismatchError,
+  createModeMismatchError,
+  createInvalidContentError,
+  createMissingDependencyError,
+  createFactoryCreationError,
+  enhanceError,
+  createContextualError,
+  type ActionableErrorConfig
+} from './core/actionable-error-messages.js';
+
 // =============================================================================
 // TEXT IMPLEMENTATIONS (FOR CUSTOM DEPENDENCY INJECTION)
 // =============================================================================
@@ -122,6 +147,17 @@ export {
   createTextEmbedFunction,
   createTextEmbedder
 } from './text/embedder.js';
+
+// =============================================================================
+// MULTIMODAL IMPLEMENTATIONS (FOR CLIP AND CROSS-MODAL SEARCH)
+// =============================================================================
+
+// Universal embedder interface and implementations
+// Note: The actual CLIP embedder implementation is in src/multimodal/clip-embedder.ts
+// and is accessed through the embedder factory (createEmbedder function)
+export type { UniversalEmbedder } from './core/universal-embedder.js';
+export { CLIPEmbedder } from './multimodal/clip-embedder.js';
+export { createEmbedder } from './core/embedder-factory.js';
 
 // Text-specific reranking implementations
 export {

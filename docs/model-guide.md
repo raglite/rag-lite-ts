@@ -75,8 +75,8 @@ raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2
 - **Speed**: ~45 embeddings/second (text)
 - **Memory**: ~650MB total usage
 - **Quality**: Good for multimodal understanding
-- **Content Types**: Text (ready), Image (prepared for transformers.js updates)
-- **Status**: Text embeddings production-ready, image support infrastructure prepared
+- **Content Types**: Text and images (both production-ready)
+- **Status**: Full multimodal support with reliable CLIP implementation
 
 **Auto-configured settings:**
 - Chunk size: 300 tokens
@@ -93,8 +93,8 @@ raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2
 - **Speed**: ~25 embeddings/second (text)
 - **Memory**: ~950MB total usage
 - **Quality**: Better for detailed visual content
-- **Content Types**: Text (ready), Image (prepared)
-- **Status**: Text embeddings production-ready, image support infrastructure prepared
+- **Content Types**: Text and images (both production-ready)
+- **Status**: Full multimodal support with enhanced CLIP implementation
 
 **Auto-configured settings:**
 - Chunk size: 300 tokens
@@ -136,8 +136,9 @@ raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2
 | Feature | Text Models | CLIP Models | Implementation Status |
 |---------|-------------|-------------|----------------------|
 | Text embedding | ✅ Production | ✅ Production | Ready |
-| Image embedding | ❌ Not supported | 🔮 Prepared | Awaiting transformers.js |
+| Image embedding | ❌ Not supported | ✅ Production | Ready |
 | Image-to-text | ❌ Not supported | ✅ Production | Ready |
+| Cross-modal search | ❌ Not supported | ✅ Production | Ready |
 | Mixed content | ❌ Text only | ✅ Production | Ready |
 | Reranking | ✅ Cross-encoder | ✅ Text-derived + Metadata | Ready |
 

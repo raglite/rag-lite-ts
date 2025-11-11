@@ -11,8 +11,9 @@ Complete reference for all RAG-lite TS command-line interface commands with **Ch
   - [raglite search](#raglite-search)
   - [raglite rebuild](#raglite-rebuild)
   - [raglite help](#raglite-help)
-- [MCP Server](#mcp-server)
 - [Examples](#examples)
+
+> **Note:** For MCP (Model Context Protocol) server integration, see the [MCP Server Multimodal Guide](./mcp-server-multimodal-guide.md).
 
 ## Installation
 
@@ -158,6 +159,7 @@ raglite search <query> [options]
 - `--top-k <number>`: Number of results to return (default: 10)
 - `--rerank`: Enable cross-encoder reranking for better relevance
 - `--no-rerank`: Explicitly disable reranking
+- `--content-type <type>`: Filter results by content type (`text` or `image`)
 - `--db <path>`: Database file path
 - `--index <path>`: Index file path
 
@@ -173,6 +175,21 @@ raglite search "API documentation" --top-k 20
 
 # Search for images or visual content (multimodal mode)
 raglite search "diagram showing architecture"
+```
+
+**Cross-modal search (multimodal mode):**
+```bash
+# Find images using text query
+raglite search "red sports car" --content-type image
+
+# Find text documents only
+raglite search "vehicle specifications" --content-type text
+
+# Search all content types (default - no filter)
+raglite search "vehicles and transportation"
+
+# Combine content type filter with other options
+raglite search "mountain sunset" --content-type image --top-k 5 --rerank
 ```
 
 **Reranking:**
@@ -263,39 +280,6 @@ raglite help ingest
 raglite help search
 ```
 
-## MCP Server
-
-RAG-lite TS includes a Model Context Protocol (MCP) server for integration with AI agents.
-
-### `raglite-mcp`
-
-Start the MCP server for agent integration.
-
-#### Syntax
-```bash
-raglite-mcp
-```
-
-The server communicates via stdio and provides these tools:
-- `search_documents`: Search indexed documents
-- `ingest_documents`: Add new documents to index
-- `rebuild_index`: Rebuild vector index
-- `get_stats`: Get index statistics
-
-#### MCP Configuration
-
-Add to your MCP client configuration:
-```json
-{
-  "mcpServers": {
-    "rag-lite": {
-      "command": "raglite-mcp",
-      "args": []
-    }
-  }
-}
-```
-
 ## Examples
 
 ### Complete Workflow
@@ -368,6 +352,101 @@ export RAG_EMBEDDING_MODEL="Xenova/all-mpnet-base-v2"
 export RAG_DB_FILE="prod-db.sqlite"
 export RAG_RERANK_ENABLED="true"
 raglite ingest ./docs/
+```
+
+## CLI Workflow Examples
+
+For comprehensive, hands-on examples of CLI workflows, see the `examples/cli-multimodal-workflows/` directory:
+
+### Available Example Scripts
+
+1. **`text-mode-workflow.sh`** - Complete text-only workflow
+   - Creating sample content
+   - Ingesting text documents
+   - Performing various searches
+   - Using different search options
+
+2. **`multimodal-ingestion.sh`** - Multimodal content ingestion
+   - Setting up multimodal mode
+   - Understanding CLIP models
+   - Choosing reranking strategies
+   - Best practices for mixed content
+
+3. **`cross-modal-search.sh`** - Cross-modal search examples
+   - Finding images with text queries
+   - Finding text with image descriptions
+   - Understanding semantic similarity
+   - Real-world use cases
+
+4. **`content-type-filtering.sh`** - Filtering results by content type
+   - Text-only searches
+   - Image-only searches
+   - Combining filters with other options
+   - Performance considerations
+
+5. **`advanced-workflows.sh`** - Advanced usage patterns
+   - Mode migration strategies
+   - Hybrid content organization
+   - Performance optimization
+   - Batch processing
+   - Error recovery
+   - Integration with other tools
+
+### Running the Examples
+
+```bash
+# Navigate to examples directory
+cd examples/cli-multimodal-workflows/
+
+# Make scripts executable (Unix/Mac)
+chmod +x *.sh
+
+# Run an example
+./text-mode-workflow.sh
+
+# Or use bash directly
+bash multimodal-ingestion.sh
+```
+
+For Windows users, PowerShell versions are provided:
+```powershell
+# Run PowerShell example
+.\text-mode-workflow.ps1
+```
+
+### Quick Example: Cross-Modal Search
+
+```bash
+# 1. Ingest mixed content in multimodal mode
+raglite ingest ./content/ --mode multimodal --model Xenova/clip-vit-base-patch32
+
+# 2. Search for images using text query
+raglite search "red sports car" --content-type image
+
+# 3. Search for all related content (default - no filter needed)
+raglite search "vehicles"
+
+# 4. Filter to text documents only
+raglite search "vehicle specifications" --content-type text
+
+# 5. Combine with other options
+raglite search "mountain landscape" --content-type image --top-k 5 --rerank
+```
+
+### Example: Content Type Filtering
+
+```bash
+# Search all content types (default)
+raglite search "machine learning"
+
+# Filter to text documents only
+raglite search "machine learning tutorial" --content-type text
+
+# Filter to images only
+raglite search "neural network diagram" --content-type image
+
+# Combine with top-k
+raglite search "data visualization" --content-type image --top-k 3
 ```
 
 ## Error Handling

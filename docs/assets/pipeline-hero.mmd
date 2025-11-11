@@ -1,0 +1,34 @@
+%%{init: {'theme':'base', 'themeVariables': { 'fontSize':'18px', 'fontFamily':'Arial'}}}%%
+
+flowchart LR
+    subgraph Input["📥 INPUT"]
+        direction TB
+        I1["📄 Text"]
+        I2["🖼️ Images"]
+        I3["📊 Mixed"]
+    end
+    
+    Input --> Chameleon["🦎 CHAMELEON
+    Auto-adapt"]
+    
+    Chameleon --> Process["⚙️ PROCESS
+    Embed & Index"]
+    
+    Process --> Storage["� STORAGE
+    Local-first"]
+    
+    Storage --> Search["🔍 SEARCH
+    Semantic"]
+    
+    Search --> Output["🎯 RESULTS
+    Cross-modal"]
+    
+    style Input fill:#e3f2fd,stroke:#1976d2,stroke-width:4px,color:#1565c0
+    style Chameleon fill:#fff9c4,stroke:#f57f17,stroke-width:5px,color:#f57f17
+    style Process fill:#e8eaf6,stroke:#3f51b5,stroke-width:4px,color:#283593
+    style Storage fill:#e8f5e9,stroke:#388e3c,stroke-width:4px,color:#1b5e20
+    style Search fill:#fff3e0,stroke:#f57c00,stroke-width:4px,color:#e65100
+    style Output fill:#f3e5f5,stroke:#7b1fa2,stroke-width:4px,color:#4a148c
+    style I1 fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style I2 fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style I3 fill:#e3f2fd,stroke:#1976d2,stroke-width:2px

@@ -2,7 +2,7 @@
 
 *Specific troubleshooting for multimodal mode issues and model compatibility*
 
-This guide covers troubleshooting specific to the Chameleon Multimodal Architecture, including image processing, mode detection, and multimodal model compatibility issues.
+This guide covers troubleshooting specific to the simplified multimodal architecture, including image processing, mode detection, and multimodal model compatibility issues. The system now provides reliable CLIP-based multimodal capabilities without complex fallback mechanisms.
 
 ## Table of Contents
 
@@ -14,6 +14,25 @@ This guide covers troubleshooting specific to the Chameleon Multimodal Architect
 - [Performance Issues](#performance-issues)
 - [Content Type Detection](#content-type-detection)
 - [Debug Mode for Multimodal](#debug-mode-for-multimodal)
+
+## Simplified Architecture Benefits
+
+The updated multimodal implementation eliminates many common issues:
+
+**No More Fallback Complexity:**
+- CLIP text embedding works reliably without `pixel_values` errors
+- No complex error recovery mechanisms
+- Clear, actionable error messages
+
+**Predictable Behavior:**
+- Each mode has consistent, documented behavior
+- No unexpected fallbacks to different models
+- Errors indicate actual problems, not expected limitations
+
+**True Cross-Modal Capabilities:**
+- Text queries reliably find semantically similar images
+- Unified embedding space for both content types
+- No conversion between content types in multimodal mode
 
 ## Quick Multimodal Diagnostics
 
@@ -221,10 +240,59 @@ npm install -g rag-lite-ts@latest
 
 # Use supported multimodal models
 raglite ingest ./docs/ --mode multimodal --model Xenova/clip-vit-base-patch32
-raglite ingest ./docs/ --mode multimodal --model Xenova/clip-vit-base-patch16
 
 # Check available models
 raglite help | grep -A 10 "Supported models"
+```
+
+### "CLIP text embedding requires multimodal mode"
+
+**Error:**
+```
+Error: CLIP model requires multimodal mode. Use mode: 'multimodal' in options.
+```
+
+**Cause:** Trying to use a CLIP model without specifying multimodal mode.
+
+**Solution:**
+```bash
+# Always specify multimodal mode with CLIP models
+raglite ingest ./docs/ --mode multimodal --model Xenova/clip-vit-base-patch32
+
+# Or in code
+const ingestion = new IngestionPipeline('./db.sqlite', './index.bin', {
+  mode: 'multimodal',
+  embeddingModel: 'Xenova/clip-vit-base-patch32'
+});
+```
+
+### "Cross-modal search not working"
+
+**Problem:** Text queries don't find relevant images or vice versa.
+
+**Diagnosis:**
+```bash
+# Check if mode is actually multimodal
+sqlite3 db.sqlite "SELECT mode, model_name FROM system_info;"
+
+# Verify both content types exist
+sqlite3 db.sqlite "SELECT content_type, COUNT(*) FROM chunks GROUP BY content_type;"
+
+# Test with known content
+raglite search "test" --top-k 20
+```
+
+**Solutions:**
+```bash
+# Ensure multimodal mode was used during ingestion
+raglite ingest ./docs/ --mode multimodal --rebuild-if-needed
+
+# Use descriptive queries
+raglite search "red sports car" --content-type image  # Good
+raglite search "car" --content-type image  # Less specific
+
+# Enable reranking for better results
+raglite search "architecture diagram" --rerank
 ```
 
 ### "Transformers.js compatibility error"

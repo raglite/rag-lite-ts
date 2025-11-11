@@ -8,6 +8,7 @@ import { DatabaseConnection, getChunksByEmbeddingIds } from './db.js';
 import type { SearchResult, SearchOptions } from './types.js';
 import type { EmbedFunction, RerankFunction } from './interfaces.js';
 import { config } from './config.js';
+import { createMissingDependencyError } from './actionable-error-messages.js';
 
 /**
  * Search engine that provides semantic search capabilities
@@ -80,13 +81,19 @@ export class SearchEngine {
   ) {
     // Validate required dependencies
     if (!embedFn || typeof embedFn !== 'function') {
-      throw new Error('embedFn must be a valid function');
+      throw createMissingDependencyError('embedFn', 'function', {
+        operationContext: 'SearchEngine constructor'
+      });
     }
     if (!indexManager) {
-      throw new Error('indexManager is required');
+      throw createMissingDependencyError('indexManager', 'object', {
+        operationContext: 'SearchEngine constructor'
+      });
     }
     if (!db) {
-      throw new Error('db connection is required');
+      throw createMissingDependencyError('db', 'object', {
+        operationContext: 'SearchEngine constructor'
+      });
     }
     
     // Initialize ContentResolver if provided, or create lazily when needed

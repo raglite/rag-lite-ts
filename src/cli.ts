@@ -37,13 +37,15 @@ Examples:
   raglite ingest ./docs/ --path-strategy relative --path-base /project  # Use relative paths
   raglite search "machine learning" # Search for documents about machine learning
   raglite search "API documentation" --top-k 10  # Get top 10 results
+  raglite search "red car" --content-type image  # Search only image results
 
   raglite rebuild                  # Rebuild the entire index
 
 Options for search:
-  --top-k <number>    Number of results to return (default: 10)
-  --rerank           Enable reranking for better results
-  --no-rerank        Disable reranking
+  --top-k <number>       Number of results to return (default: 10)
+  --rerank              Enable reranking for better results
+  --no-rerank           Disable reranking
+  --content-type <type> Filter results by content type: 'text', 'image', or 'all' (default: all)
 
 Options for ingest:
   --model <name>       Use specific embedding model
@@ -160,12 +162,14 @@ function validateArgs(command: string, args: string[], options: Record<string, a
         console.error('  raglite search "machine learning"');
         console.error('  raglite search "API documentation" --top-k 10');
         console.error('  raglite search "tutorial" --rerank');
+        console.error('  raglite search "red car" --content-type image');
 
         console.error('');
         console.error('Options:');
-        console.error('  --top-k <number>    Number of results to return (default: 10)');
-        console.error('  --rerank           Enable reranking for better results');
-        console.error('  --no-rerank        Disable reranking');
+        console.error('  --top-k <number>       Number of results to return (default: 10)');
+        console.error('  --rerank              Enable reranking for better results');
+        console.error('  --no-rerank           Disable reranking');
+        console.error('  --content-type <type> Filter by content type: text, image, or all (default: all)');
 
         process.exit(EXIT_CODES.INVALID_ARGUMENTS);
       }
@@ -206,6 +210,36 @@ function validateArgs(command: string, args: string[], options: Record<string, a
     }
 
     options['top-k'] = topK;
+  }
+
+  // Validate content-type option (only for search command)
+  if (options['content-type'] !== undefined) {
+    if (command !== 'search') {
+      console.error(`Error: --content-type option is only available for the 'search' command`);
+      console.error('');
+      console.error('Use this option to filter search results by content type.');
+      console.error('');
+      console.error('Examples:');
+      console.error('  raglite search "query" --content-type text   # Only text results');
+      console.error('  raglite search "query" --content-type image  # Only image results');
+      process.exit(EXIT_CODES.INVALID_ARGUMENTS);
+    }
+
+    const supportedTypes = ['text', 'image', 'all'];
+    if (!supportedTypes.includes(options['content-type'])) {
+      console.error(`Error: Unsupported content type '${options['content-type']}'`);
+      console.error('');
+      console.error('Supported content types:');
+      console.error('  text   Filter to show only text results');
+      console.error('  image  Filter to show only image results');
+      console.error('  all    Show all results (default)');
+      console.error('');
+      console.error('Examples:');
+      console.error('  --content-type text');
+      console.error('  --content-type image');
+      console.error('  --content-type all');
+      process.exit(EXIT_CODES.INVALID_ARGUMENTS);
+    }
   }
 
   // Validate mode option (only for ingest command)

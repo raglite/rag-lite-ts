@@ -16,12 +16,14 @@ This tutorial walks you through setting up and using the Chameleon Multimodal Ar
 
 ## Overview
 
-The Chameleon Multimodal Architecture enables RAG-lite TS to:
+The simplified multimodal architecture enables RAG-lite TS to:
 
 - **Process mixed content**: Text documents (Markdown, PDF, DOCX) and images (JPG, PNG, GIF, WebP)
+- **Cross-modal search**: Find images using text queries and text using image descriptions
 - **Automatic mode detection**: Set mode once during ingestion, automatically detected during search
 - **Intelligent reranking**: Multiple strategies for optimal search results across content types
 - **Seamless experience**: Same CLI commands work for both text-only and multimodal content
+- **Reliable operation**: No fallback mechanisms - each mode works predictably or fails clearly
 
 ### Supported Content Types
 
@@ -425,6 +427,102 @@ raglite search "test" --top-k 20
 
 # Check for both text and image results
 # Look for content_type in results
+```
+
+## Cross-Modal Search Examples
+
+### Finding Images with Text Queries
+
+The power of multimodal mode is the ability to find images using natural language descriptions:
+
+```bash
+# Ingest mixed content in multimodal mode
+raglite ingest ./content/ --mode multimodal
+
+# Find images using text descriptions
+raglite search "red sports car" --content-type image
+raglite search "mountain sunset landscape" --content-type image
+raglite search "architecture diagram" --content-type image
+```
+
+**Programmatic usage:**
+```typescript
+import { SearchEngine } from 'rag-lite-ts';
+
+const search = new SearchEngine('./multimodal.bin', './multimodal.sqlite');
+
+// Find images using text query
+const results = await search.search('red sports car', { top_k: 5 });
+
+// Filter to only image results
+const imageResults = results.filter(r => r.contentType === 'image');
+
+console.log('Images matching "red sports car":');
+imageResults.forEach((result, i) => {
+  console.log(`${i + 1}. ${result.document.source} (${result.score.toFixed(2)})`);
+  console.log(`   Description: ${result.content}`);
+  if (result.metadata?.dimensions) {
+    console.log(`   Size: ${result.metadata.dimensions.width}x${result.metadata.dimensions.height}`);
+  }
+});
+
+await search.cleanup();
+```
+
+### Searching Across Both Content Types
+
+Search for content regardless of type, then separate results:
+
+```typescript
+import { SearchEngine } from 'rag-lite-ts';
+
+const search = new SearchEngine('./multimodal.bin', './multimodal.sqlite');
+
+// Search for content about vehicles
+const results = await search.search('vehicles and transportation', {
+  top_k: 10,
+  rerank: true
+});
+
+// Separate by content type
+const textResults = results.filter(r => r.contentType === 'text');
+const imageResults = results.filter(r => r.contentType === 'image');
+
+console.log(`Found ${textResults.length} text documents and ${imageResults.length} images`);
+
+console.log('\nText Documents:');
+textResults.forEach((result, i) => {
+  console.log(`${i + 1}. ${result.document.source} (${result.score.toFixed(2)})`);
+  console.log(`   ${result.content.substring(0, 100)}...`);
+});
+
+console.log('\nImages:');
+imageResults.forEach((result, i) => {
+  console.log(`${i + 1}. ${result.document.source} (${result.score.toFixed(2)})`);
+  console.log(`   ${result.content}`);
+});
+
+await search.cleanup();
+```
+
+### Understanding Semantic Similarity
+
+CLIP models understand semantic concepts across modalities:
+
+```bash
+# These queries work because CLIP understands visual and semantic concepts
+
+# Color-based search
+raglite search "bright red color" --content-type image
+
+# Abstract concepts
+raglite search "adventure and exploration"
+
+# Visual attributes
+raglite search "modern minimalist design" --content-type image
+
+# Compositional concepts
+raglite search "person standing on mountain peak" --content-type image
 ```
 
 ## Advanced Examples

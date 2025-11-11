@@ -1,0 +1,128 @@
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#e3f2fd','primaryTextColor':'#1565c0','primaryBorderColor':'#1976d2','lineColor':'#42a5f5','secondaryColor':'#fff3e0','tertiaryColor':'#f3e5f5'}}}%%
+
+graph TB
+    %% Input Layer
+    subgraph Input["📥 INPUT LAYER"]
+        TextFiles["📄 Text Files<br/>.md .txt .pdf .docx"]
+        Images["🖼️ Images<br/>.jpg .png .gif .webp"]
+        Mixed["📊 Mixed Content<br/>Text + Images"]
+    end
+
+    %% Chameleon Core
+    Chameleon["🦎 CHAMELEON CORE
+    Auto-detect content mode
+    Set once during ingestion"]
+    
+    %% Mode Selection
+    TextFiles --> Chameleon
+    Images --> Chameleon
+    Mixed --> Chameleon
+    
+    Chameleon -->|Text-only content| TextMode["📝 TEXT MODE"]
+    Chameleon -->|Images or mixed| MultimodalMode["🖼️ MULTIMODAL MODE"]
+
+    %% Text Pipeline
+    subgraph TextPipeline["TEXT PIPELINE"]
+        TP1["🧹 Text Preprocessing
+        Clean JSX, Mermaid, code blocks"]
+        TP2["✂️ Semantic Chunking
+        Natural boundaries, token limits"]
+        TP3["🧠 Sentence Transformer
+        all-MiniLM-L6-v2
+        384D embeddings"]
+        TP4["📊 Vector Generation"]
+        
+        TP1 --> TP2 --> TP3 --> TP4
+    end
+
+    %% Multimodal Pipeline
+    subgraph MultimodalPipeline["MULTIMODAL PIPELINE"]
+        MP1["🔀 Content Router
+        Separate text and images"]
+        MP2T["📝 Text Path
+        CLIP Text Encoder"]
+        MP2I["🖼️ Image Path
+        CLIP Vision Encoder"]
+        MP3["🧠 CLIP Embedder
+        clip-vit-base-patch32
+        512D unified space"]
+        MP4["📊 Cross-Modal Vectors
+        Text ↔ Image compatible"]
+        
+        MP1 --> MP2T --> MP3
+        MP1 --> MP2I --> MP3
+        MP3 --> MP4
+    end
+
+    TextMode --> TextPipeline
+    MultimodalMode --> MultimodalPipeline
+
+    %% Storage Layer
+    subgraph Storage["💾 UNIFIED STORAGE LAYER"]
+        HNSW["🔍 HNSW Index
+        Fast vector search
+        hnswlib-wasm"]
+        SQLite["🗄️ SQLite Database
+        Metadata & mode info
+        Content references"]
+        ContentDir["📁 Content Directory
+        File storage
+        Deduplication"]
+    end
+
+    TP4 --> Storage
+    MP4 --> Storage
+
+    %% Search Layer
+    subgraph SearchLayer["🔎 SEARCH LAYER"]
+        Query["❓ User Query
+        Text or image"]
+        AutoDetect["🦎 Auto-detect Mode
+        Read from database"]
+        Embedder["🧠 Appropriate Embedder
+        Sentence Transformer or CLIP"]
+        VectorSearch["🔍 Vector Search
+        Cosine similarity"]
+        Rerank["🔄 Reranking
+        Cross-encoder or text-derived"]
+        
+        Query --> AutoDetect
+        AutoDetect --> Embedder
+        Embedder --> VectorSearch
+        VectorSearch --> Rerank
+    end
+
+    Storage --> SearchLayer
+
+    %% Output Layer
+    subgraph Output["🎯 OUTPUT LAYER"]
+        Results["✨ Semantic Results
+        Ranked by relevance"]
+        CrossModal["🔄 Cross-Modal Search
+        Text finds images
+        Images find text"]
+        FormatAdaptive["📤 Format-Adaptive
+        File paths or base64"]
+        
+        Results -.-> CrossModal
+        Results -.-> FormatAdaptive
+    end
+
+    Rerank --> Output
+
+    %% Styling
+    classDef inputStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#1565c0
+    classDef chameleonStyle fill:#fff9c4,stroke:#f57f17,stroke-width:3px,color:#f57f17,font-weight:bold
+    classDef textStyle fill:#e8eaf6,stroke:#3f51b5,stroke-width:2px,color:#283593
+    classDef multimodalStyle fill:#fce4ec,stroke:#c2185b,stroke-width:2px,color:#880e4f
+    classDef storageStyle fill:#e8f5e9,stroke:#388e3c,stroke-width:2px,color:#1b5e20
+    classDef searchStyle fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#e65100
+    classDef outputStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#4a148c
+
+    class TextFiles,Images,Mixed inputStyle
+    class Chameleon chameleonStyle
+    class TextMode,TP1,TP2,TP3,TP4 textStyle
+    class MultimodalMode,MP1,MP2T,MP2I,MP3,MP4 multimodalStyle
+    class HNSW,SQLite,ContentDir storageStyle
+    class Query,AutoDetect,Embedder,VectorSearch,Rerank searchStyle
+    class Results,CrossModal,FormatAdaptive outputStyle

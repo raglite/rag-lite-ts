@@ -3,6 +3,62 @@
     "description": "Example MCP tool calls for RAG-lite multimodal server",
     "version": "1.0.0",
     
+    "multi_instance_configuration": {
+      "description": "Configure multiple MCP server instances for different databases",
+      "mcp_client_config": {
+        "mcpServers": {
+          "rag-lite-text-docs": {
+            "command": "npx",
+            "args": ["rag-lite-mcp"],
+            "env": {
+              "RAG_DB_FILE": "./text-docs/db.sqlite",
+              "RAG_INDEX_FILE": "./text-docs/index.bin"
+            }
+          },
+          "rag-lite-multimodal-images": {
+            "command": "npx",
+            "args": ["rag-lite-mcp"],
+            "env": {
+              "RAG_DB_FILE": "./mixed-content/db.sqlite",
+              "RAG_INDEX_FILE": "./mixed-content/index.bin"
+            }
+          },
+          "rag-lite-project-a": {
+            "command": "npx",
+            "args": ["rag-lite-mcp"],
+            "env": {
+              "RAG_DB_FILE": "./projects/project-a/db.sqlite",
+              "RAG_INDEX_FILE": "./projects/project-a/index.bin"
+            }
+          }
+        }
+      },
+      "features": [
+        "Each server instance runs independently",
+        "Dynamic tool descriptions show actual database capabilities",
+        "AI assistants can intelligently route queries to appropriate server",
+        "Supports mixing text-only and multimodal databases",
+        "No manual mode specification needed - auto-detected from database"
+      ],
+      "tool_descriptions_example": {
+        "rag-lite-text-docs::search": "[TEXT MODE] Search indexed documents using semantic similarity. This database contains 150 text documents. Supports .md and .txt files only.",
+        "rag-lite-multimodal-images::search": "[MULTIMODAL MODE] Search indexed documents using semantic similarity. This database contains 200 documents. Contains both text and image content. Image results include base64-encoded data for display. Supports cross-modal search (text queries can find images).",
+        "rag-lite-project-a::search": "[TEXT MODE] Search indexed documents using semantic similarity. This database contains 75 text documents. Supports .md and .txt files only."
+      },
+      "intelligent_routing_examples": {
+        "image_query": {
+          "user_query": "Find images of architecture diagrams",
+          "ai_decision": "Calls rag-lite-multimodal-images::search because description indicates image content",
+          "reasoning": "Tool description shows [MULTIMODAL MODE] and mentions image content"
+        },
+        "text_query": {
+          "user_query": "Search API documentation",
+          "ai_decision": "Calls rag-lite-text-docs::search because description indicates text documents",
+          "reasoning": "Tool description shows [TEXT MODE] and mentions text documents"
+        }
+      }
+    },
+    
     "basic_text_ingestion": {
       "description": "Ingest text documents in text mode",
       "tool": "ingest",

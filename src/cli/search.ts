@@ -96,8 +96,20 @@ export async function runSearch(query: string, options: Record<string, any> = {}
       
       // Perform search
       const startTime = Date.now();
-      const results = await searchEngine.search(query, searchOptions);
+      let results = await searchEngine.search(query, searchOptions);
       const searchTime = Date.now() - startTime;
+      
+      // Apply content type filter if specified
+      const contentTypeFilter = options['content-type'];
+      if (contentTypeFilter && contentTypeFilter !== 'all') {
+        const originalCount = results.length;
+        results = results.filter(r => r.contentType === contentTypeFilter);
+        
+        if (results.length < originalCount) {
+          console.log(`Filtered to ${results.length} ${contentTypeFilter} result${results.length === 1 ? '' : 's'} (from ${originalCount} total)`);
+          console.log('');
+        }
+      }
       
       // Display results
       if (results.length === 0) {
@@ -110,10 +122,31 @@ export async function runSearch(query: string, options: Record<string, any> = {}
         console.log(`Found ${results.length} result${results.length === 1 ? '' : 's'} in ${searchTime}ms:\n`);
         
         results.forEach((result, index) => {
-          console.log(`${index + 1}. ${result.document.title}`);
+          // Add content type icon for visual distinction
+          const contentTypeIcon = result.contentType === 'image' ? '🖼️ ' : '📄 ';
+          const contentTypeLabel = result.contentType === 'image' ? '[IMAGE]' : '[TEXT]';
+          
+          console.log(`${index + 1}. ${contentTypeIcon}${result.document.title}`);
           console.log(`   Source: ${result.document.source}`);
+          console.log(`   Type: ${contentTypeLabel}`);
           console.log(`   Score: ${(result.score * 100).toFixed(1)}%`);
-          console.log(`   Text: ${truncateText(result.content, 200)}`);
+          
+          // Display content differently based on type
+          if (result.contentType === 'image') {
+            // For images, show metadata if available
+            if (result.metadata?.description) {
+              console.log(`   Description: ${truncateText(result.metadata.description, 200)}`);
+            }
+            if (result.metadata?.dimensions) {
+              console.log(`   Dimensions: ${result.metadata.dimensions}`);
+            }
+            if (result.metadata?.format) {
+              console.log(`   Format: ${result.metadata.format}`);
+            }
+          } else {
+            // For text, show content preview
+            console.log(`   Text: ${truncateText(result.content, 200)}`);
+          }
           console.log('');
         });
         

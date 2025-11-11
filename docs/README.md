@@ -76,17 +76,23 @@ New to RAG-lite TS? Start with the [CLI Reference](cli-reference.md) for install
 
 ### 🎨 Multimodal Capabilities (NEW)
 
-- **[Multimodal Architecture Overview](../UNIFIED_CHAMELEON_MULTIMODAL_ARCHITECTURE.md)** - Complete architecture guide
-  - Chameleon polymorphic runtime system
-  - Mode-based operation with automatic detection
-  - Text and image processing capabilities
-  - Implementation status and performance metrics
+- **[Multimodal Configuration](multimodal-configuration.md)** - Multimodal mode setup and configuration
+  - Setting up multimodal mode with CLIP models
+  - Processing mixed content (text + images)
+  - Reranking strategies for multimodal content
+  - Mode persistence and automatic detection
 
 - **[Multimodal Tutorial](multimodal-tutorial.md)** - Step-by-step multimodal guide
-  - Setting up multimodal mode
-  - Processing mixed content (text + images)
-  - Advanced reranking strategies
-  - Performance optimization tips
+  - Getting started with multimodal mode
+  - Cross-modal search examples
+  - Content type filtering
+  - Best practices and workflows
+
+- **[MCP Server Multimodal Guide](mcp-server-multimodal-guide.md)** - MCP integration for multimodal content
+  - Multimodal MCP tools and capabilities
+  - Image content retrieval through MCP
+  - Cross-modal search via MCP interface
+  - Configuration and usage examples
 
 ### 📊 Technical References
 

@@ -14,6 +14,7 @@ export {
 export { countTokens, getTokenizer, resetTokenizer } from './tokenizer.js';
 export { chunkDocument, type Chunk, type Document } from '../core/chunker.js';
 export { type ChunkConfig } from '../core/chunker.js';
+export { SentenceTransformerEmbedder } from './sentence-transformer-embedder.js';
 
 // Re-export preprocessors
 export * from './preprocessors/index.js';

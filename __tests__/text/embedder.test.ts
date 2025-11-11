@@ -24,7 +24,7 @@ describe('EmbeddingEngine', () => {
     const engine = new EmbeddingEngine();
     await assert.rejects(
       engine.embedSingle('test text'),
-      /Model not loaded/
+      /Missing required object: model/
     );
   });
 
@@ -187,7 +187,7 @@ describe('EmbeddingEngine', () => {
     
     await assert.rejects(
       engine.embedSingle('test'),
-      /Failed to generate embedding for single text/
+      /Empty text content provided/
     );
     
     // Restore original method

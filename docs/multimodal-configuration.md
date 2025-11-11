@@ -2,7 +2,7 @@
 
 *Comprehensive configuration examples for multimodal RAG-lite TS deployments*
 
-This guide provides detailed configuration examples for various multimodal use cases, from simple mixed content to complex production deployments with the Chameleon Multimodal Architecture.
+This guide provides detailed configuration examples for various multimodal use cases, from simple mixed content to complex production deployments with the simplified two-mode architecture. The system now provides reliable CLIP-based multimodal capabilities without complex fallback mechanisms.
 
 ## Table of Contents
 
@@ -15,12 +15,30 @@ This guide provides detailed configuration examples for various multimodal use c
 
 ## Configuration Overview
 
-The Chameleon Multimodal Architecture supports configuration through multiple methods with automatic mode persistence:
+The simplified two-mode architecture provides reliable multimodal capabilities:
 
 1. **Mode Storage**: Set once during ingestion, automatically detected during search
 2. **Model Selection**: Choose between text-only and multimodal models
 3. **Reranking Strategies**: Multiple strategies for different content types
 4. **Content Processing**: Optimized settings for mixed content
+5. **No Fallbacks**: Each mode works reliably or fails clearly with actionable errors
+
+### What's New in the Simplified Architecture
+
+**Reliable CLIP Text Embedding:**
+- CLIP text embedding now works without fallback mechanisms
+- No more `pixel_values` errors or complex error recovery
+- Predictable behavior for each mode
+
+**True Cross-Modal Search:**
+- Text queries find semantically similar images
+- Image queries find related text content
+- Unified embedding space for both content types
+
+**Clear Mode Separation:**
+- Text mode: Optimized for text-only content
+- Multimodal mode: Unified CLIP embedding space for text and images
+- No mixing of embedding approaches within a collection
 
 ### Key Configuration Parameters
 

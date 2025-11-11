@@ -57,14 +57,10 @@ export function createReranker(
     // Validate strategy is supported for the mode
     if (!isStrategySupported(strategy, mode)) {
       const supportedStrategies = getSupportedStrategies(mode);
-      console.warn(
-        `⚠️ Strategy '${strategy}' not supported for ${mode} mode. ` +
-        `Supported strategies: ${supportedStrategies.join(', ')}. ` +
-        `Initiating fallback sequence.`
+      throw new Error(
+        `Strategy '${strategy}' not supported for ${mode} mode. ` +
+        `Supported strategies: ${supportedStrategies.join(', ')}`
       );
-      
-      // Initiate fallback chain instead of just using default
-      return createFallbackReranker(mode);
     }
 
     // Validate and merge configuration
@@ -97,10 +93,9 @@ export function createReranker(
 
   } catch (error) {
     const duration = Date.now() - startTime;
-    console.warn(
-      `❌ Failed to create reranker with strategy '${strategy}' for ${mode} mode (${duration}ms): ` +
-      `${error instanceof Error ? error.message : 'Unknown error'}. ` +
-      `Initiating comprehensive fallback sequence.`
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(
+      `❌ Failed to create reranker with strategy '${strategy}' for ${mode} mode (${duration}ms): ${errorMessage}`
     );
     
     // Log error details for debugging
@@ -113,30 +108,7 @@ export function createReranker(
       });
     }
     
-    // Attempt comprehensive fallback sequence
-    try {
-      const fallbackReranker = createFallbackReranker(mode);
-      const totalDuration = Date.now() - startTime;
-      
-      if (fallbackReranker) {
-        console.log(`✅ Fallback reranker created successfully (total: ${totalDuration}ms)`);
-      } else {
-        console.log(`ℹ️ All fallback strategies exhausted, reranking disabled (total: ${totalDuration}ms)`);
-      }
-      
-      return fallbackReranker;
-    } catch (fallbackError) {
-      const totalDuration = Date.now() - startTime;
-      console.error(
-        `❌ Fallback reranker creation also failed (total: ${totalDuration}ms): ` +
-        `${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}. ` +
-        `Reranking will be completely disabled.`
-      );
-      
-      // Return undefined to disable reranking completely
-      // This ensures search operations can continue with vector similarity only
-      return undefined;
-    }
+    throw error;
   }
 }
 
@@ -245,17 +217,7 @@ function createRerankingFunction(
     
     logRerankingError(rerankingError, duration);
     
-    // Try fallback strategy if specified in config
-    if (config.fallback && config.fallback !== strategy && config.fallback !== 'disabled') {
-      console.log(`🔄 Attempting fallback to ${config.fallback} strategy`);
-      return createRerankingFunction(mode, config.fallback, {
-        ...config,
-        strategy: config.fallback,
-        fallback: 'disabled' // Prevent infinite recursion
-      });
-    }
-    
-    throw rerankingError; // Re-throw if no fallback available
+    throw rerankingError;
   }
 }
 
@@ -372,120 +334,7 @@ function wrapRerankFunctionWithErrorRecovery(
   };
 }
 
-/**
- * Create fallback reranker when primary strategy fails
- * Implements automatic strategy downgrade: hybrid → text-derived → metadata → disabled
- */
-function createFallbackReranker(mode: 'text' | 'multimodal'): RerankFunction | undefined {
-  try {
-    console.log(`Creating fallback reranker for ${mode} mode`);
-    
-    if (mode === 'text') {
-      // For text mode: cross-encoder → disabled
-      return createFallbackChain(mode, ['cross-encoder', 'disabled']);
-    } else {
-      // For multimodal mode: hybrid → text-derived → metadata → disabled
-      return createFallbackChain(mode, ['hybrid', 'text-derived', 'metadata', 'disabled']);
-    }
-  } catch (error) {
-    console.warn(
-      `Fallback reranker creation failed: ` +
-      `${error instanceof Error ? error.message : 'Unknown error'}. ` +
-      `Reranking will be disabled.`
-    );
-    return undefined;
-  }
-}
 
-/**
- * Create reranker with automatic fallback chain
- * Tries strategies in order until one succeeds or all fail
- */
-function createFallbackChain(
-  mode: 'text' | 'multimodal', 
-  strategies: RerankingStrategyType[]
-): RerankFunction | undefined {
-  const errors: Array<{ strategy: RerankingStrategyType; error: string }> = [];
-  
-  for (const strategy of strategies) {
-    if (strategy === 'disabled') {
-      console.log('Reached disabled strategy in fallback chain, reranking will be disabled');
-      logFallbackSummary(mode, strategies, errors);
-      return undefined;
-    }
-    
-    try {
-      console.log(`Attempting fallback strategy: ${strategy} for ${mode} mode`);
-      
-      // Validate strategy is supported for the mode
-      if (!isStrategySupported(strategy, mode)) {
-        const error = `Strategy '${strategy}' not supported for ${mode} mode`;
-        errors.push({ strategy, error });
-        console.warn(error);
-        continue;
-      }
-      
-      const config = getDefaultRerankingConfig(mode);
-      const reranker = createRerankingFunction(mode, strategy, {
-        ...config,
-        strategy,
-        fallback: 'disabled' // Prevent infinite recursion in fallback chain
-      });
-      
-      if (reranker) {
-        console.log(`Successfully created fallback reranker with ${strategy} strategy`);
-        logFallbackSummary(mode, strategies, errors, strategy);
-        return reranker;
-      } else {
-        const error = `Strategy '${strategy}' returned undefined reranker`;
-        errors.push({ strategy, error });
-        console.warn(error);
-      }
-      
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      errors.push({ strategy, error: errorMessage });
-      console.warn(`Fallback strategy '${strategy}' failed: ${errorMessage}`);
-    }
-  }
-  
-  // All strategies failed
-  console.error('All fallback strategies failed, reranking will be disabled');
-  logFallbackSummary(mode, strategies, errors);
-  return undefined;
-}
-
-/**
- * Log comprehensive summary of fallback attempts
- */
-function logFallbackSummary(
-  mode: 'text' | 'multimodal',
-  attemptedStrategies: RerankingStrategyType[],
-  errors: Array<{ strategy: RerankingStrategyType; error: string }>,
-  successfulStrategy?: RerankingStrategyType
-): void {
-  console.log('=== Reranking Strategy Fallback Summary ===');
-  console.log(`Mode: ${mode}`);
-  console.log(`Attempted strategies: ${attemptedStrategies.join(' → ')}`);
-  
-  if (successfulStrategy) {
-    console.log(`✅ Successfully fell back to: ${successfulStrategy}`);
-    if (errors.length > 0) {
-      console.log('Failed strategies:');
-      errors.forEach(({ strategy, error }) => {
-        console.log(`  ❌ ${strategy}: ${error}`);
-      });
-    }
-  } else {
-    console.log('❌ All strategies failed, reranking disabled');
-    console.log('Failure details:');
-    errors.forEach(({ strategy, error }) => {
-      console.log(`  ❌ ${strategy}: ${error}`);
-    });
-  }
-  
-  console.log('=== End Fallback Summary ===');
-}
 
 /**
  * Create hybrid reranking function that combines multiple strategies with enhanced error recovery
@@ -788,10 +637,7 @@ export async function getRerankingInfo(mode: 'text' | 'multimodal') {
     mode,
     defaultStrategy: defaultConfig.strategy,
     strategies: strategyInfo,
-    hasAvailableStrategies: strategyInfo.some(info => info.available),
-    fallbackChain: mode === 'text' 
-      ? ['cross-encoder', 'disabled']
-      : ['hybrid', 'text-derived', 'metadata', 'disabled']
+    hasAvailableStrategies: strategyInfo.some(info => info.available)
   };
 }
 
@@ -856,14 +702,8 @@ export async function testRerankingHealth(mode: 'text' | 'multimodal'): Promise<
     strategyTests.push({ strategy, success, duration, error });
   }
   
-  // Test fallback system
-  let fallbackSystemWorking = false;
-  try {
-    const fallbackReranker = createFallbackReranker(mode);
-    fallbackSystemWorking = fallbackReranker !== undefined;
-  } catch (error) {
-    console.warn(`Fallback system test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
+  // Fallback system removed - no longer testing fallback functionality
+  let fallbackSystemWorking = true; // Always true since we don't use fallbacks anymore
   
   // Determine overall health
   let overallHealth: 'healthy' | 'degraded' | 'failed';

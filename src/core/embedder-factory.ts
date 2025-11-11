@@ -1,7 +1,16 @@
 /**
  * CORE MODULE — Simple Embedder Creation Function
- * Simplified embedder creation without complex factory patterns
- * Provides direct model instantiation with comprehensive error handling
+ * 
+ * Provides direct model instantiation with clear validation and error handling.
+ * No fallback mechanisms - models work reliably or fail clearly with actionable guidance.
+ * 
+ * Supported Models:
+ * - Text Mode: sentence-transformers/all-MiniLM-L6-v2, Xenova/all-mpnet-base-v2
+ * - Multimodal Mode: Xenova/clip-vit-base-patch32, Xenova/clip-vit-base-patch16
+ * 
+ * Mode Selection Guide:
+ * - Use text mode for text-only content (faster, optimized for text similarity)
+ * - Use multimodal mode for mixed text/image content (enables cross-modal search)
  */
 
 // Ensure DOM polyfills are set up before any transformers.js usage
@@ -28,21 +37,38 @@ import {
 
 /**
  * Create a universal embedder for the specified model
- * Simple function-based approach without complex factory patterns
+ * 
+ * Simple function-based approach that validates model compatibility and creates
+ * the appropriate embedder. Models work reliably without fallback mechanisms -
+ * if there's an issue, you'll get clear error messages with actionable guidance.
+ * 
+ * Mode Selection:
+ * - Text Mode: Use sentence-transformer models for text-only content
+ *   - Fast, optimized for text similarity
+ *   - Best for: document search, semantic similarity, text clustering
+ * 
+ * - Multimodal Mode: Use CLIP models for mixed text/image content
+ *   - Unified embedding space for text and images
+ *   - Enables cross-modal search (text queries find images, image queries find text)
+ *   - Best for: image search, visual question answering, multimodal retrieval
  * 
  * @param modelName - Name of the model to create
  * @param options - Optional configuration options
  * @returns Promise resolving to a UniversalEmbedder instance
+ * @throws {Error} If model is not supported or validation fails
  * 
  * @example
  * ```typescript
- * // Create a text embedder
+ * // Text mode - optimized for text-only content
  * const textEmbedder = await createEmbedder('sentence-transformers/all-MiniLM-L6-v2');
+ * const textResult = await textEmbedder.embedText('machine learning');
  * 
- * // Create a multimodal embedder
+ * // Multimodal mode - enables cross-modal search
  * const clipEmbedder = await createEmbedder('Xenova/clip-vit-base-patch32');
+ * const textResult = await clipEmbedder.embedText('red sports car');
+ * const imageResult = await clipEmbedder.embedImage('./car.jpg');
  * 
- * // Create with options
+ * // Create with custom options
  * const embedder = await createEmbedder('sentence-transformers/all-MiniLM-L6-v2', {
  *   maxBatchSize: 16,
  *   cachePath: './models'
@@ -115,54 +141,22 @@ export async function createEmbedder(
   // Step 3: Create the appropriate embedder based on model type
   const modelType = modelInfo.type;
   
-  try {
-    switch (modelType) {
-      case 'sentence-transformer':
-        return await createSentenceTransformerEmbedder(modelName, options);
-      
-      case 'clip':
-        return await createCLIPEmbedder(modelName, options);
-      
-      default:
-        const errorMessage = createValidationErrorMessage(modelName, 'not_found', {
-          suggestions: [`Unsupported model type: ${modelType}`]
-        });
-        console.error(errorMessage);
-        throw createModelValidationError(
-          modelName, 
-          `Unsupported model type: ${modelType}. Supported types: sentence-transformer, clip`
-        );
-    }
-  } catch (error) {
-    // Enhance error messages for creation failures
-    if (error instanceof Error) {
-      const enhancedMessage = `Failed to create embedder for '${modelName}': ${error.message}`;
-      
-      // Provide specific guidance based on error type
-      if (error.message.includes('network') || error.message.includes('fetch')) {
-        console.error('🌐 Network Error: Check your internet connection and try again.');
-        console.info('💡 The model needs to be downloaded from Hugging Face on first use.');
-      } else if (error.message.includes('memory') || error.message.includes('OOM')) {
-        console.error('💾 Memory Error: The model requires more memory than available.');
-        console.info('💡 Try using a smaller model or increase available memory.');
-        
-        // Suggest alternative models
-        const alternatives = ModelRegistry.getSupportedModels(modelType).filter(name => {
-          const info = ModelRegistry.getModelInfo(name);
-          return info && 
-                 info.requirements.minimumMemory && 
-                 info.requirements.minimumMemory < (modelInfo.requirements.minimumMemory || 0);
-        });
-        
-        if (alternatives.length > 0) {
-          console.info(`💡 Alternative models: ${alternatives.join(', ')}`);
-        }
-      }
-      
-      throw new Error(enhancedMessage);
-    }
+  switch (modelType) {
+    case 'sentence-transformer':
+      return await createSentenceTransformerEmbedder(modelName, options);
     
-    throw error;
+    case 'clip':
+      return await createCLIPEmbedder(modelName, options);
+    
+    default:
+      const errorMessage = createValidationErrorMessage(modelName, 'not_found', {
+        suggestions: [`Unsupported model type: ${modelType}`]
+      });
+      console.error(errorMessage);
+      throw createModelValidationError(
+        modelName, 
+        `Unsupported model type: ${modelType}. Supported types: sentence-transformer, clip`
+      );
   }
 }
 
@@ -219,19 +213,42 @@ export function getSupportedModelsForContentType(contentType: string): string[] 
 
 /**
  * Get recommended model for a specific use case
- * Provides intelligent model selection based on requirements
+ * 
+ * Provides intelligent model selection based on content types and constraints.
+ * Returns models that work reliably for the specified requirements.
+ * 
+ * Mode Selection Guide:
+ * - Text only (['text']): Returns sentence-transformer models
+ *   - Fast, optimized for text similarity
+ *   - Best for document search and text clustering
+ * 
+ * - Text + Images (['text', 'image']): Returns CLIP models
+ *   - Unified embedding space for cross-modal search
+ *   - Text queries can find images, image queries can find text
+ *   - Best for visual search and multimodal retrieval
  * 
  * @param contentTypes - Required content types
  * @param constraints - Optional constraints (memory, performance, etc.)
+ * @param constraints.maxMemory - Maximum memory in MB
+ * @param constraints.preferPerformance - Prefer faster models
+ * @param constraints.preferAccuracy - Prefer more accurate models
  * @returns Recommended model name or null if no suitable model found
  * 
  * @example
  * ```typescript
- * // Get best text model
+ * // Get best text model (fast, optimized for text)
  * const textModel = getRecommendedModel(['text']);
+ * // Returns: 'sentence-transformers/all-MiniLM-L6-v2'
  * 
- * // Get best multimodal model with memory constraint
- * const multimodalModel = getRecommendedModel(['text', 'image'], { maxMemory: 1024 });
+ * // Get best multimodal model (enables cross-modal search)
+ * const multimodalModel = getRecommendedModel(['text', 'image']);
+ * // Returns: 'Xenova/clip-vit-base-patch32'
+ * 
+ * // Get performance-optimized model
+ * const fastModel = getRecommendedModel(['text'], { preferPerformance: true });
+ * 
+ * // Get accuracy-optimized model
+ * const accurateModel = getRecommendedModel(['text'], { preferAccuracy: true });
  * ```
  */
 export function getRecommendedModel(

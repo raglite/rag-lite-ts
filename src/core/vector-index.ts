@@ -6,6 +6,11 @@
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { JSDOM } from 'jsdom';
 import { handleError, ErrorCategory, ErrorSeverity, createError, safeExecute } from './error-handler.js';
+import {
+  createMissingFileError,
+  createDimensionMismatchError,
+  createMissingDependencyError
+} from './actionable-error-messages.js';
 
 export interface VectorIndexOptions {
   dimensions: number;
@@ -137,7 +142,9 @@ export class VectorIndex {
    */
   async loadIndex(): Promise<void> {
     if (!existsSync(this.indexPath)) {
-      throw new Error(`Index file not found: ${this.indexPath}`);
+      throw createMissingFileError(this.indexPath, 'index', {
+        operationContext: 'VectorIndex.loadIndex'
+      });
     }
 
     try {
@@ -202,12 +209,11 @@ export class VectorIndex {
           console.log(`   Actual vector length: ${stored.vectors[0].vector.length}`);
         }
         
-        throw new Error(
-          `Vector dimension mismatch!\n` +
-          `Index was created with ${stored.dimensions} dimensions\n` +
-          `Current model expects ${this.options.dimensions} dimensions\n` +
-          `This indicates the embedding model has changed.\n` +
-          `Please rebuild the index with the current model.`
+        throw createDimensionMismatchError(
+          this.options.dimensions,
+          stored.dimensions,
+          'vector index loading',
+          { operationContext: 'VectorIndex.loadIndex' }
         );
       }
       
@@ -283,7 +289,12 @@ export class VectorIndex {
     }
 
     if (vector.length !== this.options.dimensions) {
-      throw new Error(`Vector dimension mismatch: expected ${this.options.dimensions}, got ${vector.length}`);
+      throw createDimensionMismatchError(
+        this.options.dimensions,
+        vector.length,
+        'vector addition',
+        { operationContext: 'VectorIndex.addVector' }
+      );
     }
 
     try {
@@ -314,7 +325,12 @@ export class VectorIndex {
     }
 
     if (queryVector.length !== this.options.dimensions) {
-      throw new Error(`Query vector dimension mismatch: expected ${this.options.dimensions}, got ${queryVector.length}`);
+      throw createDimensionMismatchError(
+        this.options.dimensions,
+        queryVector.length,
+        'vector search',
+        { operationContext: 'VectorIndex.search' }
+      );
     }
 
     if (this.currentSize === 0) {
