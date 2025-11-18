@@ -3,7 +3,7 @@
  * Model-agnostic. No transformer or modality-specific logic.
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { existsSync } from 'fs';
 import { JSDOM } from 'jsdom';
 import { handleError, ErrorCategory, ErrorSeverity, createError, safeExecute } from './error-handler.js';
 import {
@@ -11,6 +11,7 @@ import {
   createDimensionMismatchError,
   createMissingDependencyError
 } from './actionable-error-messages.js';
+import { BinaryIndexFormat } from './binary-index-format.js';
 
 export interface VectorIndexOptions {
   dimensions: number;
@@ -195,61 +196,59 @@ export class VectorIndex {
       // Create new HNSW index (third parameter is autoSaveFilename, but we'll handle persistence manually)
       this.index = new this.hnswlib.HierarchicalNSW('cosine', this.options.dimensions, '');
       
-      // Load from JSON format since IDBFS doesn't work in Node.js
-      const data = readFileSync(this.indexPath, 'utf-8');
-      const stored = JSON.parse(data);
+      // Load from binary format
+      const data = await BinaryIndexFormat.load(this.indexPath);
       
-      // Check dimension compatibility and log details
-      if (stored.dimensions && stored.dimensions !== this.options.dimensions) {
+      // Validate dimensions
+      if (data.dimensions !== this.options.dimensions) {
         console.log(`⚠️  Dimension mismatch detected:`);
-        console.log(`   Stored dimensions: ${stored.dimensions}`);
+        console.log(`   Stored dimensions: ${data.dimensions}`);
         console.log(`   Expected dimensions: ${this.options.dimensions}`);
-        console.log(`   Number of vectors: ${stored.vectors?.length || 0}`);
-        if (stored.vectors && stored.vectors.length > 0) {
-          console.log(`   Actual vector length: ${stored.vectors[0].vector.length}`);
+        console.log(`   Number of vectors: ${data.vectors.length}`);
+        if (data.vectors.length > 0) {
+          console.log(`   Actual vector length: ${data.vectors[0].vector.length}`);
         }
         
         throw createDimensionMismatchError(
           this.options.dimensions,
-          stored.dimensions,
+          data.dimensions,
           'vector index loading',
           { operationContext: 'VectorIndex.loadIndex' }
         );
       }
       
       // Update options from stored data
-      this.options.maxElements = stored.maxElements || this.options.maxElements;
-      this.options.M = stored.M || this.options.M;
-      this.options.efConstruction = stored.efConstruction || this.options.efConstruction;
-      this.options.seed = stored.seed || this.options.seed;
+      this.options.maxElements = data.maxElements;
+      this.options.M = data.M;
+      this.options.efConstruction = data.efConstruction;
+      this.options.seed = data.seed;
       
-      // Recreate the index from stored data
+      // Initialize HNSW index
       this.index.initIndex(
         this.options.maxElements,
-        this.options.M || 16,
-        this.options.efConstruction || 200,
-        this.options.seed || 100
+        this.options.M,
+        this.options.efConstruction,
+        this.options.seed
       );
       
       // Clear and repopulate vector storage
       this.vectorStorage.clear();
       
-      // Add all stored vectors back
-      for (const item of stored.vectors || []) {
-        const vector = new Float32Array(item.vector);
-        this.index.addPoint(vector, item.id, false);
-        this.vectorStorage.set(item.id, vector);
+      // Add all stored vectors to HNSW index
+      for (const item of data.vectors) {
+        this.index.addPoint(item.vector, item.id, false);
+        this.vectorStorage.set(item.id, item.vector);
       }
       
-      this.currentSize = stored.vectors?.length || 0;
-      console.log(`Loaded HNSW index with ${this.currentSize} vectors from ${this.indexPath}`);
+      this.currentSize = data.currentSize;
+      console.log(`✓ Loaded HNSW index with ${this.currentSize} vectors from ${this.indexPath}`);
     } catch (error) {
       throw new Error(`Failed to load index from ${this.indexPath}: ${error}`);
     }
   }
 
   /**
-   * Save index to file using JSON format (since IDBFS doesn't work in Node.js)
+   * Save index to binary format
    */
   async saveIndex(): Promise<void> {
     if (!this.index) {
@@ -257,24 +256,24 @@ export class VectorIndex {
     }
 
     try {
-      // Convert stored vectors to serializable format
+      // Collect all vectors from storage
       const vectors = Array.from(this.vectorStorage.entries()).map(([id, vector]) => ({
         id,
-        vector: Array.from(vector)
+        vector
       }));
       
-      const stored = {
+      // Save to binary format
+      await BinaryIndexFormat.save(this.indexPath, {
         dimensions: this.options.dimensions,
         maxElements: this.options.maxElements,
         M: this.options.M || 16,
         efConstruction: this.options.efConstruction || 200,
         seed: this.options.seed || 100,
         currentSize: this.currentSize,
-        vectors: vectors
-      };
+        vectors
+      });
       
-      writeFileSync(this.indexPath, JSON.stringify(stored, null, 2));
-      console.log(`Saved HNSW index with ${this.currentSize} vectors to ${this.indexPath}`);
+      console.log(`✓ Saved HNSW index with ${this.currentSize} vectors to ${this.indexPath}`);
     } catch (error) {
       throw new Error(`Failed to save index to ${this.indexPath}: ${error}`);
     }

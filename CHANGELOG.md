@@ -1,5 +1,28 @@
 # Changelog
 
+## [2.0.1] - 2025-11-18
+
+### Features
+- **SearchEngine Chameleon Architecture**: `SearchEngine` now automatically detects mode (text/multimodal) from database and adapts accordingly
+  - Simple constructor works for all modes: `new SearchEngine(indexPath, dbPath)`
+  - No need for `PolymorphicSearchFactory` in basic usage
+  - Mode detection happens transparently on first search
+
+### Performance
+- Binary index format: 3.6x smaller files, 3.5x faster loading
+- Zero-copy Float32Array views for efficient deserialization
+
+### Breaking Changes
+- Index files now use binary format (not backward compatible with v2.0.0)
+- **Migration required**: Remove old index files and re-ingest
+  ```bash
+  rm .raglite/*.index && raglite ingest ./docs
+  ```
+- Database content preserved (no data loss)
+
+
+---
+
 ## [2.0.0] - 2025-11-11 - Chameleon Multimodal Architecture
 
 ### Release Summary
