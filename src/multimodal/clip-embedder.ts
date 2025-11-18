@@ -305,6 +305,39 @@ export class CLIPEmbedder extends BaseUniversalEmbedder {
   }
 
   // =============================================================================
+  // NORMALIZATION UTILITIES
+  // =============================================================================
+
+  /**
+   * Apply L2-normalization to an embedding vector
+   * 
+   * L2-normalization ensures that all embeddings have unit length (magnitude = 1),
+   * which is essential for CLIP models as they were trained with normalized embeddings.
+   * This normalization makes cosine similarity calculations more reliable and ensures
+   * that vector magnitudes don't affect similarity scores.
+   * 
+   * @param embedding - The embedding vector to normalize (modified in-place)
+   * @returns The normalized embedding vector (same reference as input)
+   * @private
+   */
+  private normalizeEmbedding(embedding: Float32Array): Float32Array {
+    // Calculate L2 norm (magnitude)
+    const magnitude = Math.sqrt(
+      Array.from(embedding).reduce((sum, val) => sum + val * val, 0)
+    );
+
+    // Avoid division by zero
+    if (magnitude > 0) {
+      // Normalize each component by dividing by magnitude
+      for (let i = 0; i < embedding.length; i++) {
+        embedding[i] /= magnitude;
+      }
+    }
+
+    return embedding;
+  }
+
+  // =============================================================================
   // TEXT EMBEDDING METHODS
   // =============================================================================
 
@@ -315,11 +348,11 @@ export class CLIPEmbedder extends BaseUniversalEmbedder {
    * pixel_values errors. Text is tokenized with CLIP's 77 token limit and
    * automatically truncated if necessary.
    * 
-   * Returns a 512-dimensional embedding vector in the unified CLIP embedding space,
-   * which is directly comparable to image embeddings for cross-modal search.
+   * Returns a 512-dimensional L2-normalized embedding vector in the unified CLIP 
+   * embedding space, which is directly comparable to image embeddings for cross-modal search.
    * 
    * @param text - The text to embed (will be trimmed and validated)
-   * @returns EmbeddingResult with 512-dimensional vector and metadata
+   * @returns EmbeddingResult with 512-dimensional normalized vector and metadata
    * @throws {Error} If text is empty, model not loaded, or embedding fails
    * 
    * @example
@@ -400,10 +433,19 @@ export class CLIPEmbedder extends BaseUniversalEmbedder {
         throw new Error('CLIP embedding is all zeros');
       }
 
-      // Calculate embedding magnitude for quality assessment
-      const magnitude = Math.sqrt(Array.from(embedding).reduce((sum, val) => sum + val * val, 0));
-      if (magnitude < 1e-6) {
-        throw new Error(`CLIP embedding has critically low magnitude: ${magnitude.toExponential(3)}`);
+      // Calculate embedding magnitude before normalization for quality assessment
+      const magnitudeBeforeNorm = Math.sqrt(Array.from(embedding).reduce((sum, val) => sum + val * val, 0));
+      if (magnitudeBeforeNorm < 1e-6) {
+        throw new Error(`CLIP embedding has critically low magnitude: ${magnitudeBeforeNorm.toExponential(3)}`);
+      }
+
+      // Apply L2-normalization (CLIP models are trained with normalized embeddings)
+      this.normalizeEmbedding(embedding);
+
+      // Verify normalization was successful
+      const magnitudeAfterNorm = Math.sqrt(Array.from(embedding).reduce((sum, val) => sum + val * val, 0));
+      if (Math.abs(magnitudeAfterNorm - 1.0) > 0.01) {
+        console.warn(`Warning: Embedding normalization may be imprecise (magnitude: ${magnitudeAfterNorm.toFixed(6)})`);
       }
 
       // Generate unique embedding ID
@@ -417,7 +459,9 @@ export class CLIPEmbedder extends BaseUniversalEmbedder {
           originalText: text,
           processedText: finalProcessedText,
           textLength: finalProcessedText.length,
-          embeddingMagnitude: magnitude,
+          embeddingMagnitudeBeforeNorm: magnitudeBeforeNorm,
+          embeddingMagnitudeAfterNorm: magnitudeAfterNorm,
+          normalized: true,
           modelName: this.modelName,
           modelType: this.modelType,
           dimensions: this.dimensions
@@ -444,10 +488,10 @@ export class CLIPEmbedder extends BaseUniversalEmbedder {
    * - Converted to proper pixel_values format using AutoProcessor
    * - Normalized for CLIP vision model
    * 
-   * Returns a 512-dimensional embedding vector directly comparable to text embeddings.
+   * Returns a 512-dimensional L2-normalized embedding vector directly comparable to text embeddings.
    * 
    * @param imagePath - Local file path or URL to the image
-   * @returns EmbeddingResult with 512-dimensional vector and metadata
+   * @returns EmbeddingResult with 512-dimensional normalized vector and metadata
    * @throws {Error} If image not found, unsupported format, or embedding fails
    * 
    * @example
@@ -527,10 +571,19 @@ export class CLIPEmbedder extends BaseUniversalEmbedder {
         throw new Error('CLIP image embedding is all zeros');
       }
 
-      // Calculate embedding magnitude for quality assessment
-      const magnitude = Math.sqrt(Array.from(embedding).reduce((sum, val) => sum + val * val, 0));
-      if (magnitude < 1e-6) {
-        throw new Error(`CLIP image embedding has critically low magnitude: ${magnitude.toExponential(3)}`);
+      // Calculate embedding magnitude before normalization for quality assessment
+      const magnitudeBeforeNorm = Math.sqrt(Array.from(embedding).reduce((sum, val) => sum + val * val, 0));
+      if (magnitudeBeforeNorm < 1e-6) {
+        throw new Error(`CLIP image embedding has critically low magnitude: ${magnitudeBeforeNorm.toExponential(3)}`);
+      }
+
+      // Apply L2-normalization (CLIP models are trained with normalized embeddings)
+      this.normalizeEmbedding(embedding);
+
+      // Verify normalization was successful
+      const magnitudeAfterNorm = Math.sqrt(Array.from(embedding).reduce((sum, val) => sum + val * val, 0));
+      if (Math.abs(magnitudeAfterNorm - 1.0) > 0.01) {
+        console.warn(`Warning: Image embedding normalization may be imprecise (magnitude: ${magnitudeAfterNorm.toFixed(6)})`);
       }
 
       // Generate unique embedding ID
@@ -542,7 +595,9 @@ export class CLIPEmbedder extends BaseUniversalEmbedder {
         contentType: 'image',
         metadata: {
           imagePath: processedPath,
-          embeddingMagnitude: magnitude,
+          embeddingMagnitudeBeforeNorm: magnitudeBeforeNorm,
+          embeddingMagnitudeAfterNorm: magnitudeAfterNorm,
+          normalized: true,
           modelName: this.modelName,
           modelType: this.modelType,
           dimensions: this.dimensions
@@ -879,6 +934,9 @@ export class CLIPEmbedder extends BaseUniversalEmbedder {
           `CLIP embedding dimension mismatch for item ${i}: expected ${this.dimensions}, got ${embedding.length}`
         );
       }
+
+      // Apply L2-normalization (CLIP models are trained with normalized embeddings)
+      this.normalizeEmbedding(embedding);
 
       const embeddingId = this.generateEmbeddingId(item.content, 'text');
 

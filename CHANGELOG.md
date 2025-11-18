@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.0.0] - 2025-01-15 - Chameleon Multimodal Architecture
+## [2.0.0] - 2025-11-11 - Chameleon Multimodal Architecture
 
 ### Release Summary
 
@@ -149,7 +149,7 @@ All planned features for the Chameleon Multimodal Architecture release are compl
 
 ---
 
-## [1.0.2] - 2025-01-12
+## [1.0.2] - 2025-10-12
 
 ### Documentation
 - Updated API reference with simplified constructor patterns

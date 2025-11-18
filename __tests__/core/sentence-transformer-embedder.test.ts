@@ -4,12 +4,11 @@
  * Uses Node.js test runner
  */
 
-import { test, describe, beforeEach } from 'node:test';
+import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
 
-import { SentenceTransformerEmbedder } from '../../src/../src/core/sentence-transformer-embedder.js';
-import { ModelRegistry } from '../../src/../src/core/model-registry.js';
-import type { EmbeddingResult } from '../../src/types.js';
+import { SentenceTransformerEmbedder } from '../../src/text/sentence-transformer-embedder.js';
+import { ModelRegistry } from '../../src/core/model-registry.js';
 
 describe('Sentence Transformer Embedder Implementation', () => {
   

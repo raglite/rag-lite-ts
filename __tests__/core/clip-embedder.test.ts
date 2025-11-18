@@ -4,12 +4,11 @@
  * Uses Node.js test runner
  */
 
-import { test, describe, beforeEach } from 'node:test';
+import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
 
-import { CLIPEmbedder } from '../../src/../src/core/clip-embedder.js';
-import { ModelRegistry } from '../../src/../src/core/model-registry.js';
-import type { EmbeddingResult } from '../../src/types.js';
+import { CLIPEmbedder } from '../../src/multimodal/clip-embedder.js';
+import { ModelRegistry } from '../../src/core/model-registry.js';
 
 describe('CLIP Embedder Implementation (Text-Only Initially)', () => {
   
@@ -337,7 +336,7 @@ describe('CLIP Embedder Implementation (Text-Only Initially)', () => {
         assert.strictEqual(results.length, 3, 'Should return results for all items');
         
         // All results should have 512 dimensions (even placeholders)
-        results.forEach(result => {
+        results.forEach((result: { vector: Float32Array }) => {
           assert.ok(result.vector.length === 512, 'All results should have 512 dimensions');
         });
         

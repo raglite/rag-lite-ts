@@ -1,28 +1,47 @@
 /**
- * Public API SearchEngine - Simple constructor interface with internal factory usage
+ * Public API SearchEngine - Simple constructor with Chameleon Architecture
  * 
- * This class provides a clean, simple API while using the new core architecture 
- * internally. It handles dependency injection automatically.
+ * This class provides a clean, simple API that automatically adapts to the mode
+ * (text or multimodal) stored in the database during ingestion. The system detects
+ * the mode and creates the appropriate embedder and reranker without user intervention.
+ * 
+ * Chameleon Architecture Features:
+ * - Automatic mode detection from database configuration
+ * - Seamless switching between text and multimodal modes
+ * - Appropriate embedder selection (sentence-transformer or CLIP)
+ * - Mode-specific reranking strategies
  * 
  * @example
  * ```typescript
- * // Simple usage
+ * // Simple usage - mode automatically detected from database
  * const search = new SearchEngine('./index.bin', './db.sqlite');
  * const results = await search.search('query');
  * 
- * // With options
+ * // Works for both text and multimodal databases
+ * // Text mode: uses sentence-transformer embeddings
+ * // Multimodal mode: uses CLIP embeddings for cross-modal search
+ * 
+ * // With options (advanced)
  * const search = new SearchEngine('./index.bin', './db.sqlite', {
- *   embeddingModel: 'all-MiniLM-L6-v2',
  *   enableReranking: true
  * });
  * ```
  */
 
 import { SearchEngine as CoreSearchEngine } from './core/search.js';
-import { TextSearchFactory, type TextSearchOptions } from './factories/index.js';
 import type { SearchResult, SearchOptions, EmbedFunction, RerankFunction } from './core/types.js';
 
-export interface SearchEngineOptions extends TextSearchOptions {
+export interface SearchEngineOptions {
+  /** Embedding model name override */
+  embeddingModel?: string;
+  /** Embedding batch size override */
+  batchSize?: number;
+  /** Reranking model name override */
+  rerankingModel?: string;
+  /** Whether to enable reranking (default: true) */
+  enableReranking?: boolean;
+  /** Top-k results to return (default: from config) */
+  topK?: number;
   /** Custom embedding function (advanced usage) */
   embedFn?: EmbedFunction;
   /** Custom reranking function (advanced usage) */
@@ -56,7 +75,13 @@ export class SearchEngine {
   }
 
   /**
-   * Initialize the search engine using the factory or direct injection
+   * Initialize the search engine using polymorphic factory or direct injection
+   * 
+   * Chameleon Architecture Implementation:
+   * - Automatically detects mode from database (text or multimodal)
+   * - Creates appropriate embedder based on detected mode
+   * - Applies mode-specific reranking strategies
+   * - Provides seamless polymorphic behavior
    */
   private async initialize(): Promise<void> {
     if (this.coreEngine) {
@@ -102,11 +127,13 @@ export class SearchEngine {
         // Create core engine with dependency injection
         this.coreEngine = new CoreSearchEngine(embedFn, indexManager, db, this.options.rerankFn, contentResolver);
       } else {
-        // Use factory for standard initialization
-        this.coreEngine = await TextSearchFactory.create(
+        // Use core polymorphic factory for automatic mode detection (Chameleon Architecture)
+        // This enables SearchEngine to automatically adapt to text or multimodal mode
+        // based on the configuration stored in the database during ingestion
+        const { PolymorphicSearchFactory } = await import('./core/polymorphic-search-factory.js');
+        this.coreEngine = await PolymorphicSearchFactory.create(
           this.indexPath,
-          this.dbPath,
-          this.options
+          this.dbPath
         );
       }
     })();

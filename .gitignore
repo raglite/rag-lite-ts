@@ -65,3 +65,7 @@ temp/
 # test-data/ - keeping this tracked for tests
 
 # Examples should be tracked in git but excluded from npm package
+
+# Paper directory - research paper drafts and documentation
+paper/
+evaluation/

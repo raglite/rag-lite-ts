@@ -433,7 +433,6 @@ Now Claude can search your docs directly! Works with any MCP-compatible AI tool.
 - **Content management** - Deduplication, cleanup
 - **Model compatibility** - Auto-detection, rebuilds
 - **Error recovery** - Clear messages, helpful hints
-- **Battle-tested** - Used in real applications
 
 </td>
 </tr>

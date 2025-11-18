@@ -53,6 +53,25 @@ export {
   TextFactoryHelpers
 } from './factories/index.js';
 
+/**
+ * @deprecated PolymorphicSearchFactory is no longer needed - SearchEngine now automatically
+ * detects mode from database and adapts accordingly (Chameleon Architecture).
+ * 
+ * Migration Guide:
+ * ```typescript
+ * // Old way (deprecated):
+ * const search = await PolymorphicSearchFactory.create('./index.bin', './db.sqlite');
+ * 
+ * // New way (recommended):
+ * const search = new SearchEngine('./index.bin', './db.sqlite');
+ * await search.search('query'); // Mode automatically detected
+ * ```
+ * 
+ * The SearchEngine constructor now uses the polymorphic factory internally,
+ * providing the same automatic mode detection without requiring explicit factory usage.
+ */
+export { PolymorphicSearchFactory } from './factories/index.js';
+
 // Convenience aliases for common usage
 export {
   TextSearchFactory as SearchFactory,
@@ -65,6 +84,12 @@ export type {
   TextSearchOptions,
   TextIngestionOptions
 } from './factories/index.js';
+
+/**
+ * @deprecated PolymorphicSearchOptions is no longer needed - use SearchEngineOptions instead.
+ * SearchEngine now automatically detects mode and adapts (Chameleon Architecture).
+ */
+export type { PolymorphicSearchOptions } from './factories/index.js';
 
 // Backward compatibility type aliases
 export type {

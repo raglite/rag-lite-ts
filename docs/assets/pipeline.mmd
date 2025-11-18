@@ -28,8 +28,7 @@ graph TB
         TP2["✂️ Semantic Chunking
         Natural boundaries, token limits"]
         TP3["🧠 Sentence Transformer
-        all-MiniLM-L6-v2
-        384D embeddings"]
+        384D/768D embeddings"]
         TP4["📊 Vector Generation"]
         
         TP1 --> TP2 --> TP3 --> TP4
@@ -44,7 +43,6 @@ graph TB
         MP2I["🖼️ Image Path
         CLIP Vision Encoder"]
         MP3["🧠 CLIP Embedder
-        clip-vit-base-patch32
         512D unified space"]
         MP4["📊 Cross-Modal Vectors
         Text ↔ Image compatible"]
@@ -82,7 +80,7 @@ graph TB
         Embedder["🧠 Appropriate Embedder
         Sentence Transformer or CLIP"]
         VectorSearch["🔍 Vector Search
-        Cosine similarity"]
+        Cosine distance"]
         Rerank["🔄 Reranking
         Cross-encoder or text-derived"]
         

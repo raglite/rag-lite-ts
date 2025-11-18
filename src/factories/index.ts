@@ -44,6 +44,15 @@ export {
   TextFactoryHelpers
 } from './text-factory.js';
 
+// Polymorphic factory for mode-aware search
+export {
+  PolymorphicSearchFactory
+} from './polymorphic-factory.js';
+
+export type {
+  PolymorphicSearchOptions
+} from './polymorphic-factory.js';
+
 // Factory option types
 export type {
   TextSearchOptions,
