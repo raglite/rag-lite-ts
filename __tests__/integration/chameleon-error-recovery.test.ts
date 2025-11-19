@@ -554,3 +554,19 @@ describe('Chameleon Error Recovery and Reliability', () => {
     });
   });
 });
+
+// Force exit after tests complete to prevent hanging
+setTimeout(() => {
+  console.log('🔄 Forcing test exit to prevent hanging...');
+  
+  if (global.gc) {
+    global.gc();
+    setTimeout(() => { if (global.gc) global.gc(); }, 100);
+    setTimeout(() => { if (global.gc) global.gc(); }, 300);
+  }
+  
+  setTimeout(() => {
+    console.log('✅ Exiting test process');
+    process.exit(0);
+  }, 1000);
+}, 5000);

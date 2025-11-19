@@ -1,6 +1,6 @@
 {
   "name": "rag-lite-ts",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Local-first TypeScript retrieval engine with Chameleon Multimodal Architecture for semantic search over text and image content",
   "type": "module",
   "main": "./dist/index.js",
@@ -31,9 +31,16 @@
     "build:test": "tsc --project tsconfig.test.json",
     "clean": "rimraf dist",
     "dev": "tsc --watch",
-    "test": "npm run build:test && node --test dist/text/tokenizer.test.js dist/core/chunker.test.js dist/text/embedder.test.js dist/core/vector-index.test.js dist/index-manager.test.js dist/core/search.test.js dist/file-processor.test.js dist/mcp-server.test.js dist/preprocess.test.js dist/core/config.test.js dist/preprocessors/integration.test.js dist/cli/cli.test.js",
-    "test:integration": "npm run build && npm run build:test && node --test dist/integration.test.js",
-    "test:all": "npm run test && npm run test:integration",
+    "test": "npm run build:test && node --expose-gc --test --test-concurrency=1 dist/__tests__/core dist/__tests__/text dist/__tests__/preprocessors",
+    "test:verbose": "npm run build:test && node --expose-gc --test --test-concurrency=1 --test-reporter=tap dist/__tests__/core dist/__tests__/text dist/__tests__/preprocessors",
+    "test:core": "npm run build:test && node --expose-gc --test --test-concurrency=1 dist/__tests__/core",
+    "test:core:verbose": "npm run build:test && node --expose-gc --test --test-concurrency=1 --test-reporter=tap dist/__tests__/core",
+    "test:text": "npm run build:test && node --expose-gc --test --test-concurrency=1 dist/__tests__/text",
+    "test:preprocessors": "npm run build:test && node --expose-gc --test --test-concurrency=1 dist/__tests__/preprocessors",
+    "test:integration": "npm run build && npm run build:test && node --expose-gc --test --test-concurrency=1 dist/__tests__/integration",
+    "test:integration:verbose": "npm run build && npm run build:test && node --expose-gc --test --test-concurrency=1 --test-reporter=tap dist/__tests__/integration",
+    "test:all": "npm run build:test && node --expose-gc --test --test-concurrency=1 dist/__tests__",
+    "test:all:verbose": "npm run build:test && node --expose-gc --test --test-concurrency=1 --test-reporter=tap dist/__tests__",
     "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [

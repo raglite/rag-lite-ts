@@ -3,7 +3,7 @@
 
 greeting: "Hello! I'm your Dexto Helper agent."
 agentCard:
-  name: "Dexto Helper Agent"
+  name: "Dexto-Helper-Agent"
   description: "Comprehensive AI assistant for the Dexto agent framework. Provides expert guidance on architecture, development, configuration, deployment, and real-world applications. Includes semantic search over complete Dexto documentation covering concepts, tutorials, examples, and advanced patterns."
   url: "http://localhost:3000"
   version: "1.0.0"

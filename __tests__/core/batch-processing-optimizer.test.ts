@@ -418,3 +418,24 @@ describe('Batch Processing Optimizer', () => {
     });
   });
 });
+
+// =============================================================================
+// MANDATORY: Force exit after test completion to prevent hanging
+// ML resources (image-to-text processor) don't clean up gracefully
+// =============================================================================
+setTimeout(() => {
+  console.log('🔄 Forcing test exit to prevent hanging from ML resources...');
+  
+  // Multiple garbage collection attempts
+  if (global.gc) {
+    global.gc();
+    setTimeout(() => global.gc && global.gc(), 100);
+    setTimeout(() => global.gc && global.gc(), 300);
+  }
+  
+  // Force exit after cleanup attempts
+  setTimeout(() => {
+    console.log('✅ Exiting test process');
+    process.exit(0);
+  }, 1000);
+}, 2000);

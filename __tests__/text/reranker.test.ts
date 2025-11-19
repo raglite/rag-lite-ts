@@ -46,7 +46,7 @@ describe('CrossEncoderReranker', () => {
     assert.deepStrictEqual(rerankedResults, []);
   });
 
-  test('should fallback to original scores on reranking failure', async () => {
+  test('should fallback to simple text reranking on model failure', async () => {
     const query = 'test query';
     const originalResults: SearchResult[] = [
       {
@@ -68,9 +68,16 @@ describe('CrossEncoderReranker', () => {
     // @ts-ignore - accessing private property for testing
     mockReranker.model = () => { throw new Error('Model failure'); };
 
-    // Should fallback to original results without throwing
+    // Should fallback to simple text reranking without throwing
     const results = await mockReranker.rerank(query, originalResults);
-    assert.deepStrictEqual(results, originalResults);
+    
+    // Should return results (may have adjusted scores from simple text reranking)
+    assert.strictEqual(results.length, originalResults.length);
+    assert.strictEqual(results[0].content, originalResults[0].content);
+    assert.strictEqual(results[1].content, originalResults[1].content);
+    // Scores may be adjusted by simple text reranking fallback
+    assert.ok(results[0].score >= originalResults[0].score);
+    assert.ok(results[1].score >= originalResults[1].score);
   });
 
   test('should use Xenova model as default for better compatibility', () => {

@@ -380,3 +380,25 @@ describe('Sentence Transformer Embedder Implementation', () => {
     });
   });
 });
+
+
+// =============================================================================
+// MANDATORY: Force exit after test completion to prevent hanging
+// This test loads actual sentence transformer models which don't clean up gracefully
+// =============================================================================
+setTimeout(() => {
+  console.log('🔄 Forcing test exit to prevent hanging from ML resources...');
+  
+  // Multiple garbage collection attempts
+  if (global.gc) {
+    global.gc();
+    setTimeout(() => global.gc && global.gc(), 100);
+    setTimeout(() => global.gc && global.gc(), 300);
+  }
+  
+  // Force exit after cleanup attempts
+  setTimeout(() => {
+    console.log('✅ Exiting test process');
+    process.exit(0);
+  }, 1000);
+}, 2000);

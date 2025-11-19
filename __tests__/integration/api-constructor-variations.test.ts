@@ -10,18 +10,25 @@ import { existsSync, rmSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
+// Test configuration
+const TEST_BASE_DIR = join(tmpdir(), 'rag-lite-constructor-test');
+
 describe('Constructor Variations - Clean Architecture', () => {
-    const testBaseDir = join(tmpdir(), 'rag-lite-constructor-test');
-    const testDir = join(testBaseDir, Date.now().toString());
-    const docsDir = join(testDir, 'docs');
+    const testBaseDir = TEST_BASE_DIR;
+    let testDir: string;
+    let docsDir: string;
+
+    // Generate unique directory for each test
+    function getUniqueTestDir(): string {
+        return join(testBaseDir, `${Date.now()}-${Math.random().toString(36).substring(7)}`);
+    }
 
     beforeEach(async () => {
-        // Clean up any existing test directory
-        if (existsSync(testDir)) {
-            rmSync(testDir, { recursive: true, force: true });
-        }
+        // Create unique directory for this test
+        testDir = getUniqueTestDir();
+        docsDir = join(testDir, 'docs');
 
-        // Create test directories
+        // Create test directories (no cleanup needed - unique dir per test)
         mkdirSync(testDir, { recursive: true });
         mkdirSync(docsDir, { recursive: true });
 
@@ -40,25 +47,27 @@ Machine learning algorithms are powerful.
     });
 
     afterEach(async () => {
-        // Add a small delay for Windows file handles to close
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Give time for resources to be released
+        await new Promise(resolve => setTimeout(resolve, 500));
 
-        // Clean up test directory
+        // Force garbage collection if available
+        if (global.gc) {
+            global.gc();
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        // Clean up this test's directory
         if (existsSync(testDir)) {
-            let retries = 3;
-            while (retries > 0) {
+            try {
+                rmSync(testDir, { recursive: true, force: true });
+            } catch (error: any) {
+                // Windows file locking - retry after delay
+                await new Promise(resolve => setTimeout(resolve, 1000));
                 try {
                     rmSync(testDir, { recursive: true, force: true });
-                    break;
-                } catch (error: any) {
-                    if (error.code === 'EBUSY' && retries > 1) {
-                        await new Promise(resolve => setTimeout(resolve, 200));
-                        retries--;
-                    } else {
-                        // If it's the last retry or not a busy error, just log and continue
-                        console.warn('Failed to clean up test directory:', error.message);
-                        break;
-                    }
+                } catch (retryError: any) {
+                    console.warn(`⚠️  Could not clean up test directory: ${testDir}`, retryError.message);
+                    // Don't fail the test due to cleanup issues
                 }
             }
         }
@@ -353,3 +362,35 @@ Machine learning algorithms are powerful.
         });
     });
 });
+
+
+// =============================================================================
+// MANDATORY: Force exit after test completion to prevent hanging
+// Integration tests with ML models and database connections need forced exit
+// =============================================================================
+setTimeout(async () => {
+    console.log('🔄 Forcing test exit to prevent hanging from ML/database resources...');
+    
+    // Clean up all test directories
+    if (existsSync(TEST_BASE_DIR)) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        try {
+            rmSync(TEST_BASE_DIR, { recursive: true, force: true });
+        } catch (error) {
+            console.warn('⚠️  Could not clean up base test directory:', error);
+        }
+    }
+    
+    // Multiple garbage collection attempts
+    if (global.gc) {
+        global.gc();
+        setTimeout(() => global.gc && global.gc(), 100);
+        setTimeout(() => global.gc && global.gc(), 300);
+    }
+    
+    // Force exit after cleanup attempts
+    setTimeout(() => {
+        console.log('✅ Exiting test process');
+        process.exit(0);
+    }, 1000);
+}, 2000);

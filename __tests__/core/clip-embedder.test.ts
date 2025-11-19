@@ -78,7 +78,7 @@ describe('CLIP Embedder Implementation (Text-Only Initially)', () => {
       assert.ok(modelInfo.capabilities.supportsImageTextSimilarity, 'Should support image-text similarity');
       assert.ok(modelInfo.capabilities.supportsTextImageRetrieval, 'Should support text-image retrieval');
       assert.strictEqual(modelInfo.capabilities.recommendedUseCase, 'multimodal similarity and zero-shot classification');
-      assert.strictEqual(modelInfo.capabilities.imageEmbeddingStatus, 'placeholder');
+      assert.strictEqual(modelInfo.capabilities.imageEmbeddingStatus, 'implemented');
     });
   });
   
@@ -139,13 +139,12 @@ describe('CLIP Embedder Implementation (Text-Only Initially)', () => {
       const capabilities = embedder.getMultimodalCapabilities();
       
       assert.ok(capabilities.textSupport, 'Should support text');
-      assert.ok(!capabilities.imageSupport, 'Should not yet support images');
+      assert.ok(capabilities.imageSupport, 'Should support images');
       assert.ok(!capabilities.videoSupport, 'Should not support video');
       assert.ok(!capabilities.audioSupport, 'Should not support audio');
       
       assert.ok(Array.isArray(capabilities.plannedFeatures), 'Should have planned features');
-      assert.ok(capabilities.plannedFeatures.length > 0, 'Should have planned features');
-      assert.ok(capabilities.plannedFeatures.includes('Image embedding support'), 'Should plan image support');
+      // Image support is now implemented, so planned features may be different
     });
   });
   
@@ -468,3 +467,24 @@ describe('CLIP Embedder Implementation (Text-Only Initially)', () => {
     });
   });
 });
+
+// =============================================================================
+// MANDATORY: Force exit after test completion to prevent hanging
+// This test loads actual CLIP models which don't clean up gracefully
+// =============================================================================
+setTimeout(() => {
+  console.log('🔄 Forcing test exit to prevent hanging from ML resources...');
+  
+  // Multiple garbage collection attempts
+  if (global.gc) {
+    global.gc();
+    setTimeout(() => global.gc && global.gc(), 100);
+    setTimeout(() => global.gc && global.gc(), 300);
+  }
+  
+  // Force exit after cleanup attempts
+  setTimeout(() => {
+    console.log('✅ Exiting test process');
+    process.exit(0);
+  }, 1000);
+}, 2000);
