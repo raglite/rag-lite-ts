@@ -1,6 +1,6 @@
 {
   "name": "rag-lite-ts",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Local-first TypeScript retrieval engine with Chameleon Multimodal Architecture for semantic search over text and image content",
   "type": "module",
   "main": "./dist/index.js",
