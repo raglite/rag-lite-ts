@@ -231,80 +231,28 @@ export class TextDerivedRerankingStrategy implements RerankingStrategy {
   public isEnabled = true;
   
   private crossEncoderReranker: CrossEncoderRerankingStrategy;
-  private imageToTextModel: any = null;
-  private imageToTextModelName: string = 'Xenova/vit-gpt2-image-captioning';
-  private initialized = false;
 
   constructor(
     imageToTextModelName?: string,
     crossEncoderModelName?: string
   ) {
-    if (imageToTextModelName) {
-      this.imageToTextModelName = imageToTextModelName;
-    }
+    // Note: imageToTextModelName parameter is kept for backward compatibility
+    // but is no longer used since we delegate to file-processor's implementation
     
     // Create the underlying cross-encoder strategy
     this.crossEncoderReranker = new CrossEncoderRerankingStrategy(crossEncoderModelName);
   }
 
   /**
-   * Initialize the image-to-text model if not already done
-   */
-  private async ensureInitialized(): Promise<void> {
-    if (!this.initialized) {
-      try {
-        console.log(`Loading image-to-text model: ${this.imageToTextModelName}`);
-        
-        // Set up polyfills for transformers.js
-        this.ensurePolyfills();
-        
-        const { pipeline } = await import('@huggingface/transformers');
-        this.imageToTextModel = await pipeline('image-to-text', this.imageToTextModelName);
-        
-        this.initialized = true;
-        console.log(`Image-to-text model loaded successfully: ${this.imageToTextModelName}`);
-      } catch (error) {
-        console.warn(`Image-to-text model initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        this.isEnabled = false;
-      }
-    }
-  }
-
-  /**
-   * Ensure DOM polyfills are set up for transformers.js
-   */
-  private ensurePolyfills(): void {
-    if (typeof window === 'undefined' && typeof globalThis !== 'undefined') {
-      if (typeof (globalThis as any).self === 'undefined') {
-        (globalThis as any).self = globalThis;
-      }
-      if (typeof (global as any).self === 'undefined') {
-        (global as any).self = global;
-      }
-    }
-  }
-
-  /**
    * Generate text description for an image
+   * Uses the shared image-to-text functionality from file-processor
    */
   private async generateImageDescription(imagePath: string): Promise<string> {
-    await this.ensureInitialized();
-    
-    if (!this.imageToTextModel) {
-      throw new Error('Image-to-text model not loaded');
-    }
-
     try {
-      const result = await this.imageToTextModel(imagePath);
-      
-      // Handle different response formats from the pipeline
-      if (Array.isArray(result) && result.length > 0) {
-        return result[0].generated_text || result[0].text || String(result[0]);
-      } else if (result && typeof result === 'object') {
-        return result.generated_text || result.text || String(result);
-      } else {
-        return String(result);
-      }
+      // Use the file-processor's image description function which has proven to work reliably
+      const { generateImageDescriptionForFile } = await import('../file-processor.js');
+      const result = await generateImageDescriptionForFile(imagePath);
+      return result.description;
     } catch (error) {
       console.warn(`Failed to generate description for image ${imagePath}: ${error instanceof Error ? error.message : 'Unknown error'}`);
       
@@ -322,26 +270,12 @@ export class TextDerivedRerankingStrategy implements RerankingStrategy {
     results: SearchResult[], 
     contentType?: string
   ): Promise<SearchResult[]> => {
-    // If strategy is disabled, return results unchanged
-    if (!this.isEnabled) {
-      return results;
-    }
-
     // Validate content type
     if (contentType && !this.supportedContentTypes.includes(contentType)) {
       throw new Error(
         `Text-derived strategy does not support content type '${contentType}'. ` +
         `Supported types: ${this.supportedContentTypes.join(', ')}`
       );
-    }
-
-    // Ensure models are initialized
-    await this.ensureInitialized();
-
-    // If initialization failed, return results unchanged
-    if (!this.isEnabled) {
-      console.warn('Text-derived reranker not enabled, returning results unchanged');
-      return results;
     }
 
     try {
@@ -401,12 +335,8 @@ export class TextDerivedRerankingStrategy implements RerankingStrategy {
    * Configure the reranking strategy
    */
   configure(config: Record<string, any>): void {
-    if (config.imageToTextModel && typeof config.imageToTextModel === 'string') {
-      this.imageToTextModelName = config.imageToTextModel;
-      // Reset initialization to use new model
-      this.initialized = false;
-      this.imageToTextModel = null;
-    }
+    // Note: imageToTextModel configuration is no longer used
+    // since we delegate to file-processor's implementation
 
     if (config.crossEncoderModel && typeof config.crossEncoderModel === 'string') {
       this.crossEncoderReranker.configure({ modelName: config.crossEncoderModel });
@@ -424,15 +354,10 @@ export class TextDerivedRerankingStrategy implements RerankingStrategy {
     return {
       description: 'Text-derived reranking that converts images to text descriptions then applies cross-encoder reranking',
       requiredModels: [
-        'Xenova/vit-gpt2-image-captioning', // Image-to-text model
+        'Xenova/vit-gpt2-image-captioning', // Image-to-text model (via file-processor)
         'Xenova/ms-marco-MiniLM-L-6-v2'     // Cross-encoder model
       ],
       configOptions: {
-        imageToTextModel: {
-          type: 'string',
-          description: 'Image-to-text model name for generating descriptions',
-          default: 'Xenova/vit-gpt2-image-captioning'
-        },
         crossEncoderModel: {
           type: 'string',
           description: 'Cross-encoder model name for text reranking',
@@ -451,9 +376,8 @@ export class TextDerivedRerankingStrategy implements RerankingStrategy {
    * Check if the strategy is ready to use
    */
   async isReady(): Promise<boolean> {
-    await this.ensureInitialized();
     const crossEncoderReady = await this.crossEncoderReranker.isReady();
-    return this.isEnabled && this.imageToTextModel !== null && crossEncoderReady;
+    return this.isEnabled && crossEncoderReady;
   }
 
   /**
@@ -461,7 +385,7 @@ export class TextDerivedRerankingStrategy implements RerankingStrategy {
    */
   getModelNames(): { imageToText: string; crossEncoder: string } {
     return {
-      imageToText: this.imageToTextModelName,
+      imageToText: 'Xenova/vit-gpt2-image-captioning', // Fixed model via file-processor
       crossEncoder: this.crossEncoderReranker.getModelName()
     };
   }
@@ -470,8 +394,6 @@ export class TextDerivedRerankingStrategy implements RerankingStrategy {
    * Clean up resources
    */
   async cleanup(): Promise<void> {
-    this.initialized = false;
-    this.imageToTextModel = null;
     await this.crossEncoderReranker.cleanup();
   }
 }

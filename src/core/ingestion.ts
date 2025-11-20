@@ -385,7 +385,7 @@ export class IngestionPipeline {
         chunkSize: config.chunk_size,
         chunkOverlap: config.chunk_overlap
       };
-      const chunkingResult = await this.chunkDocumentsWithContentTypes(fileResult.documents, effectiveChunkConfig);
+      const chunkingResult = await this.chunkDocumentsWithContentTypes(fileResult.documents, effectiveChunkConfig, options.mode);
 
       if (chunkingResult.totalChunks === 0) {
         console.log('No chunks created from documents');
@@ -476,7 +476,8 @@ export class IngestionPipeline {
    */
   private async chunkDocumentsWithContentTypes(
     documents: Document[],
-    chunkConfig?: ChunkConfig
+    chunkConfig?: ChunkConfig,
+    mode?: 'text' | 'multimodal'
   ): Promise<{
     documentChunks: Array<{ document: Document; chunks: any[] }>;
     allChunks: Array<{ text: string; contentType: string; metadata?: Record<string, any> }>;
@@ -504,8 +505,17 @@ export class IngestionPipeline {
             contentType: 'image',
             metadata: document.metadata
           }];
+        } else if (mode === 'multimodal') {
+          // In multimodal mode, don't chunk text - CLIP handles truncation at 77 tokens
+          // Chunking doesn't make sense because CLIP can't handle long text anyway
+          chunks = [{
+            text: document.content,
+            chunkIndex: 0,
+            contentType: 'text',
+            metadata: document.metadata
+          }];
         } else {
-          // For text documents, use normal chunking
+          // For text mode, use normal chunking
           const textChunks = await chunkDocument(document, chunkConfig);
           chunks = textChunks.map(chunk => ({
             ...chunk,

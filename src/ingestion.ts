@@ -83,7 +83,12 @@ export class IngestionPipeline {
     if (!this.corePipeline) {
       throw new Error('IngestionPipeline failed to initialize');
     }
-    return this.corePipeline.ingestFile(filePath, options);
+    // Merge mode from constructor options with runtime options
+    const mergedOptions = {
+      ...options,
+      mode: options?.mode || this.options.mode
+    };
+    return this.corePipeline.ingestFile(filePath, mergedOptions);
   }
 
   /**
@@ -94,7 +99,12 @@ export class IngestionPipeline {
     if (!this.corePipeline) {
       throw new Error('IngestionPipeline failed to initialize');
     }
-    return this.corePipeline.ingestDirectory(directoryPath, options);
+    // Merge mode from constructor options with runtime options
+    const mergedOptions = {
+      ...options,
+      mode: options?.mode || this.options.mode
+    };
+    return this.corePipeline.ingestDirectory(directoryPath, mergedOptions);
   }
 
   /**
@@ -120,7 +130,12 @@ export class IngestionPipeline {
     if (!this.corePipeline) {
       throw new Error('IngestionPipeline failed to initialize');
     }
-    return this.corePipeline.ingestFromMemory(content, metadata, options);
+    // Merge mode from constructor options with runtime options
+    const mergedOptions = {
+      ...options,
+      mode: options?.mode || this.options.mode
+    };
+    return this.corePipeline.ingestFromMemory(content, metadata, mergedOptions);
   }
 
   /**

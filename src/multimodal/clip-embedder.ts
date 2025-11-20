@@ -388,16 +388,13 @@ export class CLIPEmbedder extends BaseUniversalEmbedder {
     }
 
     try {
-      // Validate and truncate text if necessary (CLIP has a 77 token limit)
-      this.validateTextLength(text);
-      const finalProcessedText = this.truncateText(processedText);
-
       // Use the validated CLIPTextModelWithProjection approach (no pixel_values errors)
       // Tokenize text with CLIP's requirements
-      const tokens = await this.tokenizer(finalProcessedText, {
+      // The tokenizer handles truncation at 77 TOKENS (not characters)
+      const tokens = await this.tokenizer(processedText, {
         padding: true,
         truncation: true,
-        max_length: 77, // CLIP's text sequence length limit
+        max_length: 77, // CLIP's text sequence length limit (77 tokens)
         return_tensors: 'pt'
       });
 
@@ -406,7 +403,7 @@ export class CLIPEmbedder extends BaseUniversalEmbedder {
         const tokenIds = tokens.input_ids?.data || [];
         const actualTokenCount = Array.from(tokenIds as number[]).filter((id: number) => id !== 0).length;
         if (actualTokenCount >= 77) {
-          console.warn(`Text truncated: "${finalProcessedText.substring(0, 50)}..." (${actualTokenCount}+ tokens -> 77 tokens)`);
+          console.warn(`Text truncated by tokenizer: "${processedText.substring(0, 50)}..." (truncated to 77 tokens)`);
         }
       }
 
@@ -449,7 +446,7 @@ export class CLIPEmbedder extends BaseUniversalEmbedder {
       }
 
       // Generate unique embedding ID
-      const embeddingId = this.generateEmbeddingId(finalProcessedText, 'text');
+      const embeddingId = this.generateEmbeddingId(processedText, 'text');
 
       return {
         embedding_id: embeddingId,
@@ -457,8 +454,8 @@ export class CLIPEmbedder extends BaseUniversalEmbedder {
         contentType: 'text',
         metadata: {
           originalText: text,
-          processedText: finalProcessedText,
-          textLength: finalProcessedText.length,
+          processedText: processedText,
+          textLength: processedText.length,
           embeddingMagnitudeBeforeNorm: magnitudeBeforeNorm,
           embeddingMagnitudeAfterNorm: magnitudeAfterNorm,
           normalized: true,
@@ -785,8 +782,9 @@ export class CLIPEmbedder extends BaseUniversalEmbedder {
           const batchProcessor = createTextBatchProcessor();
 
           // Convert to EmbeddingBatchItem format
+          // Let tokenizer handle truncation at 77 tokens (not characters)
           const batchItems = textItems.map(item => ({
-            content: this.truncateText(item.content.trim()),
+            content: item.content.trim(),
             contentType: item.contentType,
             metadata: item.metadata
           }));
@@ -903,7 +901,8 @@ export class CLIPEmbedder extends BaseUniversalEmbedder {
    */
   private async processBatchText(textItems: Array<{ content: string; contentType: string; metadata?: Record<string, any> }>): Promise<EmbeddingResult[]> {
     // Prepare texts for batch processing
-    const texts = textItems.map(item => this.truncateText(item.content.trim()));
+    // Let tokenizer handle truncation at 77 tokens (not characters)
+    const texts = textItems.map(item => item.content.trim());
 
     // Tokenize all texts in batch
     const tokensBatch = await Promise.all(

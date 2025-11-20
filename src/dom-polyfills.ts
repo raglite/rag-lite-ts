@@ -39,12 +39,9 @@ if (typeof window === 'undefined') {
     (globalThis as any).navigator = dom.window.navigator;
   }
 
-  // Polyfill createImageBitmap if needed (for image processing)
-  if (typeof (globalThis as any).createImageBitmap === 'undefined') {
-    (globalThis as any).createImageBitmap = dom.window.createImageBitmap || (() => {
-      throw new Error('createImageBitmap not available in Node.js environment');
-    });
-  }
+  // Note: Do NOT polyfill createImageBitmap with a fake implementation
+  // RawImage.fromURL() will handle image loading correctly without it
+  // Setting a fake createImageBitmap that throws errors breaks image loading
 }
 
 export {}; // Make this a module

@@ -81,7 +81,7 @@ export const SUPPORTED_MODELS: Record<string, ModelInfo> = {
       supportsMetadata: true,
       supportsMultimodal: true,        // True cross-modal search capabilities
       maxBatchSize: 8,
-      maxTextLength: 77,               // CLIP's text sequence length limit
+      maxTextLength: 77,               // CLIP's token limit (tokenizer handles truncation)
       supportedImageFormats: ['jpg', 'jpeg', 'png', 'webp', 'gif'] as const
     },
     requirements: {
@@ -105,7 +105,7 @@ export const SUPPORTED_MODELS: Record<string, ModelInfo> = {
       supportsMetadata: true,
       supportsMultimodal: true,        // True cross-modal search capabilities
       maxBatchSize: 4,
-      maxTextLength: 77,               // CLIP's text sequence length limit
+      maxTextLength: 77,               // CLIP's token limit (tokenizer handles truncation)
       supportedImageFormats: ['jpg', 'jpeg', 'png', 'webp', 'gif'] as const
     },
     requirements: {
@@ -230,9 +230,9 @@ export class ModelRegistry {
     }
 
     // Text length limitations
-    if (modelInfo.capabilities.maxTextLength && modelInfo.capabilities.maxTextLength < 512) {
+    if (modelInfo.capabilities.maxTextLength && modelInfo.capabilities.maxTextLength < 256) {
       warnings.push(`Model has limited text length: ${modelInfo.capabilities.maxTextLength} characters`);
-      suggestions.push('Consider chunking long texts before processing');
+      suggestions.push('Long texts will be truncated by the tokenizer');
     }
 
     // Image format support

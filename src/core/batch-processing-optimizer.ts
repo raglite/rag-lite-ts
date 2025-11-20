@@ -53,8 +53,8 @@ export const DEFAULT_BATCH_CONFIG: BatchProcessingConfig = {
   imageBatchSize: 4, // Smaller for memory-intensive image processing
   maxConcurrentBatches: 2,
   
-  // Memory management (256MB threshold)
-  memoryThresholdMB: 256,
+  // Memory management (512MB threshold for multimodal processing)
+  memoryThresholdMB: 512,
   enableMemoryMonitoring: true,
   enableGarbageCollection: true,
   
@@ -637,14 +637,8 @@ export class BatchProcessingOptimizer {
    */
   private async preloadImageProcessingModels(): Promise<void> {
     try {
-      if (!this.resourcePool.has('imageToText')) {
-        console.log('Preloading image-to-text processor...');
-        const processor = await LazyMultimodalLoader.loadImageToTextProcessor();
-        this.resourcePool.set('imageToText', processor);
-        
-        // Register with resource manager
-        this.resourceManager.registerImageProcessor(processor, 'image-to-text');
-      }
+      // Note: Image-to-text processor is loaded on-demand by file-processor.ts
+      // to avoid conflicts with different pipeline configurations
       
       if (!this.resourcePool.has('metadataExtractor')) {
         console.log('Preloading image metadata extractor...');
@@ -770,7 +764,7 @@ export function createImageBatchProcessor(): BatchProcessingOptimizer {
   return new BatchProcessingOptimizer({
     imageBatchSize: 2, // Very small batches for memory efficiency
     textBatchSize: 8,
-    memoryThresholdMB: 128, // Lower threshold for images
+    memoryThresholdMB: 512, // Higher threshold for memory-intensive image processing
     enableMemoryMonitoring: true,
     enableGarbageCollection: true,
     enableParallelProcessing: false, // Sequential for better memory control
@@ -786,7 +780,7 @@ export function createTextBatchProcessor(): BatchProcessingOptimizer {
     textBatchSize: 32, // Larger batches for text
     imageBatchSize: 4,
     enableParallelProcessing: true, // Parallel processing for text
-    memoryThresholdMB: 512, // Higher threshold for text
+    memoryThresholdMB: 256, // Lower threshold sufficient for text processing
     progressReportInterval: 10
   });
 }

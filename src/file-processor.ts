@@ -464,25 +464,38 @@ function extractTitle(content: string, filePath: string): string {
  * Cache for image-to-text pipeline to avoid reloading
  */
 let imageToTextPipeline: any = null;
+let imageToTextPipelinePromise: Promise<any> | null = null;
 
 /**
- * Initialize the image-to-text pipeline
+ * Initialize the image-to-text pipeline with proper async locking
  */
 async function initializeImageToTextPipeline(modelName: string = 'Xenova/vit-gpt2-image-captioning'): Promise<any> {
+  // Return cached pipeline if available
   if (imageToTextPipeline) {
     return imageToTextPipeline;
   }
 
-  try {
-    const { pipeline } = await import('@huggingface/transformers');
-    console.log(`Loading image-to-text model: ${modelName}`);
-    imageToTextPipeline = await pipeline('image-to-text', modelName);
-    console.log(`Successfully loaded image-to-text model: ${modelName}`);
-    return imageToTextPipeline;
-  } catch (error) {
-    console.error(`Failed to load image-to-text model ${modelName}:`, error);
-    throw new Error(`Failed to initialize image-to-text pipeline: ${error instanceof Error ? error.message : String(error)}`);
+  // If pipeline is currently loading, wait for it
+  if (imageToTextPipelinePromise) {
+    return imageToTextPipelinePromise;
   }
+
+  // Start loading pipeline
+  imageToTextPipelinePromise = (async () => {
+    try {
+      const { pipeline } = await import('@huggingface/transformers');
+      console.log(`Loading image-to-text model: ${modelName}`);
+      imageToTextPipeline = await pipeline('image-to-text', modelName);
+      console.log(`Successfully loaded image-to-text model: ${modelName}`);
+      return imageToTextPipeline;
+    } catch (error) {
+      console.error(`Failed to load image-to-text model ${modelName}:`, error);
+      imageToTextPipelinePromise = null; // Reset on error so it can be retried
+      throw new Error(`Failed to initialize image-to-text pipeline: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  })();
+
+  return imageToTextPipelinePromise;
 }
 
 /**
@@ -680,8 +693,12 @@ async function generateImageDescription(
   try {
     const pipeline = await initializeImageToTextPipeline(options.model);
     
-    // Generate description
-    const result = await pipeline(imagePath, {
+    // Load image using RawImage.fromURL which works with local file paths
+    const { RawImage } = await import('@huggingface/transformers');
+    const image = await RawImage.fromURL(imagePath);
+    
+    // Generate description with loaded image
+    const result = await pipeline(image, {
       max_length: options.maxLength || 50,
       num_beams: 4,
       early_stopping: true
@@ -741,113 +758,6 @@ async function generateImageDescriptionsBatch(
   }
 
   return results;
-}
-
-/**
- * Generate text descriptions for multiple images using optimized batch processing
- * Uses BatchProcessingOptimizer for memory-efficient processing of large image collections
- */
-async function generateImageDescriptionsBatchOptimized(
-  imagePaths: string[],
-  options: ImageToTextOptions = DEFAULT_IMAGE_TO_TEXT_OPTIONS
-): Promise<Array<{ path: string; result?: ImageDescriptionResult; error?: string }>> {
-  
-  // For small batches, use the existing implementation
-  if (imagePaths.length <= 10) {
-    return generateImageDescriptionsBatch(imagePaths, options);
-  }
-  
-  try {
-    // Import batch processing optimizer
-    const { createImageBatchProcessor } = await import('./core/batch-processing-optimizer.js');
-    const batchProcessor = createImageBatchProcessor();
-    
-    // Convert image paths to batch items
-    const batchItems = imagePaths.map(path => ({
-      content: path,
-      contentType: 'image' as const,
-      metadata: { originalPath: path }
-    }));
-    
-    // Create image description function
-    const imageDescriptionFunction = async (item: any) => {
-      try {
-        const result = await generateImageDescription(item.content, options);
-        return {
-          embedding_id: `img_desc_${Date.now()}_${Math.random()}`,
-          vector: new Float32Array([0]), // Placeholder vector
-          contentType: 'image',
-          metadata: {
-            path: item.content,
-            description: result.description,
-            confidence: result.confidence,
-            model: result.model
-          }
-        };
-      } catch (error) {
-        throw new Error(`Failed to generate description for ${item.content}: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    };
-    
-    // Process with optimization and progress reporting
-    const batchResult = await batchProcessor.processBatch(
-      batchItems,
-      imageDescriptionFunction,
-      (stats) => {
-        console.log(`Image description progress: ${stats.processedItems}/${stats.totalItems} (${Math.round((stats.processedItems / stats.totalItems) * 100)}%)`);
-        console.log(`  Memory usage: ${stats.memoryUsageMB}MB (peak: ${stats.peakMemoryUsageMB}MB)`);
-        
-        if (stats.failedItems > 0) {
-          console.log(`  Failed items: ${stats.failedItems}`);
-        }
-      }
-    );
-    
-    // Log final statistics
-    console.log(`✓ Image description generation complete:`);
-    console.log(`  Processed: ${batchResult.stats.processedItems}/${batchResult.stats.totalItems}`);
-    console.log(`  Failed: ${batchResult.stats.failedItems}`);
-    console.log(`  Processing time: ${Math.round(batchResult.stats.processingTimeMs / 1000)}s`);
-    console.log(`  Rate: ${Math.round(batchResult.stats.itemsPerSecond)} images/sec`);
-    console.log(`  Peak memory usage: ${batchResult.stats.peakMemoryUsageMB}MB`);
-    
-    if (batchResult.stats.retryCount > 0) {
-      console.log(`  Retries: ${batchResult.stats.retryCount}`);
-    }
-    
-    // Convert results back to expected format
-    const results: Array<{ path: string; result?: ImageDescriptionResult; error?: string }> = [];
-    
-    // Add successful results
-    for (const result of batchResult.results) {
-      if (result.metadata?.description) {
-        results.push({
-          path: result.metadata.path,
-          result: {
-            description: result.metadata.description,
-            confidence: result.metadata.confidence,
-            model: result.metadata.model
-          }
-        });
-      }
-    }
-    
-    // Add failed results
-    for (const error of batchResult.errors) {
-      results.push({
-        path: error.item.content,
-        error: error.error
-      });
-    }
-    
-    return results;
-    
-  } catch (error) {
-    console.warn(`Optimized batch processing failed, falling back to standard batch processing: ${error instanceof Error ? error.message : String(error)}`);
-    
-    // Fall back to existing implementation
-    return generateImageDescriptionsBatch(imagePaths, options);
-  }
 }
 
 /**
@@ -1040,8 +950,8 @@ export async function processFiles(
     console.log(`Processing ${imageFiles.length} image files with optimized batch processing`);
     
     try {
-      // Use optimized batch processing for image descriptions
-      const batchResults = await generateImageDescriptionsBatchOptimized(imageFiles, imageToTextOptions);
+      // Use batch processing for image descriptions
+      const batchResults = await generateImageDescriptionsBatch(imageFiles, imageToTextOptions);
       
       // Convert batch results to documents with metadata extraction
       for (const batchResult of batchResults) {
@@ -1194,6 +1104,7 @@ export async function cleanupImageProcessingResources(): Promise<void> {
         await imageToTextPipeline.dispose();
       }
       imageToTextPipeline = null;
+      imageToTextPipelinePromise = null;
       console.log('Image-to-text pipeline cleaned up');
     } catch (error) {
       console.warn('Error cleaning up image-to-text pipeline:', error);

@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.2] - 2025-11-20
+
+### Bug Fixes
+- Fixed CLIP tokenizer handling: corrected maxTextLength to 77 tokens (not characters) and removed incorrect character truncation
+- Fixed image-to-text pipeline failing during ingestion by properly loading images as RawImage objects
+- Fixed mode parameter not propagating from public API to core pipeline, causing incorrect text chunking in multimodal mode
+- Fixed pipeline loading race condition causing multiple simultaneous model loads and hangs with async locking
+- Fixed inverted memory thresholds in batch processor (512MB for images, 256MB for text)
+
+---
+
 ## [2.0.1] - 2025-11-18
 
 ### Features
