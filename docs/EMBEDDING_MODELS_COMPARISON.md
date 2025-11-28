@@ -233,7 +233,7 @@ const embeddings = await model(texts, {
 ## Future Model Support
 
 ### Planned Additions
-- **sentence-transformers/all-mpnet-base-v2**: Original HuggingFace version
+- **Xenova/all-mpnet-base-v2**: Original HuggingFace version
 - **BAAI/bge-small-en-v1.5**: Competitive 384D alternative
 - **intfloat/e5-small-v2**: Another quality option
 

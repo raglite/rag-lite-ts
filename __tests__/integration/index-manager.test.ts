@@ -249,10 +249,13 @@ for (const model of TEST_MODELS.filter(m => m.dimensions === 384)) {
       await manager1.initialize();
       
       // Manually corrupt the stored dimensions to simulate a mismatch
-      const { openDatabase, setStoredModelInfo } = await import('../../src/core/db.js');
+      const { openDatabase, setSystemInfo } = await import('../../src/core/db.js');
       const db = await openDatabase(dbPath);
       const wrongDimensions = model.dimensions === 384 ? 768 : 384;
-      await setStoredModelInfo(db, model.name, wrongDimensions);
+      await setSystemInfo(db, {
+        modelName: model.name,
+        modelDimensions: wrongDimensions
+      });
       await db.close();
       
       await manager1.close();
@@ -283,14 +286,14 @@ for (const model of TEST_MODELS.filter(m => m.dimensions === 384)) {
       await manager.initialize();
       
       // Verify model info was stored during initialization
-      const { openDatabase, getStoredModelInfo } = await import('../../src/core/db.js');
+      const { openDatabase, getSystemInfo } = await import('../../src/core/db.js');
       const db = await openDatabase(dbPath);
-      const storedInfo = await getStoredModelInfo(db);
+      const systemInfo = await getSystemInfo(db);
       await db.close();
       
-      assert.ok(storedInfo, 'Model info should be stored');
-      assert.equal(storedInfo.modelName, model.name);
-      assert.equal(storedInfo.dimensions, model.dimensions);
+      assert.ok(systemInfo, 'Model info should be stored');
+      assert.equal(systemInfo.modelName, model.name);
+      assert.equal(systemInfo.modelDimensions, model.dimensions);
       
       await manager.close();
       cleanup(indexPath, dbPath);
@@ -305,14 +308,14 @@ for (const model of TEST_MODELS.filter(m => m.dimensions === 384)) {
       await manager.initialize();
       
       // Should have stored the model info
-      const { openDatabase, getStoredModelInfo } = await import('../../src/core/db.js');
+      const { openDatabase, getSystemInfo } = await import('../../src/core/db.js');
       const db = await openDatabase(dbPath);
-      const storedInfo = await getStoredModelInfo(db);
+      const systemInfo = await getSystemInfo(db);
       await db.close();
       
-      assert.ok(storedInfo, 'Model info should be stored after first initialization');
-      assert.equal(storedInfo.modelName, model.name);
-      assert.equal(storedInfo.dimensions, model.dimensions);
+      assert.ok(systemInfo, 'Model info should be stored after first initialization');
+      assert.equal(systemInfo.modelName, model.name);
+      assert.equal(systemInfo.modelDimensions, model.dimensions);
       
       await manager.close();
       cleanup(indexPath, dbPath);
@@ -342,14 +345,14 @@ for (const model of TEST_MODELS.filter(m => m.dimensions === 384)) {
       assert.equal(stats.modelVersion, newModelVersion);
       
       // Verify model info is still correct
-      const { openDatabase: openDB2, getStoredModelInfo } = await import('../../src/core/db.js');
+      const { openDatabase: openDB2, getSystemInfo } = await import('../../src/core/db.js');
       const db2 = await openDB2(dbPath);
-      const storedInfo = await getStoredModelInfo(db2);
+      const systemInfo = await getSystemInfo(db2);
       await db2.close();
       
-      assert.ok(storedInfo, 'Model info should still be stored after rebuild');
-      assert.equal(storedInfo.modelName, model.name);
-      assert.equal(storedInfo.dimensions, model.dimensions);
+      assert.ok(systemInfo, 'Model info should still be stored after rebuild');
+      assert.equal(systemInfo.modelName, model.name);
+      assert.equal(systemInfo.modelDimensions, model.dimensions);
       
       await manager.close();
       cleanup(indexPath, dbPath);
@@ -367,9 +370,12 @@ for (const model of TEST_MODELS.filter(m => m.dimensions === 384)) {
       await manager1.close();
       
       // Manually corrupt the stored model info
-      const { openDatabase, setStoredModelInfo } = await import('../../src/core/db.js');
+      const { openDatabase, setSystemInfo } = await import('../../src/core/db.js');
       const db = await openDatabase(dbPath);
-      await setStoredModelInfo(db, 'different-model', 999);
+      await setSystemInfo(db, {
+        modelName: 'different-model',
+        modelDimensions: 999
+      });
       await db.close();
       
       // Should be able to initialize with skipModelCheck = true

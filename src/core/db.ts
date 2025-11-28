@@ -630,81 +630,17 @@ export async function setSystemInfo(connection: DatabaseConnection, systemInfo: 
   }
 }
 
-/**
- * @deprecated Use getSystemInfo() instead. This function is kept for existing code compatibility.
- * Gets the current model version from system_info table
- * @param connection - Database connection object
- * @returns Promise that resolves to the model version string or null if not set
- */
-export async function getModelVersion(connection: DatabaseConnection): Promise<string | null> {
-  try {
-    const systemInfo = await getSystemInfo(connection);
-    return systemInfo ? systemInfo.modelVersion : null;
-  } catch (error) {
-    throw new Error(`Failed to get model version: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-}
-
-/**
- * @deprecated Use setSystemInfo() instead. This function is kept for existing code compatibility.
- * Sets the model version in system_info table
- * @param connection - Database connection object
- * @param modelVersion - Model version string to store
- */
-export async function setModelVersion(connection: DatabaseConnection, modelVersion: string): Promise<void> {
-  try {
-    await setSystemInfo(connection, { modelVersion });
-  } catch (error) {
-    throw new Error(`Failed to set model version: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-}
-
-/**
- * @deprecated Use getSystemInfo() instead. This function is kept for existing code compatibility.
- * Gets the stored model information from system_info table
- * @param connection - Database connection object
- * @returns Promise that resolves to model info object or null if not set
- */
-export async function getStoredModelInfo(connection: DatabaseConnection): Promise<{
-  modelName: string;
-  dimensions: number;
-} | null> {
-  try {
-    const systemInfo = await getSystemInfo(connection);
-    if (!systemInfo || !systemInfo.modelName || !systemInfo.modelDimensions) {
-      return null;
-    }
-    
-    return {
-      modelName: systemInfo.modelName,
-      dimensions: systemInfo.modelDimensions
-    };
-  } catch (error) {
-    throw new Error(`Failed to get stored model info: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-}
-
-/**
- * @deprecated Use setSystemInfo() instead. This function is kept for existing code compatibility.
- * Sets the model information in system_info table
- * @param connection - Database connection object
- * @param modelName - Name of the embedding model
- * @param dimensions - Number of dimensions for the model
- */
-export async function setStoredModelInfo(
-  connection: DatabaseConnection,
-  modelName: string,
-  dimensions: number
-): Promise<void> {
-  try {
-    await setSystemInfo(connection, { 
-      modelName, 
-      modelDimensions: dimensions 
-    });
-  } catch (error) {
-    throw new Error(`Failed to set stored model info: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-}
+// =============================================================================
+// REMOVED IN v3.0.0: Legacy database functions
+// =============================================================================
+// The following functions have been removed. Use getSystemInfo() and setSystemInfo() instead:
+//
+// - getModelVersion() → Use: const systemInfo = await getSystemInfo(db); const version = systemInfo?.modelVersion;
+// - setModelVersion() → Use: await setSystemInfo(db, { modelVersion: 'version' });
+// - getStoredModelInfo() → Use: const systemInfo = await getSystemInfo(db); access systemInfo.modelName and systemInfo.modelDimensions
+// - setStoredModelInfo() → Use: await setSystemInfo(db, { modelName: 'name', modelDimensions: 384 });
+//
+// Migration guide: See CHANGELOG.md for v3.0.0 breaking changes
 
 /**
  * Retrieves documents by content type

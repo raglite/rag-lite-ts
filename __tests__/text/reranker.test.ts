@@ -1,6 +1,6 @@
 import { test, describe, before } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { CrossEncoderReranker } from '../../src/../src/text/reranker.js';
+import { CrossEncoderReranker } from '../../src/text/reranker.js';
 import type { SearchResult } from '../../src/core/types.js';
 
 describe('CrossEncoderReranker', () => {

@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { MdxPreprocessor } from '../../src/../src/preprocessors/mdx.js';
+import { MdxPreprocessor } from '../../src/preprocessors/mdx.js';
 
 describe('MdxPreprocessor', () => {
   const preprocessor = new MdxPreprocessor();

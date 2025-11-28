@@ -13,9 +13,9 @@ import {
   DEFAULT_BATCH_CONFIG,
   type BatchProcessingConfig,
   type BatchProcessingResult
-} from '../../src/../src/core/batch-processing-optimizer.js';
-import type { EmbeddingResult } from '../../src/../src/types.js';
-import type { EmbeddingBatchItem } from '../../src/../src/core/universal-embedder.js';
+} from '../../src/core/batch-processing-optimizer.js';
+import type { EmbeddingResult } from '../../src/types.js';
+import type { EmbeddingBatchItem } from '../../src/core/universal-embedder.js';
 
 describe('Batch Processing Optimizer', () => {
   let optimizer: BatchProcessingOptimizer;
@@ -83,7 +83,8 @@ describe('Batch Processing Optimizer', () => {
       
       // Should have smaller batch sizes for memory efficiency
       assert.ok(config.imageBatchSize <= 4);
-      assert.ok(config.memoryThresholdMB <= 128);
+      // Should have higher memory threshold for memory-intensive image processing
+      assert.ok(config.memoryThresholdMB >= 256);
       assert.strictEqual(config.enableMemoryMonitoring, true);
     });
     

@@ -13,8 +13,8 @@ import {
   initializeSchema,
   getContentMetadata,
   getContentMetadataByHash
-} from '../../src/../src/core/db.js';
-import { ContentManager } from '../../src/../src/core/content-manager.js';
+} from '../../src/core/db.js';
+import { ContentManager } from '../../src/core/content-manager.js';
 
 describe('ContentManager', () => {
   const testDbPath = './test-content-manager.db';
@@ -519,7 +519,7 @@ describe('ContentManager', () => {
       await fs.writeFile(file3Path, duplicateContent);
       
       // Create metadata entries for these files with same hash but different IDs
-      const { insertContentMetadata } = await import('../../src/../src/core/db.js');
+      const { insertContentMetadata } = await import('../../src/core/db.js');
       
       await insertContentMetadata(connection, {
         id: `${contentHash}_1`,

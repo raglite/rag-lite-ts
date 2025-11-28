@@ -3,13 +3,11 @@ export {
   EmbeddingEngine, 
   getEmbeddingEngine, 
   initializeEmbeddingEngine,
-  createTextEmbedFunction,
-  createTextEmbedder
+  createTextEmbedFunction
 } from './embedder.js';
 export { 
   CrossEncoderReranker, 
-  createTextRerankFunction, 
-  createTextReranker 
+  createTextRerankFunction
 } from './reranker.js';
 export { countTokens, getTokenizer, resetTokenizer } from './tokenizer.js';
 export { chunkDocument, type Chunk, type Document } from '../core/chunker.js';

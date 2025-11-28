@@ -489,12 +489,8 @@ export const DEFAULT_MODELS: Record<ModelType, string> = {
   'clip': 'Xenova/clip-vit-base-patch32'
 } as const;
 
-/**
- * Model type mappings for backward compatibility
- */
-export const MODEL_TYPE_ALIASES: Record<string, ModelType> = {
-  'text': 'sentence-transformer',
-  'multimodal': 'clip',
-  'sentence': 'sentence-transformer',
-  'embedding': 'sentence-transformer'
-} as const;
+// =============================================================================
+// REMOVED IN v3.0.0: MODEL_TYPE_ALIASES
+// =============================================================================
+// Model type aliases have been removed as they were not used anywhere in the codebase.
+// Use ModelType directly: 'sentence-transformer' or 'clip'

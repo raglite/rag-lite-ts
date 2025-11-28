@@ -35,6 +35,17 @@ export class DatabaseConnectionManager {
     
     let connectionInfo = this.connections.get(normalizedPath);
     
+    // Check if cached connection exists but database file was deleted
+    if (connectionInfo && !connectionInfo.isClosing) {
+      const { existsSync } = await import('fs');
+      if (!existsSync(normalizedPath)) {
+        // Database file was deleted - invalidate cached connection
+        console.log(`🔄 Database file deleted, invalidating cached connection: ${normalizedPath}`);
+        await this.forceCloseConnection(normalizedPath);
+        connectionInfo = undefined; // Force creation of new connection
+      }
+    }
+    
     if (!connectionInfo || connectionInfo.isClosing) {
       // Create new connection
       const connection = await openDatabase(dbPath);

@@ -14,8 +14,8 @@ import {
   insertContentMetadata,
   type DatabaseConnection,
   type ContentMetadata
-} from '../../src/../src/core/db.js';
-import { ContentResolver } from '../../src/../src/core/content-resolver.js';
+} from '../../src/core/db.js';
+import { ContentResolver } from '../../src/core/content-resolver.js';
 
 describe('ContentResolver', () => {
   let testDbPath: string;

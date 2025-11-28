@@ -15,7 +15,7 @@ import {
   isTextOnlyModel,
   isMultimodalModel,
   DEFAULT_MODELS
-} from '../../src/../src/core/model-registry.js';
+} from '../../src/core/model-registry.js';
 
 import {
   validateContentType,
@@ -26,14 +26,14 @@ import {
   ModelValidationError,
   TransformersCompatibilityError,
   ContentTypeError
-} from '../../src/../src/core/universal-embedder.js';
+} from '../../src/core/universal-embedder.js';
 
 import type {
   UniversalEmbedder,
   ModelInfo,
   ModelType,
   EmbeddingBatchItem
-} from '../../src/../src/core/universal-embedder.js';
+} from '../../src/core/universal-embedder.js';
 
 describe('Universal Embedder Interface Design', () => {
   

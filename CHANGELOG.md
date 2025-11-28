@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.0.4] - 2025-01-22
+
+### Breaking Changes
+- **Removed legacy factory functions**: `createTextEmbedder()` and `createTextReranker()` removed in favor of unified `createEmbedder()` and `createReranker()` APIs
+- **Removed legacy database functions**: `getEmbeddingModel()`, `getDimensions()`, `getRerankingModel()`, `getMode()` consolidated into `getSystemInfo()`
+- **Removed type aliases**: Use direct types instead of deprecated aliases
+- **Removed deprecated content manager method**: `_getContentPath()` removed from internal API
+
+---
+
+## [2.0.3] - 2025-01-21
+
+### Improvements
+- Auto-select default CLIP model (`Xenova/clip-vit-base-patch32`) when `--mode multimodal` is specified without `--model` parameter
+- Updated CLI to enable all supported file formats while ingesting a single file
+
+---
+
 ## [2.0.2] - 2025-11-20
 
 ### Bug Fixes
@@ -16,7 +34,7 @@
 ### Features
 - **SearchEngine Chameleon Architecture**: `SearchEngine` now automatically detects mode (text/multimodal) from database and adapts accordingly
   - Simple constructor works for all modes: `new SearchEngine(indexPath, dbPath)`
-  - No need for `PolymorphicSearchFactory` in basic usage
+  - No need for `SearchFactory` in basic usage
   - Mode detection happens transparently on first search
 
 ### Performance

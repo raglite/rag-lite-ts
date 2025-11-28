@@ -12,11 +12,10 @@ import {
   getSupportedModelsForContentType,
   getRecommendedModel,
   validateModelCompatibility,
-  listAvailableModels,
-  UniversalEmbedderFactory
-} from '../../src/../src/core/embedder-factory.js';
+  listAvailableModels
+} from '../../src/core/embedder-factory.js';
 
-import { ModelValidator } from '../../src/../src/core/model-validator.js';
+import { ModelValidator } from '../../src/core/model-validator.js';
 
 describe('Simple Embedder Creation Function', () => {
   
@@ -161,51 +160,6 @@ describe('Simple Embedder Creation Function', () => {
       
       assert.ok(hasTextModel, 'Should have text models');
       assert.ok(hasMultimodalModel, 'Should have multimodal models');
-    });
-  });
-  
-  describe('Backward Compatibility', () => {
-    test('should provide deprecated factory interface', async () => {
-      // Test that the deprecated interface exists
-      assert.ok(typeof UniversalEmbedderFactory === 'object', 'Should have factory object');
-      assert.ok(typeof UniversalEmbedderFactory.create === 'function', 'Should have create method');
-      assert.ok(typeof UniversalEmbedderFactory.validateModel === 'function', 'Should have validateModel method');
-      assert.ok(typeof UniversalEmbedderFactory.getModelInfo === 'function', 'Should have getModelInfo method');
-      assert.ok(typeof UniversalEmbedderFactory.getSupportedModels === 'function', 'Should have getSupportedModels method');
-    });
-    
-    test('should show deprecation warnings for factory methods', () => {
-      // Capture console warnings
-      const originalWarn = console.warn;
-      const warnings: string[] = [];
-      console.warn = (message: string) => warnings.push(message);
-      
-      try {
-        // Test deprecated methods
-        UniversalEmbedderFactory.validateModel('sentence-transformers/all-MiniLM-L6-v2');
-        UniversalEmbedderFactory.getModelInfo('sentence-transformers/all-MiniLM-L6-v2');
-        UniversalEmbedderFactory.getSupportedModels();
-        
-        // Should have shown deprecation warnings
-        assert.ok(warnings.length >= 3, 'Should show deprecation warnings');
-        assert.ok(warnings.some(w => w.includes('deprecated')), 'Should mention deprecation');
-        
-      } finally {
-        console.warn = originalWarn;
-      }
-    });
-    
-    test('should delegate to correct implementations in deprecated factory', async () => {
-      const modelInfo = UniversalEmbedderFactory.getModelInfo('sentence-transformers/all-MiniLM-L6-v2');
-      assert.ok(modelInfo, 'Should return model info');
-      assert.strictEqual(modelInfo.name, 'sentence-transformers/all-MiniLM-L6-v2', 'Should return correct model info');
-      
-      const supportedModels = UniversalEmbedderFactory.getSupportedModels();
-      assert.ok(Array.isArray(supportedModels), 'Should return array of models');
-      assert.ok(supportedModels.length > 0, 'Should have supported models');
-      
-      const validation = UniversalEmbedderFactory.validateModel('sentence-transformers/all-MiniLM-L6-v2');
-      assert.ok(typeof validation.isValid === 'boolean', 'Should return validation result');
     });
   });
   

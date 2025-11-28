@@ -438,6 +438,33 @@ Now Claude can search your docs directly! Works with any MCP-compatible AI tool.
 </tr>
 </table>
 
+### 📁 Supported File Formats
+
+RAG-lite TS supports the following file formats with full processing implementations:
+
+**Text Mode:**
+- Markdown: `.md`, `.mdx`
+- Plain text: `.txt`
+- Documents: `.pdf`, `.docx`
+
+**Multimodal Mode** (includes all text formats plus):
+- Images: `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.bmp`
+
+All formats work seamlessly with both single file and directory ingestion:
+
+```bash
+# Single file ingestion
+raglite ingest ./document.pdf
+raglite ingest ./readme.md
+raglite ingest ./notes.txt
+
+# Directory ingestion (processes all supported formats)
+raglite ingest ./docs/
+
+# Multimodal ingestion (includes images)
+raglite ingest ./mixed-content/ --mode multimodal
+```
+
 ## 🔧 How It Works
 
 RAG-lite TS follows a clean, efficient pipeline:

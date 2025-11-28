@@ -35,7 +35,7 @@
  * });
  * 
  * // Factory with custom configuration
- * const ingestion = await TextIngestionFactory.create('./db.sqlite', './index.bin', {
+ * const ingestion = await IngestionFactory.create('./db.sqlite', './index.bin', {
  *   chunkSize: 300,
  *   chunkOverlap: 50
  * });

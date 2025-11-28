@@ -130,8 +130,8 @@ export class SearchEngine {
         // Use core polymorphic factory for automatic mode detection (Chameleon Architecture)
         // This enables SearchEngine to automatically adapt to text or multimodal mode
         // based on the configuration stored in the database during ingestion
-        const { PolymorphicSearchFactory } = await import('./core/polymorphic-search-factory.js');
-        this.coreEngine = await PolymorphicSearchFactory.create(
+        const { SearchFactory } = await import('./factories/search-factory.js');
+        this.coreEngine = await SearchFactory.create(
           this.indexPath,
           this.dbPath
         );

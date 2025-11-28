@@ -1,12 +1,12 @@
 /**
- * Tests for multimodal mode routing in TextIngestionFactory
+ * Tests for multimodal mode routing in IngestionFactory
  * Verifies that the factory correctly routes to CLIP embedder for multimodal mode
  * Uses Node.js test runner
  */
 
 import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { TextIngestionFactory } from '../../src/factories/text-factory.js';
+import { IngestionFactory } from '../../src/factories/ingestion-factory.js';
 import { existsSync, rmSync } from 'fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +15,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const TEST_TEMP_DIR = join(__dirname, '../temp');
 
-describe('TextIngestionFactory Multimodal Routing', () => {
+describe('IngestionFactory Multimodal Routing', () => {
   test('should create CLIP embedder for multimodal mode', async () => {
     const dbPath = join(TEST_TEMP_DIR, `test-multimodal-${Date.now()}.db`);
     const indexPath = join(TEST_TEMP_DIR, `test-multimodal-${Date.now()}.index`);
@@ -23,7 +23,7 @@ describe('TextIngestionFactory Multimodal Routing', () => {
     let pipeline;
     try {
       // Create ingestion pipeline with multimodal mode
-      pipeline = await TextIngestionFactory.create(dbPath, indexPath, {
+      pipeline = await IngestionFactory.create(dbPath, indexPath, {
         mode: 'multimodal',
         embeddingModel: 'Xenova/clip-vit-base-patch32'
       });
@@ -61,7 +61,7 @@ describe('TextIngestionFactory Multimodal Routing', () => {
     let pipeline;
     try {
       // Create ingestion pipeline with text mode (default)
-      pipeline = await TextIngestionFactory.create(dbPath, indexPath, {
+      pipeline = await IngestionFactory.create(dbPath, indexPath, {
         mode: 'text',
         embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2'
       });

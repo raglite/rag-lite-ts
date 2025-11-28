@@ -5,11 +5,11 @@
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { IngestionPipeline } from '../../src/../src/core/ingestion.js';
+import { IngestionPipeline } from '../../src/core/ingestion.js';
 import { IndexManager } from '../../src/index-manager.js';
-import { openDatabase, type DatabaseConnection } from '../../src/../src/core/db.js';
-import type { EmbedFunction } from '../../src/../src/core/interfaces.js';
-import type { EmbeddingResult } from '../../src/../src/core/types.js';
+import { openDatabase, initializeSchema, type DatabaseConnection } from '../../src/core/db.js';
+import type { EmbedFunction } from '../../src/core/interfaces.js';
+import type { EmbeddingResult } from '../../src/core/types.js';
 import { existsSync, unlinkSync, writeFileSync, mkdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -42,26 +42,65 @@ describe('IngestionPipeline (Core with Dependency Injection)', () => {
       };
     };
 
-    // Initialize database
+    // Initialize database with schema
     db = await openDatabase(testDbPath);
+    await initializeSchema(db);
+    await db.close(); // Close to ensure schema is flushed
     
-    // Initialize index manager
+    // Initialize index manager (it will open its own connection)
     indexManager = new IndexManager(testIndexPath, testDbPath, 384);
     await indexManager.initialize(true); // Skip model check for tests
+    
+    // Reopen database for test use
+    db = await openDatabase(testDbPath);
   });
 
   afterEach(async () => {
     // Clean up resources
-    if (db) {
-      await db.close();
-    }
     if (indexManager) {
       await indexManager.close();
     }
+    if (db) {
+      try {
+        await db.close();
+      } catch (error) {
+        // Ignore if already closed
+      }
+    }
+    
+    // Force close any cached database connections
+    const { DatabaseConnectionManager } = await import('../../src/core/database-connection-manager.js');
+    try {
+      await DatabaseConnectionManager.forceCloseConnection(testDbPath);
+    } catch (error) {
+      // Ignore if connection doesn't exist
+    }
 
-    // Clean up test directory
+    // Wait for resources to be released
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Force garbage collection if available
+    if (global.gc) {
+      global.gc();
+    }
+
+    // Clean up test directory with retry logic for Windows
     if (existsSync(testDir)) {
-      rmSync(testDir, { recursive: true, force: true });
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          rmSync(testDir, { recursive: true, force: true });
+          break;
+        } catch (error: any) {
+          if (error.code === 'EBUSY' && retries > 1) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+            retries--;
+          } else {
+            console.warn('⚠️  Could not clean up test directory:', error.message);
+            break;
+          }
+        }
+      }
     }
   });
 

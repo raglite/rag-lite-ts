@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { CoreConfig, validateCoreConfig, getModelDefaults, type ModelDefaults, ConfigurationError } from '../../src/../src/core/config.js';
+import { CoreConfig, validateCoreConfig, getModelDefaults, type ModelDefaults, ConfigurationError } from '../../src/core/config.js';
 
 describe('Configuration Tests', () => {
   describe('getModelDefaults', () => {

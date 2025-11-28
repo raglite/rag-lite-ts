@@ -3,9 +3,9 @@
  * Verifies model-agnostic search pipeline coordination
  */
 
-import { SearchPipelineCoordinator, SearchPipelineFactory } from '../../src/../src/core/search-pipeline.js';
-import type { EmbedFunction, RerankFunction } from '../../src/../src/core/interfaces.js';
-import type { EmbeddingResult, SearchResult } from '../../src/../src/core/types.js';
+import { SearchPipelineCoordinator, SearchPipelineFactory } from '../../src/core/search-pipeline.js';
+import type { EmbedFunction, RerankFunction } from '../../src/core/interfaces.js';
+import type { EmbeddingResult, SearchResult } from '../../src/core/types.js';
 
 /**
  * Mock embedding function for testing

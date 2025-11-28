@@ -1,12 +1,13 @@
 /**
- * Tests for text factory functions
+ * Tests for factory functions
  * Validates that factories can create instances with proper dependency injection
  * Uses Node.js test runner
  */
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { TextSearchFactory, TextIngestionFactory, TextRAGFactory } from '../../src/../src/factories/text-factory.js';
+import { IngestionFactory } from '../../src/factories/ingestion-factory.js';
+import { SearchFactory } from '../../src/factories/search-factory.js';
 import { existsSync, unlinkSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, dirname } from 'path';
@@ -16,7 +17,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const TEST_TEMP_DIR = join(__dirname, '../temp');
 
-describe('TextSearchFactory', () => {
+describe('SearchFactory', () => {
   let testDbPath: string;
   let testIndexPath: string;
 
@@ -39,12 +40,12 @@ describe('TextSearchFactory', () => {
 
   test('should validate required parameters', async () => {
     await assert.rejects(
-      () => TextSearchFactory.create('', testDbPath),
+      () => SearchFactory.create('', testDbPath),
       /Invalid file paths provided/,
       'Should reject empty indexPath'
     );
     await assert.rejects(
-      () => TextSearchFactory.create(testIndexPath, ''),
+      () => SearchFactory.create(testIndexPath, ''),
       /Invalid file paths provided/,
       'Should reject empty dbPath'
     );
@@ -52,7 +53,7 @@ describe('TextSearchFactory', () => {
 
   test('should validate file existence', async () => {
     await assert.rejects(
-      () => TextSearchFactory.create('nonexistent.bin', testDbPath),
+      () => SearchFactory.create('nonexistent.bin', testDbPath),
       /Vector index file not found/,
       'Should reject nonexistent index file'
     );
@@ -62,7 +63,7 @@ describe('TextSearchFactory', () => {
     writeFileSync(testIndexPath, 'dummy content');
     
     await assert.rejects(
-      () => TextSearchFactory.create(testIndexPath, 'nonexistent.sqlite'),
+      () => SearchFactory.create(testIndexPath, 'nonexistent.sqlite'),
       /Database file not found/,
       'Should reject nonexistent database file'
     );
@@ -82,7 +83,7 @@ describe('TextSearchFactory', () => {
   });
 });
 
-describe('TextIngestionFactory', () => {
+describe('IngestionFactory', () => {
   let testDbPath: string;
   let testIndexPath: string;
 
@@ -105,12 +106,12 @@ describe('TextIngestionFactory', () => {
 
   test('should validate required parameters', async () => {
     await assert.rejects(
-      () => TextIngestionFactory.create('', testIndexPath),
+      () => IngestionFactory.create('', testIndexPath),
       /Invalid file paths provided/,
       'Should reject empty dbPath'
     );
     await assert.rejects(
-      () => TextIngestionFactory.create(testDbPath, ''),
+      () => IngestionFactory.create(testDbPath, ''),
       /Invalid file paths provided/,
       'Should reject empty indexPath'
     );
@@ -130,35 +131,18 @@ describe('TextIngestionFactory', () => {
   });
 });
 
-describe('TextRAGFactory', () => {
-  test('should accept valid options for both search and ingestion', () => {
-    const searchOptions = {
-      embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
-      enableReranking: true,
-      topK: 10
-    };
-
-    const ingestionOptions = {
-      embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
-      chunkSize: 1024,
-      forceRebuild: false
-    };
-
-    // Should not throw when creating options
-    assert.doesNotThrow(() => ({ searchOptions, ingestionOptions }), 'Valid options should not throw');
-  });
-});
+// TextRAGFactory has been removed - use IngestionFactory and SearchFactory directly
 
 describe('Factory Options Validation', () => {
   test('should handle undefined options gracefully', () => {
     // Test that the factory methods accept undefined options without throwing synchronously
     // These will fail due to missing files, but should not throw synchronously
     assert.doesNotThrow(() => {
-      TextSearchFactory.create('nonexistent.bin', 'nonexistent.db', undefined);
+      SearchFactory.create('nonexistent.bin', 'nonexistent.db');
     }, 'Should not throw synchronously with undefined options');
     
     assert.doesNotThrow(() => {
-      TextIngestionFactory.create('nonexistent.db', 'nonexistent.bin', undefined);
+      IngestionFactory.create('nonexistent.db', 'nonexistent.bin', undefined);
     }, 'Should not throw synchronously with undefined options');
   });
 
@@ -166,11 +150,11 @@ describe('Factory Options Validation', () => {
     // Test that the factory methods accept empty options without throwing synchronously
     // These will fail due to missing files, but should not throw synchronously
     assert.doesNotThrow(() => {
-      TextSearchFactory.create('nonexistent.bin', 'nonexistent.db', {});
+      SearchFactory.create('nonexistent.bin', 'nonexistent.db');
     }, 'Should not throw synchronously with empty options');
     
     assert.doesNotThrow(() => {
-      TextIngestionFactory.create('nonexistent.db', 'nonexistent.bin', {});
+      IngestionFactory.create('nonexistent.db', 'nonexistent.bin', {});
     }, 'Should not throw synchronously with empty options');
   });
 });

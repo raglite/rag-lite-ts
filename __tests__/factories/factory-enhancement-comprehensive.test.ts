@@ -6,7 +6,7 @@
 
 import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { TextIngestionFactory } from '../../src/factories/text-factory.js';
+import { IngestionFactory } from '../../src/factories/ingestion-factory.js';
 import { existsSync, rmSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,7 +30,7 @@ describe('Factory Enhancement - Embedder Type Verification', () => {
     let db;
     try {
       // Create ingestion pipeline with multimodal mode
-      pipeline = await TextIngestionFactory.create(dbPath, indexPath, {
+      pipeline = await IngestionFactory.create(dbPath, indexPath, {
         mode: 'multimodal',
         embeddingModel: 'Xenova/clip-vit-base-patch32'
       });
@@ -65,7 +65,7 @@ describe('Factory Enhancement - Embedder Type Verification', () => {
     let db;
     try {
       // Create ingestion pipeline with text mode
-      pipeline = await TextIngestionFactory.create(dbPath, indexPath, {
+      pipeline = await IngestionFactory.create(dbPath, indexPath, {
         mode: 'text',
         embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2'
       });
@@ -100,7 +100,7 @@ describe('Factory Enhancement - Mode Validation', () => {
     
     try {
       // Try to create with incompatible combination
-      await TextIngestionFactory.create(dbPath, indexPath, {
+      await IngestionFactory.create(dbPath, indexPath, {
         mode: 'multimodal',
         embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2' // Text model with multimodal mode
       });
@@ -128,7 +128,7 @@ describe('Factory Enhancement - Mode Validation', () => {
     
     try {
       // Try to create with incompatible combination
-      await TextIngestionFactory.create(dbPath, indexPath, {
+      await IngestionFactory.create(dbPath, indexPath, {
         mode: 'text',
         embeddingModel: 'Xenova/clip-vit-base-patch32' // CLIP model with text mode
       });
@@ -164,7 +164,7 @@ describe('Factory Enhancement - End-to-End Multimodal Ingestion', () => {
       writeFileSync(testFilePath, 'This is a test document for multimodal ingestion.');
       
       // Create multimodal pipeline
-      pipeline = await TextIngestionFactory.create(dbPath, indexPath, {
+      pipeline = await IngestionFactory.create(dbPath, indexPath, {
         mode: 'multimodal',
         embeddingModel: 'Xenova/clip-vit-base-patch32'
       });
@@ -209,7 +209,7 @@ describe('Factory Enhancement - End-to-End Text Ingestion', () => {
       writeFileSync(testFilePath, 'This is a test document for text mode ingestion.');
       
       // Create text mode pipeline
-      pipeline = await TextIngestionFactory.create(dbPath, indexPath, {
+      pipeline = await IngestionFactory.create(dbPath, indexPath, {
         mode: 'text',
         embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2'
       });

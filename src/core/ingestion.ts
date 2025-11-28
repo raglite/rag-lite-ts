@@ -97,7 +97,7 @@ export class IngestionPipeline {
    * USAGE EXAMPLES:
    * ```typescript
    * // Text-only ingestion pipeline with unified content system
-   * const textEmbedFn = await createTextEmbedder();
+   * const textEmbedFn = createTextEmbedFunction();
    * const indexManager = new IndexManager('./index.bin');
    * const db = await openDatabase('./db.sqlite');
    * const contentManager = new ContentManager(db);
@@ -555,28 +555,6 @@ export class IngestionPipeline {
   }
 
   /**
-   * Chunk all documents and organize results (legacy method for backward compatibility)
-   * @deprecated Use chunkDocumentsWithContentTypes for multimodal support
-   */
-  private async chunkDocuments(
-    documents: Document[],
-    chunkConfig?: ChunkConfig
-  ): Promise<{
-    documentChunks: Array<{ document: Document; chunks: any[] }>;
-    allChunks: string[];
-    totalChunks: number;
-  }> {
-    const result = await this.chunkDocumentsWithContentTypes(documents, chunkConfig);
-
-    // Convert to legacy format for backward compatibility
-    return {
-      documentChunks: result.documentChunks,
-      allChunks: result.allChunks.map(chunk => chunk.text),
-      totalChunks: result.totalChunks
-    };
-  }
-
-  /**
    * Generate embeddings for all chunks with content-type support
    * Enhanced to handle different content types and pass metadata to embedding function
    */
@@ -635,19 +613,6 @@ export class IngestionPipeline {
       console.error('Critical embedding failure:', error instanceof Error ? error.message : String(error));
       throw new Error(`Embedding generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  }
-
-  /**
-   * Generate embeddings for all chunks with error handling (legacy method for backward compatibility)
-   * @deprecated Use generateEmbeddingsWithContentTypes for multimodal support
-   */
-  private async generateEmbeddings(chunkTexts: string[]): Promise<{
-    embeddings: EmbeddingResult[];
-    errors: number;
-  }> {
-    // Convert to new format for backward compatibility
-    const chunks = chunkTexts.map(text => ({ text, contentType: 'text' }));
-    return this.generateEmbeddingsWithContentTypes(chunks);
   }
 
   /**
@@ -767,17 +732,6 @@ export class IngestionPipeline {
 
     console.log(`✓ Storage complete: ${documentsStored} documents, ${totalChunksStored} chunks saved to database`);
     return contentIds;
-  }
-
-  /**
-   * Store documents and chunks in database (legacy method for backward compatibility)
-   * @deprecated Use storeDocumentsAndChunksWithContentTypes for multimodal support
-   */
-  private async storeDocumentsAndChunks(
-    documentChunks: Array<{ document: Document; chunks: any[] }>,
-    embeddings: EmbeddingResult[]
-  ): Promise<void> {
-    await this.storeDocumentsAndChunksWithContentTypes(documentChunks, embeddings);
   }
 
   /**

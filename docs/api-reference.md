@@ -261,7 +261,7 @@ Handles document ingestion, processing, and indexing with automatic initializati
 
 ```typescript
 class IngestionPipeline {
-  constructor(dbPath: string, indexPath: string, options?: IngestionPipelineOptions);
+  constructor(dbPath: string, indexPath: string, options?: IngestionFactoryOptions);
   
   async ingestDirectory(path: string, options?: IngestionOptions): Promise<IngestionResult>;
   async ingestFile(filePath: string, options?: IngestionOptions): Promise<IngestionResult>;
@@ -274,12 +274,12 @@ class IngestionPipeline {
 
 - `dbPath` (string): Path to the SQLite database file (will be created if doesn't exist)
 - `indexPath` (string): Path to the vector index file (will be created if doesn't exist)
-- `options` (IngestionPipelineOptions, optional): Configuration options
+- `options` (IngestionFactoryOptions, optional): Configuration options
 
-#### IngestionPipelineOptions
+#### IngestionFactoryOptions
 
 ```typescript
-interface IngestionPipelineOptions {
+interface IngestionFactoryOptions {
   mode?: 'text' | 'multimodal';  // Processing mode (default: 'text')
   embeddingModel?: string;        // Model name (default: 'sentence-transformers/all-MiniLM-L6-v2')
   rerankingStrategy?: 'cross-encoder' | 'text-derived' | 'metadata' | 'hybrid' | 'disabled';
@@ -447,10 +447,10 @@ const ingestion = new IngestionPipeline('./db.sqlite', './index.bin', {
 **Advanced: Direct Polymorphic Factory Usage**
 
 ```typescript
-import { PolymorphicSearchFactory } from 'rag-lite-ts';
+import { SearchFactory } from 'rag-lite-ts';
 
 // Advanced usage - direct factory access
-const search = await PolymorphicSearchFactory.create('./index.bin', './db.sqlite');
+const search = await SearchFactory.create('./index.bin', './db.sqlite');
 // Automatically detects mode and creates appropriate search engine
 ```
 
@@ -731,30 +731,16 @@ Factory functions provide advanced initialization with automatic setup, smart de
 
 ### SearchFactory
 
-Creates and initializes search engines with automatic model loading and validation.
+Creates and initializes search engines with automatic mode detection and configuration from the database.
+
+The factory automatically detects the mode (text or multimodal), embedding model, dimensions, and reranking strategy from the database configuration stored during ingestion. This implements the Chameleon Architecture where the search engine adapts to the stored configuration.
 
 ```typescript
 class SearchFactory {
   static async create(
     indexPath: string, 
-    dbPath: string, 
-    options?: TextSearchOptions
+    dbPath: string
   ): Promise<SearchEngine>;
-  
-  static async createWithDefaults(
-    options?: TextSearchOptions
-  ): Promise<SearchEngine>;
-}
-```
-
-#### TextSearchOptions
-
-```typescript
-interface TextSearchOptions {
-  embeddingModel?: string;        // Model name override
-  batchSize?: number;             // Embedding batch size override
-  rerankingModel?: string;        // Reranking model name override
-  enableReranking?: boolean;      // Enable/disable reranking (default: false)
 }
 ```
 
@@ -763,20 +749,12 @@ interface TextSearchOptions {
 ```typescript
 import { SearchFactory } from 'rag-lite-ts';
 
-// Basic usage with comprehensive error handling
+// Basic usage - automatically detects mode and configuration from database
 const search = await SearchFactory.create('./index.bin', './db.sqlite');
 const results = await search.search('machine learning');
 
-// Advanced configuration
-const search = await SearchFactory.create('./index.bin', './db.sqlite', {
-  embeddingModel: 'Xenova/all-mpnet-base-v2',
-  enableReranking: true
-});
-
-// Use default paths from configuration
-const search = await SearchFactory.createWithDefaults({
-  enableReranking: false
-});
+// Works for both text and multimodal modes
+// Configuration is determined by what was set during ingestion
 ```
 
 ### IngestionFactory
@@ -788,19 +766,19 @@ class IngestionFactory {
   static async create(
     dbPath: string,
     indexPath: string,
-    options?: TextIngestionOptions
+    options?: IngestionFactoryOptions
   ): Promise<IngestionPipeline>;
   
   static async createWithDefaults(
-    options?: TextIngestionOptions
+    options?: IngestionFactoryOptions
   ): Promise<IngestionPipeline>;
 }
 ```
 
-#### TextIngestionOptions
+#### IngestionFactoryOptions
 
 ```typescript
-interface TextIngestionOptions {
+interface IngestionFactoryOptions {
   embeddingModel?: string;        // Model name override
   batchSize?: number;             // Embedding batch size override
   chunkSize?: number;             // Chunk size override
@@ -827,55 +805,6 @@ const ingestion = await IngestionFactory.create('./db.sqlite', './index.bin', {
 });
 ```
 
-### RAGFactory
-
-Creates complete RAG systems with both search and ingestion capabilities.
-
-```typescript
-class RAGFactory {
-  static async createBoth(
-    indexPath: string,
-    dbPath: string,
-    searchOptions?: TextSearchOptions,
-    ingestionOptions?: TextIngestionOptions
-  ): Promise<{
-    searchEngine: SearchEngine;
-    ingestionPipeline: IngestionPipeline;
-  }>;
-  
-  static async createBothWithDefaults(
-    searchOptions?: TextSearchOptions,
-    ingestionOptions?: TextIngestionOptions
-  ): Promise<{
-    searchEngine: SearchEngine;
-    ingestionPipeline: IngestionPipeline;
-  }>;
-}
-```
-
-#### Example
-
-```typescript
-import { RAGFactory } from 'rag-lite-ts';
-
-// Create complete RAG system
-const { searchEngine, ingestionPipeline } = await RAGFactory.createBoth(
-  './index.bin',
-  './db.sqlite'
-);
-
-// First, ingest some documents
-await ingestionPipeline.ingestDirectory('./knowledge-base');
-
-// Then search the ingested content
-const results = await searchEngine.search('What is the main topic?');
-
-// Clean up both instances
-await Promise.all([
-  searchEngine.cleanup(),
-  ingestionPipeline.cleanup()
-]);
-```
 
 ## Core Architecture
 
@@ -905,32 +834,35 @@ import { IngestionPipeline as CoreIngestionPipeline } from 'rag-lite-ts';
 const corePipeline = new CoreIngestionPipeline(embedFn, indexManager, db, chunkConfig);
 ```
 
-### Text Implementations
+### Advanced: Direct Component Creation
 
-#### Embedding Functions
+#### Universal Embedder
 
 ```typescript
-import { createTextEmbedFunction, createTextEmbedder } from 'rag-lite-ts';
+import { createEmbedder } from 'rag-lite-ts';
 
-// Create embedding function
-const embedFn = createTextEmbedFunction('Xenova/all-mpnet-base-v2', 16);
+// Create embedder for text mode
+const textEmbedder = await createEmbedder('Xenova/all-mpnet-base-v2');
+const result = await textEmbedder.embedText('text to embed');
 
-// Create embedding engine directly
-const embedder = createTextEmbedder('Xenova/all-mpnet-base-v2');
-await embedder.loadModel();
+// Create embedder for multimodal mode
+const clipEmbedder = await createEmbedder('Xenova/clip-vit-base-patch32');
+const textResult = await clipEmbedder.embedText('text query');
+const imageResult = await clipEmbedder.embedImage?.('./image.jpg');
 ```
 
 #### Reranking Functions
 
 ```typescript
-import { createTextRerankFunction, createTextReranker } from 'rag-lite-ts';
+import { createReranker } from 'rag-lite-ts';
 
-// Create reranking function
-const rerankFn = createTextRerankFunction('cross-encoder/ms-marco-MiniLM-L-6-v2');
+// Create reranker for text mode
+const textReranker = createReranker('text', 'cross-encoder');
+const reranked = await textReranker(query, results);
 
-// Create reranker directly
-const reranker = createTextReranker('cross-encoder/ms-marco-MiniLM-L-6-v2');
-await reranker.loadModel();
+// Create reranker for multimodal mode
+const multimodalReranker = createReranker('multimodal', 'text-derived');
+const reranked = await multimodalReranker(query, results);
 ```
 
 ### Custom Implementation Example
@@ -938,12 +870,19 @@ await reranker.loadModel();
 ```typescript
 import { 
   SearchEngine as CoreSearchEngine,
-  createTextEmbedFunction,
+  createEmbedder,
   IndexManager,
   openDatabase
 } from 'rag-lite-ts';
 
-// Custom embedding function
+// Option 1: Use universal embedder
+const embedder = await createEmbedder('Xenova/all-mpnet-base-v2');
+const embedFn = async (query: string) => {
+  const result = await embedder.embedText(query);
+  return result;
+};
+
+// Option 2: Custom embedding function
 const customEmbedFn = async (query: string) => {
   // Your custom embedding logic
   return {
@@ -958,7 +897,7 @@ const indexManager = new IndexManager('./index.bin', './db.sqlite', 384, 'custom
 await indexManager.initialize();
 
 // Create search engine with custom embedding
-const search = new CoreSearchEngine(customEmbedFn, indexManager, db);
+const search = new CoreSearchEngine(embedFn, indexManager, db);
 ```
 
 ## Unified Content System

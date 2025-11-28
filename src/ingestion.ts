@@ -19,11 +19,9 @@
  */
 
 import { IngestionPipeline as CoreIngestionPipeline } from './core/ingestion.js';
-import { TextIngestionFactory, type TextIngestionOptions } from './factories/index.js';
+import { IngestionFactory, type IngestionFactoryOptions } from './factories/index.js';
 import type { IngestionOptions, IngestionResult } from './core/ingestion.js';
 import type { MemoryContentMetadata } from './core/content-manager.js';
-
-export interface IngestionPipelineOptions extends TextIngestionOptions {}
 
 export class IngestionPipeline {
   private corePipeline: CoreIngestionPipeline | null = null;
@@ -33,7 +31,7 @@ export class IngestionPipeline {
   constructor(
     private dbPath: string,
     private indexPath: string,
-    private options: IngestionPipelineOptions = {}
+    private options: IngestionFactoryOptions = {}
   ) {
     // Validate required parameters
     if (!dbPath || typeof dbPath !== 'string' || dbPath.trim() === '') {
@@ -65,7 +63,7 @@ export class IngestionPipeline {
     }
 
     this.initPromise = (async () => {
-      this.corePipeline = await TextIngestionFactory.create(
+      this.corePipeline = await IngestionFactory.create(
         this.dbPath,
         this.indexPath,
         this.options

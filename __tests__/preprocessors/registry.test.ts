@@ -1,8 +1,8 @@
 import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { PreprocessorRegistry, ContentTypeDetector } from '../../src/../src/preprocessors/registry.js';
-import { MdxPreprocessor } from '../../src/../src/preprocessors/mdx.js';
-import { MermaidPreprocessor } from '../../src/../src/preprocessors/mermaid.js';
+import { PreprocessorRegistry, ContentTypeDetector } from '../../src/preprocessors/registry.js';
+import { MdxPreprocessor } from '../../src/preprocessors/mdx.js';
+import { MermaidPreprocessor } from '../../src/preprocessors/mermaid.js';
 
 describe('PreprocessorRegistry', () => {
   test('should register and retrieve preprocessors', () => {

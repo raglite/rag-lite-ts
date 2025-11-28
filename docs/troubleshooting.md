@@ -556,7 +556,7 @@ sqlite3 db.sqlite "SELECT mode, model_name, created_at FROM system_info;"
 # Test polymorphic behavior
 DEBUG=1 raglite search "test query"  # Should show mode detection
 
-# Check if PolymorphicSearchFactory is being used
+# Check if SearchFactory is being used
 raglite search "test" --debug | grep -i "mode\|polymorphic"
 ```
 

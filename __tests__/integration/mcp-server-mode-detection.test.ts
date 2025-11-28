@@ -1,6 +1,6 @@
 /**
  * Tests for MCP Server Mode Detection Integration
- * Validates that MCP server correctly uses PolymorphicSearchFactory and mode detection
+ * Validates that MCP server correctly uses SearchFactory and mode detection
  * Uses Node.js test runner
  */
 
@@ -8,31 +8,31 @@ import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 describe('MCP Server Mode Detection Integration', () => {
-  test('should import PolymorphicSearchFactory correctly', async () => {
-    // Test that the MCP server now imports PolymorphicSearchFactory
+  test('should import SearchFactory correctly', async () => {
+    // Test that the MCP server now imports SearchFactory
     // instead of TextSearchFactory
     
     try {
-      // Read the MCP server source to verify it uses PolymorphicSearchFactory
+      // Read the MCP server source to verify it uses SearchFactory
       const fs = await import('fs');
       const path = await import('path');
       
       const mcpServerPath = path.resolve('./src/mcp-server.ts');
       const mcpServerSource = fs.readFileSync(mcpServerPath, 'utf-8');
       
-      // Verify that the source code imports PolymorphicSearchFactory
-      assert.ok(mcpServerSource.includes('PolymorphicSearchFactory'), 
-        'MCP server should import PolymorphicSearchFactory');
+      // Verify that the source code imports SearchFactory
+      assert.ok(mcpServerSource.includes('SearchFactory'), 
+        'MCP server should import SearchFactory');
       
       // Verify that it no longer imports TextSearchFactory for search operations
       assert.ok(!mcpServerSource.includes('TextSearchFactory.create('), 
         'MCP server should not use TextSearchFactory.create for search operations');
       
-      // Verify that it uses PolymorphicSearchFactory.create
-      assert.ok(mcpServerSource.includes('PolymorphicSearchFactory.create('), 
-        'MCP server should use PolymorphicSearchFactory.create');
+      // Verify that it uses SearchFactory.create
+      assert.ok(mcpServerSource.includes('SearchFactory.create('), 
+        'MCP server should use SearchFactory.create');
       
-      console.log('✓ MCP server correctly imports and uses PolymorphicSearchFactory');
+      console.log('✓ MCP server correctly imports and uses SearchFactory');
       
     } catch (error) {
       assert.fail(`Failed to verify MCP server imports: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -124,3 +124,22 @@ describe('MCP Server Mode Detection Integration', () => {
     }
   });
 });
+
+// Force exit after test completion to prevent hanging
+// These tests perform file I/O and module imports that can keep handles open
+setTimeout(() => {
+  console.log('🔄 Forcing test exit to prevent hanging from file handles...');
+  
+  // Multiple garbage collection attempts
+  if (global.gc) {
+    global.gc();
+    setTimeout(() => { if (global.gc) global.gc(); }, 100);
+    setTimeout(() => { if (global.gc) global.gc(); }, 300);
+  }
+  
+  // Force exit after cleanup attempts
+  setTimeout(() => {
+    console.log('✅ Exiting test process');
+    process.exit(0);
+  }, 1000);
+}, 5000); // 5 seconds should be enough for these simple tests

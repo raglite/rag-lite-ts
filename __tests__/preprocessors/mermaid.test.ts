@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { MermaidPreprocessor } from '../../src/../src/preprocessors/mermaid.js';
+import { MermaidPreprocessor } from '../../src/preprocessors/mermaid.js';
 import { PreprocessorOptions } from '../../src/types.js';
 
 describe('MermaidPreprocessor', () => {

@@ -12,17 +12,13 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 
 // Factory pattern imports
-import { 
-  TextSearchFactory, 
-  TextIngestionFactory, 
-  TextRAGFactory,
-  TextFactoryHelpers 
-} from '../../src/factories/text-factory.js';
+import { IngestionFactory } from '../../src/factories/ingestion-factory.js';
+import { SearchFactory } from '../../src/factories/search-factory.js';
 
 // Core architecture imports for direct dependency injection
-import { SearchEngine } from '../../src/../src/core/search.js';
-import { IngestionPipeline } from '../../src/../src/core/ingestion.js';
-import { openDatabase, initializeSchema } from '../../src/../src/core/db.js';
+import { SearchEngine } from '../../src/core/search.js';
+import { IngestionPipeline } from '../../src/core/ingestion.js';
+import { openDatabase, initializeSchema } from '../../src/core/db.js';
 import { IndexManager } from '../../src/index-manager.js';
 import { createTextEmbedFunction } from '../../src/text/embedder.js';
 import { createTextRerankFunction } from '../../src/text/reranker.js';
@@ -34,7 +30,7 @@ import {
   type RerankFunction,
   type EmbeddingQueryInterface,
   type RerankingInterface 
-} from '../../src/../src/core/interfaces.js';
+} from '../../src/core/interfaces.js';
 
 // Test configuration
 const TEST_BASE_DIR = join(tmpdir(), 'rag-lite-core-integration-test');
@@ -182,16 +178,20 @@ describe('Core Layer Integration Tests', () => {
   });
 
   describe('Factory Pattern Workflows', () => {
-    test('complete RAG workflow using TextRAGFactory', async () => {
+    test('complete RAG workflow using factory pattern', async () => {
       console.log('🧪 Testing complete RAG workflow with factory pattern...');
 
       try {
         // Step 1: Create ingestion pipeline first
         console.log('Step 1: Creating ingestion pipeline...');
-        const ingestionPipeline = await TextIngestionFactory.create(
+        const ingestionPipeline = await IngestionFactory.create(
           testDbPath,
           testIndexPath,
-          { chunkSize: 512, chunkOverlap: 50 }
+          { 
+            chunkSize: 512, 
+            chunkOverlap: 50,
+            rerankingStrategy: 'disabled' // Explicitly disable reranking for this test
+          }
         );
 
         assert.ok(ingestionPipeline, 'IngestionPipeline should be created');
@@ -210,10 +210,10 @@ describe('Core Layer Integration Tests', () => {
 
         // Step 4: Create search engine AFTER ingestion
         console.log('Step 3: Creating search engine...');
-        const searchEngine = await TextSearchFactory.create(
+        // SearchFactory auto-detects mode and configuration from database
+        const searchEngine = await SearchFactory.create(
           testIndexPath,
-          testDbPath,
-          { enableReranking: false, topK: 5 }
+          testDbPath
         );
 
         assert.ok(searchEngine, 'SearchEngine should be created');
@@ -271,24 +271,22 @@ describe('Core Layer Integration Tests', () => {
       }
     });
 
-    test('TextSearchFactory with custom configuration', async () => {
-      console.log('🧪 Testing TextSearchFactory with custom configuration...');
+    test('SearchFactory with auto-detection', async () => {
+      console.log('🧪 Testing SearchFactory with auto-detection...');
 
       try {
         // First create an ingestion pipeline to set up the data
-        const ingestion = await TextIngestionFactory.create(testDbPath, testIndexPath, {
+        const ingestion = await IngestionFactory.create(testDbPath, testIndexPath, {
           chunkSize: 256,
-          chunkOverlap: 25
+          chunkOverlap: 25,
+          rerankingStrategy: 'disabled' // Explicitly disable reranking for this test
         });
 
         await ingestion.ingestDirectory(testDocsDir);
         await ingestion.cleanup();
 
         // Now test search factory with custom options
-        const searchEngine = await TextSearchFactory.create(testIndexPath, testDbPath, {
-          enableReranking: false,
-          topK: 3
-        });
+        const searchEngine = await SearchFactory.create(testIndexPath, testDbPath);
 
         // Test search with custom configuration
         const results = await searchEngine.search('machine learning');
@@ -313,32 +311,6 @@ describe('Core Layer Integration Tests', () => {
         }
         throw error;
       }
-    });
-
-    test('TextFactoryHelpers validation and recommendations', async () => {
-      console.log('🧪 Testing TextFactoryHelpers utilities...');
-
-      // Test file validation
-      assert.throws(
-        () => TextFactoryHelpers.validateSearchFiles('nonexistent.bin', 'nonexistent.db'),
-        /Vector index not found/,
-        'Should validate index file existence'
-      );
-
-      // Test configuration recommendations
-      const fastConfig = TextFactoryHelpers.getRecommendedConfig('fast');
-      assert.equal(fastConfig.searchOptions.enableReranking, false, 'Fast config should disable reranking');
-      assert.equal(fastConfig.searchOptions.topK, 5, 'Fast config should use small topK');
-
-      const qualityConfig = TextFactoryHelpers.getRecommendedConfig('quality');
-      assert.equal(qualityConfig.searchOptions.enableReranking, true, 'Quality config should enable reranking');
-      assert.equal(qualityConfig.searchOptions.topK, 20, 'Quality config should use larger topK');
-
-      const balancedConfig = TextFactoryHelpers.getRecommendedConfig('balanced');
-      assert.equal(balancedConfig.searchOptions.enableReranking, true, 'Balanced config should enable reranking');
-      assert.equal(balancedConfig.searchOptions.topK, 10, 'Balanced config should use medium topK');
-
-      console.log('✅ Factory helpers test completed successfully');
     });
   });
 
@@ -506,7 +478,7 @@ describe('Core Layer Integration Tests', () => {
         await initializeSchema(db);
 
         // Test that we can store content with different content types
-        const { insertDocument, insertChunk } = await import('../../src/../src/core/db.js');
+        const { insertDocument, insertChunk } = await import('../../src/core/db.js');
 
         // Insert a text document
         const textDocId = await insertDocument(db, 'test.md', 'Test Document', 'text');
@@ -523,7 +495,7 @@ describe('Core Layer Integration Tests', () => {
         await insertChunk(db, 'image_chunk_1', imageDocId, 'image_description', 0, 'image', { type: 'image_caption' });
 
         // Verify chunks can be retrieved with content type information
-        const { getChunksByEmbeddingIds } = await import('../../src/../src/core/db.js');
+        const { getChunksByEmbeddingIds } = await import('../../src/core/db.js');
         const chunks = await getChunksByEmbeddingIds(db, ['text_chunk_1', 'image_chunk_1']);
 
         assert.equal(chunks.length, 2, 'Should retrieve both chunks');
@@ -593,16 +565,21 @@ describe('Core Layer Integration Tests', () => {
         // to the pre-refactor system for the same inputs
 
         // Create system using factory pattern
-        const { searchEngine, ingestionPipeline } = await TextRAGFactory.createBoth(
-          testIndexPath,
+        const ingestionPipeline = await IngestionFactory.create(
           testDbPath,
-          { enableReranking: false }, // Disable for consistent results
+          testIndexPath,
           { chunkSize: 1024, chunkOverlap: 100 }
         );
 
         // Ingest the same test documents
         const ingestionResult = await ingestionPipeline.ingestDirectory(testDocsDir);
         assert.ok(ingestionResult.documentsProcessed === 3, 'Should process all 3 test documents');
+
+        // Create search engine after ingestion
+        const searchEngine = await SearchFactory.create(
+          testIndexPath,
+          testDbPath
+        );
 
         // Test search with specific queries that should produce consistent results
         const query1Results = await searchEngine.search('machine learning');
@@ -651,7 +628,7 @@ describe('Core Layer Integration Tests', () => {
 
       // Test factory error handling
       await assert.rejects(
-        () => TextSearchFactory.create('nonexistent.bin', 'nonexistent.db'),
+        () => SearchFactory.create('nonexistent.bin', 'nonexistent.db'),
         /Vector index not found/,
         'Should handle missing files gracefully'
       );

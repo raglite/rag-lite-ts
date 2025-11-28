@@ -11,12 +11,12 @@ import { test, describe, beforeEach, afterEach } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import { ContentManager, type MemoryContentMetadata } from '../../src/../src/core/content-manager.js';
-import { ContentResolver } from '../../src/../src/core/content-resolver.js';
-import { openDatabase, initializeSchema } from '../../src/../src/core/db.js';
+import { ContentManager, type MemoryContentMetadata } from '../../src/core/content-manager.js';
+import { ContentResolver } from '../../src/core/content-resolver.js';
+import { openDatabase, initializeSchema } from '../../src/core/db.js';
 import {
   ContentNotFoundError
-} from '../../src/../src/core/content-errors.js';
+} from '../../src/core/content-errors.js';
 
 describe('Content System', { timeout: 30000 }, () => {
   let testDir: string;

@@ -319,40 +319,13 @@ export function createTextRerankFunction(modelName?: string): RerankFunction {
   return rerankFunction;
 }
 
-/**
- * Create a text reranker factory function
- * @param modelName - Optional model name override
- * @returns Factory function that creates initialized rerankers
- */
-export function createTextReranker(modelName?: string) {
-  return {
-    async rerank(query: string, results: SearchResult[]): Promise<SearchResult[]> {
-      const reranker = new CrossEncoderReranker();
-      if (modelName) {
-        (reranker as any).modelName = modelName;
-      }
-      await reranker.loadModel();
-
-      if (!reranker.isLoaded()) {
-        console.warn('Text reranker not loaded, returning results unchanged');
-        return results;
-      }
-
-      return reranker.rerank(query, results);
-    },
-
-    async loadModel(): Promise<void> {
-      const reranker = new CrossEncoderReranker();
-      if (modelName) {
-        (reranker as any).modelName = modelName;
-      }
-      await reranker.loadModel();
-    },
-
-    isLoaded(): boolean {
-      // For the factory version, we create new instances each time
-      // so we can't track loaded state
-      return true;
-    }
-  };
-}
+// =============================================================================
+// REMOVED IN v3.0.0: createTextReranker() factory object
+// =============================================================================
+// The createTextReranker() function has been removed as it was redundant.
+// It was just a wrapper that created new CrossEncoderReranker instances.
+//
+// Migration guide:
+// - For public API: Use createReranker() from core/reranking-factory.ts
+// - For dependency injection: Use createTextRerankFunction()
+// - For direct access: Use new CrossEncoderReranker() directly

@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { EmbeddingEngine, getEmbeddingEngine, initializeEmbeddingEngine } from '../../src/../src/text/embedder.js';
+import { EmbeddingEngine, getEmbeddingEngine, initializeEmbeddingEngine } from '../../src/text/embedder.js';
 import { config, getModelDefaults } from '../../src/core/config.js';
 
 describe('EmbeddingEngine', () => {

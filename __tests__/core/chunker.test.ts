@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { chunkDocument, DEFAULT_CHUNK_CONFIG, type GenericDocument, type ChunkConfig } from '../../src/../src/core/chunker.js';
+import { chunkDocument, DEFAULT_CHUNK_CONFIG, type GenericDocument, type ChunkConfig } from '../../src/core/chunker.js';
 
 describe('Chunker', () => {
   const sampleDocument: GenericDocument = {

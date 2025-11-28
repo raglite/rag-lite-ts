@@ -47,7 +47,7 @@ describe('SearchEngine (Core with Dependency Injection)', () => {
     db = await openDatabase(testDbPath);
     
     // Initialize database schema
-    const { initializeSchema } = await import('../../src/../src/core/db.js');
+    const { initializeSchema } = await import('../../src/core/db.js');
     await initializeSchema(db);
     
     // Initialize index manager
@@ -223,7 +223,7 @@ describe('SearchEngine (Core with Dependency Injection)', () => {
       const testIndexPath = join(tmpdir(), `test-rerank-index-${testId}.bin`);
       
       const testDb = await openDatabase(testDbPath);
-      const { initializeSchema } = await import('../../src/../src/core/db.js');
+      const { initializeSchema } = await import('../../src/core/db.js');
       await initializeSchema(testDb);
       
       const testIndexManager = new IndexManager(testIndexPath, testDbPath, 384);
@@ -258,7 +258,7 @@ describe('SearchEngine (Core with Dependency Injection)', () => {
       const testIndexPath = join(tmpdir(), `test-rerank-index-${testId}.bin`);
       
       const testDb = await openDatabase(testDbPath);
-      const { initializeSchema } = await import('../../src/../src/core/db.js');
+      const { initializeSchema } = await import('../../src/core/db.js');
       await initializeSchema(testDb);
       
       const testIndexManager = new IndexManager(testIndexPath, testDbPath, 384);

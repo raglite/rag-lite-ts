@@ -10,8 +10,8 @@ import {
   createDefaultReranker, 
   isRerankingAvailable, 
   getRerankingInfo 
-} from '../../src/../src/core/reranking-factory.js';
-import type { SearchResult } from '../../src/../src/core/types.js';
+} from '../../src/core/reranking-factory.js';
+import type { SearchResult } from '../../src/core/types.js';
 
 // Mock search results for testing
 const mockSearchResults: SearchResult[] = [

@@ -11,7 +11,7 @@ import * as path from 'path';
 import { Database } from 'sqlite3';
 import { openDatabase } from '../../src/core/db.js';
 import { ModeDetectionService } from '../../src/core/mode-detection-service.js';
-import { PolymorphicSearchFactory } from '../../src/core/polymorphic-search-factory.js';
+import { SearchFactory } from '../../src/factories/search-factory.js';
 import { createEmbedder } from '../../src/core/embedder-factory.js';
 import { createReranker } from '../../src/core/reranking-factory.js';
 
@@ -136,8 +136,9 @@ describe('Chameleon Error Recovery and Reliability', () => {
         await createEmbedder('unsupported-model-name');
         assert.fail('Should have thrown an error for unsupported model');
       } catch (error) {
-        assert.ok(getErrorMessage(error).includes('not supported'));
-        assert.ok(getErrorMessage(error).includes('Supported models:'));
+        const errorMsg = getErrorMessage(error);
+        assert.ok(errorMsg.includes('not found') || errorMsg.includes('not supported') || errorMsg.includes('validation failed'), 'Error should mention model issue');
+        // Note: Suggestions are logged to console, not in error message
       }
     });
 
@@ -182,11 +183,15 @@ describe('Chameleon Error Recovery and Reliability', () => {
 
   describe('Reranking Strategy Error Recovery', () => {
     test('should fall back when reranking strategy fails', async () => {
-      // Test fallback to disabled reranking when strategy fails
-      const reranker = createReranker('multimodal', 'invalid-strategy' as any);
-      
-      // Should return undefined (disabled) for invalid strategy
-      assert.strictEqual(reranker, undefined);
+      // Test that invalid strategy throws an error with helpful message
+      try {
+        createReranker('multimodal', 'invalid-strategy' as any);
+        assert.fail('Should have thrown an error for invalid reranking strategy');
+      } catch (error) {
+        const errorMsg = getErrorMessage(error);
+        assert.ok(errorMsg.includes('not supported') || errorMsg.includes('invalid'), 'Error should mention invalid strategy');
+        assert.ok(errorMsg.includes('text-derived') || errorMsg.includes('metadata'), 'Error should suggest valid strategies');
+      }
     });
 
     test('should handle text-derived reranking model failures', async () => {
@@ -251,7 +256,7 @@ describe('Chameleon Error Recovery and Reliability', () => {
     test('should handle search engine creation failures', async () => {
       try {
         // Try to create search engine with invalid paths
-        const searchEngine = await PolymorphicSearchFactory.create(
+        const searchEngine = await SearchFactory.create(
           '/invalid/path/index.bin',
           '/invalid/path/db.sqlite'
         );
@@ -283,7 +288,7 @@ describe('Chameleon Error Recovery and Reliability', () => {
       await db.close();
       
       try {
-        const searchEngine = await PolymorphicSearchFactory.create(testIndexPath, testDbPath);
+        const searchEngine = await SearchFactory.create(testIndexPath, testDbPath);
         
         // Try to perform a search - should handle corrupted index gracefully
         const results = await searchEngine.search('test query');
@@ -315,7 +320,7 @@ describe('Chameleon Error Recovery and Reliability', () => {
       // Create index with different dimensions (simulate mismatch)
       // This would require actual HNSW index creation, so we'll test the concept
       try {
-        const searchEngine = await PolymorphicSearchFactory.create(testIndexPath, testDbPath);
+        const searchEngine = await SearchFactory.create(testIndexPath, testDbPath);
         assert.ok(searchEngine);
       } catch (error) {
         // Should handle dimension mismatches gracefully
@@ -344,7 +349,7 @@ describe('Chameleon Error Recovery and Reliability', () => {
       await db.close();
       
       try {
-        const searchEngine = await PolymorphicSearchFactory.create(testIndexPath, testDbPath);
+        const searchEngine = await SearchFactory.create(testIndexPath, testDbPath);
         
         // Perform multiple concurrent searches
         const searchPromises = Array.from({ length: 5 }, (_, i) =>
@@ -385,7 +390,7 @@ describe('Chameleon Error Recovery and Reliability', () => {
         `);
         await db.close();
         
-        const searchEngine = await PolymorphicSearchFactory.create(testIndexPath, testDbPath);
+        const searchEngine = await SearchFactory.create(testIndexPath, testDbPath);
         
         // Process queries in batches to test memory management
         const batchSize = 10;

@@ -25,16 +25,55 @@ function setupTestData() {
   writeFileSync(testDoc, '# Test Document\n\nThis is a test document for MCP integration testing.\n\nIt contains multiple paragraphs to test chunking and embedding functionality.');
 }
 
-function cleanupTestData() {
+async function cleanupTestData() {
+  // Wait for resources to be released
+  await new Promise(resolve => setTimeout(resolve, 200));
+  
+  // Force garbage collection if available
+  if (global.gc) {
+    global.gc();
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  
+  // Cleanup test directory with retry logic
   if (existsSync(testDir)) {
-    rmSync(testDir, { recursive: true, force: true });
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        rmSync(testDir, { recursive: true, force: true });
+        break;
+      } catch (error: any) {
+        if (error.code === 'EBUSY' && retries > 1) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+          retries--;
+        } else {
+          console.warn('⚠️  Could not clean up test directory:', error.message);
+          break;
+        }
+      }
+    }
   }
-  // Clean up any test databases and indexes
-  if (existsSync('db.sqlite')) {
-    rmSync('db.sqlite', { force: true });
-  }
-  if (existsSync('vector-index.bin')) {
-    rmSync('vector-index.bin', { force: true });
+  
+  // Clean up any test databases and indexes with retry logic
+  const filesToClean = ['db.sqlite', 'vector-index.bin'];
+  for (const file of filesToClean) {
+    if (existsSync(file)) {
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          rmSync(file, { force: true });
+          break;
+        } catch (error: any) {
+          if (error.code === 'EBUSY' && retries > 1) {
+            await new Promise(resolve => setTimeout(resolve, 300));
+            retries--;
+          } else {
+            console.warn(`⚠️  Could not clean up ${file}:`, error.message);
+            break;
+          }
+        }
+      }
+    }
   }
 }
 
@@ -232,6 +271,7 @@ test('MCP server exposes all required indexing and search functions', async () =
   const toolNames = tools.map((tool: any) => tool.name);
   assert(toolNames.includes('search'), 'Should expose search function');
   assert(toolNames.includes('ingest'), 'Should expose ingest function');
+  assert(toolNames.includes('ingest_image'), 'Should expose ingest_image function');
   assert(toolNames.includes('rebuild_index'), 'Should expose rebuild_index function');
   assert(toolNames.includes('get_stats'), 'Should expose get_stats function');
 
@@ -252,7 +292,7 @@ test('MCP server exposes all required indexing and search functions', async () =
   assert(ingestTool.inputSchema.properties.model.enum.includes('Xenova/all-mpnet-base-v2'), 'Should include all-mpnet-base-v2 model');
 
   // Verify no additional abstractions - tools should directly map to core functions
-  assert.equal(tools.length, 9, 'Should expose core functions and multimodal tools without additional abstractions');
+  assert.equal(tools.length, 10, 'Should expose core functions and multimodal tools without additional abstractions');
 });
 
 test('MCP server validates same-process deployment without separate infrastructure', async () => {
@@ -466,7 +506,7 @@ test('MCP server wraps core functions without additional abstractions', async ()
   // Verify tools are direct mappings to core functions
   for (const tool of tools) {
     // Tool names should directly correspond to core functionality
-    assert(['search', 'ingest', 'rebuild_index', 'get_stats', 'get_mode_info', 'multimodal_search', 'list_supported_models', 'list_reranking_strategies', 'get_system_stats'].includes(tool.name),
+    assert(['search', 'ingest', 'ingest_image', 'rebuild_index', 'get_stats', 'get_mode_info', 'multimodal_search', 'list_supported_models', 'list_reranking_strategies', 'get_system_stats'].includes(tool.name),
       `Tool ${tool.name} should be a core function`);
 
     // Tool descriptions should be straightforward, not abstract
@@ -480,7 +520,7 @@ test('MCP server wraps core functions without additional abstractions', async ()
   }
 
   // Verify no middleware or abstraction layers in tool definitions
-  assert.equal(tools.length, 9, 'Should expose essential core functions and multimodal tools');
+  assert.equal(tools.length, 10, 'Should expose essential core functions and multimodal tools');
 
   // Verify tool parameters directly map to function parameters
   const searchTool = tools.find((tool: any) => tool.name === 'search');

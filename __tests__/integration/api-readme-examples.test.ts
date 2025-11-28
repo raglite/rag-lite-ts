@@ -411,19 +411,17 @@ After installation, you can start by creating your first project.
 
     try {
       // Using factory functions for complex scenarios
-      const { TextSearchFactory, TextIngestionFactory } = await import('../../src/index.js');
+      const { SearchFactory, IngestionFactory } = await import('../../src/index.js');
       
       // Factory-based ingestion
-      const ingestion = await TextIngestionFactory.create('./data/db.sqlite', './data/vector-index.bin', {
+      const ingestion = await IngestionFactory.create('./data/db.sqlite', './data/vector-index.bin', {
         embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2'
       });
       
       await ingestion.ingestDirectory('./docs');
       
-      // Factory-based search
-      const search = await TextSearchFactory.create('./data/vector-index.bin', './data/db.sqlite', {
-        enableReranking: true
-      });
+      // Factory-based search with automatic mode detection
+      const search = await SearchFactory.create('./data/vector-index.bin', './data/db.sqlite');
       
       const results = await search.search('getting started');
       assert.ok(results);

@@ -9,8 +9,9 @@ import { strict as assert } from 'node:assert';
 import { unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 
-import { ModeDetectionService, detectSystemMode, storeSystemMode, isMultimodalMode } from '../../src/../src/core/mode-detection-service.js';
-import { openDatabase, initializeSchema, setSystemInfo } from '../../src/../src/core/db.js';
+import { ModeDetectionService, detectSystemMode, storeSystemMode, isMultimodalMode } from '../../src/core/mode-detection-service.js';
+import { openDatabase, initializeSchema, setSystemInfo } from '../../src/core/db.js';
+import { DatabaseConnectionManager } from '../../src/core/database-connection-manager.js';
 import type { SystemInfo, ModeType, ModelType, RerankingStrategyType } from '../../src/types.js';
 
 describe('Mode Detection Service (Task 3.1)', () => {
@@ -26,11 +27,40 @@ describe('Mode Detection Service (Task 3.1)', () => {
   });
 
   async function cleanupTestDb() {
+    // Force close any database connections first
+    try {
+      await DatabaseConnectionManager.forceCloseConnection(testDbPath);
+    } catch (error) {
+      // Ignore if connection doesn't exist
+    }
+    
     if (existsSync(testDbPath)) {
-      try {
-        await unlink(testDbPath);
-      } catch (error) {
-        // Ignore cleanup errors
+      // Wait for any pending operations to complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Force garbage collection if available
+      if (global.gc) {
+        global.gc();
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      
+      // Retry cleanup with Windows file locking handling
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          await unlink(testDbPath);
+          break; // Success
+        } catch (error: any) {
+          if (error.code === 'EBUSY' && retries > 1) {
+            // Windows file locking - wait and retry
+            await new Promise(resolve => setTimeout(resolve, 200));
+            retries--;
+          } else {
+            // Final retry failed or different error - log but don't fail test
+            console.warn('⚠️  Could not clean up test database:', error.message);
+            break;
+          }
+        }
       }
     }
   }
@@ -160,6 +190,9 @@ describe('Mode Detection Service (Task 3.1)', () => {
 
   describe('Convenience Methods', () => {
     test('getCurrentMode should return current mode', async () => {
+      // Ensure clean state before test
+      await cleanupTestDb();
+      
       const service = new ModeDetectionService(testDbPath);
 
       // Store multimodal mode
@@ -170,6 +203,9 @@ describe('Mode Detection Service (Task 3.1)', () => {
     });
 
     test('isMultimodalMode should return boolean for multimodal check', async () => {
+      // Ensure clean state before test
+      await cleanupTestDb();
+      
       const service = new ModeDetectionService(testDbPath);
 
       // Default should be text mode
@@ -183,6 +219,9 @@ describe('Mode Detection Service (Task 3.1)', () => {
     });
 
     test('getCurrentModelInfo should return model information', async () => {
+      // Ensure clean state before test
+      await cleanupTestDb();
+      
       const service = new ModeDetectionService(testDbPath);
 
       await service.storeMode({
@@ -202,6 +241,9 @@ describe('Mode Detection Service (Task 3.1)', () => {
 
   describe('Convenience Functions', () => {
     test('detectMode function should work as service wrapper', async () => {
+      // Ensure clean state before test
+      await cleanupTestDb();
+      
       // Set up database with multimodal mode
       const connection = await openDatabase(testDbPath);
       await initializeSchema(connection);

@@ -452,27 +452,14 @@ export function createTextEmbedFunction(modelName?: string, batchSize?: number):
   return embedFunction;
 }
 
-/**
- * Create a text embedding engine factory function
- * @param modelName - Optional model name override
- * @param batchSize - Optional batch size override
- * @returns Factory function that creates initialized embedding engines
- */
-export function createTextEmbedder(modelName?: string, batchSize?: number) {
-  return {
-    async embedSingle(text: string): Promise<EmbeddingResult> {
-      const engine = await initializeEmbeddingEngine(modelName, batchSize);
-      return engine.embedSingle(text);
-    },
-    
-    async embedBatch(texts: string[]): Promise<EmbeddingResult[]> {
-      const engine = await initializeEmbeddingEngine(modelName, batchSize);
-      return engine.embedBatch(texts);
-    },
-    
-    async embedDocumentBatch(chunks: string[]): Promise<EmbeddingResult[]> {
-      const engine = await initializeEmbeddingEngine(modelName, batchSize);
-      return engine.embedDocumentBatch(chunks);
-    }
-  };
-}
+// =============================================================================
+// REMOVED: createTextEmbedder() factory object
+// =============================================================================
+// The createTextEmbedder() function has been removed as it was redundant.
+// It was just a wrapper around initializeEmbeddingEngine() that provided no
+// additional value over using the engine directly or using createEmbedder().
+//
+// Migration guide:
+// - For public API: Use createEmbedder() from core/embedder-factory.ts
+// - For dependency injection: Use createTextEmbedFunction()
+// - For direct access: Use initializeEmbeddingEngine() or new EmbeddingEngine()

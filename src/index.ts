@@ -47,55 +47,20 @@
 
 // Main factory classes for simple usage
 export {
-  TextSearchFactory,
-  TextIngestionFactory,
-  TextRAGFactory,
-  TextFactoryHelpers
-} from './factories/index.js';
-
-/**
- * @deprecated PolymorphicSearchFactory is no longer needed - SearchEngine now automatically
- * detects mode from database and adapts accordingly (Chameleon Architecture).
- * 
- * Migration Guide:
- * ```typescript
- * // Old way (deprecated):
- * const search = await PolymorphicSearchFactory.create('./index.bin', './db.sqlite');
- * 
- * // New way (recommended):
- * const search = new SearchEngine('./index.bin', './db.sqlite');
- * await search.search('query'); // Mode automatically detected
- * ```
- * 
- * The SearchEngine constructor now uses the polymorphic factory internally,
- * providing the same automatic mode detection without requiring explicit factory usage.
- */
-export { PolymorphicSearchFactory } from './factories/index.js';
-
-// Convenience aliases for common usage
-export {
-  TextSearchFactory as SearchFactory,
-  TextIngestionFactory as IngestionFactory,
-  TextRAGFactory as RAGFactory
+  IngestionFactory,
+  SearchFactory
 } from './factories/index.js';
 
 // Factory option types
 export type {
-  TextSearchOptions,
-  TextIngestionOptions
+  IngestionFactoryOptions
 } from './factories/index.js';
 
-/**
- * @deprecated PolymorphicSearchOptions is no longer needed - use SearchEngineOptions instead.
- * SearchEngine now automatically detects mode and adapts (Chameleon Architecture).
- */
-export type { PolymorphicSearchOptions } from './factories/index.js';
-
-// Backward compatibility type aliases
-export type {
-  TextSearchOptions as SearchEngineOptions,
-  TextIngestionOptions as IngestionPipelineOptions
-} from './factories/index.js';
+// =============================================================================
+// REMOVED IN v3.0.0: Type aliases
+// =============================================================================
+// IngestionPipelineOptions has been removed. Use IngestionFactoryOptions directly.
+// Migration: Replace IngestionPipelineOptions with IngestionFactoryOptions
 
 // =============================================================================
 // CORE ARCHITECTURE (FOR LIBRARY AUTHORS)
@@ -169,8 +134,7 @@ export {
   EmbeddingEngine,
   getEmbeddingEngine,
   initializeEmbeddingEngine,
-  createTextEmbedFunction,
-  createTextEmbedder
+  createTextEmbedFunction
 } from './text/embedder.js';
 
 // =============================================================================
@@ -187,8 +151,7 @@ export { createEmbedder } from './core/embedder-factory.js';
 // Text-specific reranking implementations
 export {
   CrossEncoderReranker,
-  createTextRerankFunction,
-  createTextReranker
+  createTextRerankFunction
 } from './text/reranker.js';
 
 // Text tokenization utilities
@@ -223,10 +186,6 @@ export {
   insertChunk,
   upsertDocument,
   getChunksByEmbeddingIds,
-  getModelVersion,
-  setModelVersion,
-  getStoredModelInfo,
-  setStoredModelInfo,
   type DatabaseConnection
 } from './core/db.js';
 

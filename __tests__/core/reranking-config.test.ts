@@ -15,7 +15,7 @@ import {
   RerankingConfigBuilder,
   DEFAULT_TEXT_RERANKING_CONFIG,
   DEFAULT_MULTIMODAL_RERANKING_CONFIG
-} from '../../src/../src/core/reranking-config.js';
+} from '../../src/core/reranking-config.js';
 
 describe('Reranking Configuration System', () => {
   

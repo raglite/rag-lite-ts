@@ -16,8 +16,8 @@ import { mkdirSync, rmSync, existsSync, writeFileSync } from 'node:fs';
 import { createEmbedder } from '../../src/core/embedder-factory.js';
 import { ModelRegistry, SUPPORTED_MODELS } from '../../src/core/model-registry.js';
 import { ModelValidator } from '../../src/core/model-validator.js';
-import { PolymorphicSearchFactory } from '../../src/core/polymorphic-search-factory.js';
-import { TextIngestionFactory } from '../../src/factories/text-factory.js';
+import { SearchFactory } from '../../src/factories/search-factory.js';
+import { IngestionFactory } from '../../src/factories/ingestion-factory.js';
 import { IngestionPipeline } from '../../src/ingestion.js';
 import { IndexManager } from '../../src/index-manager.js';
 import { openDatabase } from '../../src/core/db.js';
@@ -460,7 +460,10 @@ describe('Model Compatibility and Performance Validation', () => {
           // Benchmark batch embedding (if supported)
           let batchTime = 0;
           if (embedder.embedBatch) {
-            const batchItems = testTexts.map(text => ({ content: text, contentType: 'text' }));
+            const batchItems = testTexts.map(text => ({ 
+              content: text, 
+              contentType: 'text' as const 
+            }));
             const { timeMs } = await measurePerformance(async () => {
               return await embedder.embedBatch(batchItems);
             });
@@ -554,7 +557,7 @@ describe('Model Compatibility and Performance Validation', () => {
           console.log(`  • Ingestion completed in ${ingestionTime.toFixed(2)}ms`);
 
           // Test search with the model
-          const searchEngine = await PolymorphicSearchFactory.create(indexPath, dbPath);
+          const searchEngine = await SearchFactory.create(indexPath, dbPath);
 
           const { result: searchResults, timeMs: searchTime } = await measurePerformance(async () => {
             return await searchEngine.search(TEST_CONTENT.queries[0]);
@@ -654,7 +657,7 @@ describe('Model Compatibility and Performance Validation', () => {
         console.log(`  • Ingested ${TEST_CONTENT.text.length} documents in ${ingestionTime.toFixed(2)}ms`);
 
         // Step 2: Test search with real queries
-        const searchEngine = await PolymorphicSearchFactory.create(indexPath, dbPath);
+        const searchEngine = await SearchFactory.create(indexPath, dbPath);
 
         for (const query of TEST_CONTENT.queries) {
           const { result: results, timeMs: searchTime } = await measurePerformance(async () => {
@@ -755,3 +758,22 @@ describe('Model Compatibility and Performance Validation', () => {
     });
   });
 });
+
+// Force exit after test completion to prevent hanging from ML resources
+// These tests use embedders and ML models that can keep resources open
+setTimeout(() => {
+  console.log('🔄 Forcing test exit to prevent hanging from ML/database resources...');
+  
+  // Multiple garbage collection attempts
+  if (global.gc) {
+    global.gc();
+    setTimeout(() => { if (global.gc) global.gc(); }, 100);
+    setTimeout(() => { if (global.gc) global.gc(); }, 300);
+  }
+  
+  // Force exit after cleanup attempts
+  setTimeout(() => {
+    console.log('✅ Exiting test process');
+    process.exit(0);
+  }, 2000);
+}, 120000); // 120 seconds (2 minutes) for these comprehensive ML tests

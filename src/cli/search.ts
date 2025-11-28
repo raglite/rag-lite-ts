@@ -1,5 +1,5 @@
 import { existsSync } from 'fs';
-import { PolymorphicSearchFactory } from '../core/polymorphic-search-factory.js';
+import { SearchFactory } from '../factories/search-factory.js';
 import { withCLIDatabaseAccess, setupCLICleanup } from '../core/cli-database-utils.js';
 import { config, EXIT_CODES, ConfigurationError } from '../core/config.js';
 import type { SearchOptions } from '../core/types.js';
@@ -70,10 +70,10 @@ export async function runSearch(query: string, options: Record<string, any> = {}
     let searchEngine;
     
     try {
-      // Create search engine using PolymorphicSearchFactory (auto-detects mode)
+      // Create search engine using SearchFactory (auto-detects mode)
       searchEngine = await withCLIDatabaseAccess(
         effectiveConfig.db_file,
-        () => PolymorphicSearchFactory.create(
+        () => SearchFactory.create(
           effectiveConfig.index_file,
           effectiveConfig.db_file
         ),

@@ -20,11 +20,14 @@ async function main(): Promise<void> {
     console.error('  <path>    File or directory path to ingest (.md and .txt files)');
     console.error('');
     console.error('Examples:');
-    console.error('  node indexer.js ./docs/           # Ingest all .md/.txt files in docs/');
+    console.error('  node indexer.js ./docs/           # Ingest all .md/.txt/.pdf/.docs files in docs/');
     console.error('  node indexer.js ./readme.md       # Ingest single file');
     console.error('  node indexer.js ../project/docs/  # Ingest from parent directory');
     console.error('');
-    console.error('Supported file types: .md (Markdown), .txt (Plain text)');
+    console.error('Supported file types:');
+    console.error('  Text: .md, .txt, .mdx');
+    console.error('  Documents: .pdf, .docx');
+    console.error('  Images (multimodal mode): .jpg, .jpeg, .png, .gif, .webp, .bmp');
     console.error('');
     console.error('After ingestion, use: node search.js "your query"');
     process.exit(EXIT_CODES.INVALID_ARGUMENTS);

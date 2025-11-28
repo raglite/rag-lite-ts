@@ -8,7 +8,7 @@ import {
   ContentTypeDetector,
   MdxPreprocessor,
   MermaidPreprocessor
-} from '../../src/../src/preprocessors/index.js';
+} from '../../src/preprocessors/index.js';
 
 describe('Preprocessor Index', () => {
   test('should export all required classes and functions', () => {

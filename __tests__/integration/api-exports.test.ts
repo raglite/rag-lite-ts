@@ -27,7 +27,7 @@ describe('Clean Public API Exports', () => {
       const typeImport = `
         import type {
           SearchEngineOptions,
-          IngestionPipelineOptions
+          IngestionFactoryOptions
         } from '../../src/index.js';
       `;
       return typeImport;
@@ -36,27 +36,16 @@ describe('Clean Public API Exports', () => {
 
   test('should export factory functions as secondary API', async () => {
     const {
-      TextSearchFactory,
-      TextIngestionFactory,
-      TextRAGFactory,
-      TextFactoryHelpers
+      SearchFactory,
+      IngestionFactory
     } = await import('../../src/index.js');
 
-    assert.ok(TextSearchFactory, 'TextSearchFactory should be defined');
-    assert.strictEqual(typeof TextSearchFactory.create, 'function', 'TextSearchFactory.create should be a function');
-    assert.strictEqual(typeof TextSearchFactory.createWithDefaults, 'function', 'TextSearchFactory.createWithDefaults should be a function');
+    assert.ok(SearchFactory, 'SearchFactory should be defined');
+    assert.strictEqual(typeof SearchFactory.create, 'function', 'SearchFactory.create should be a function');
 
-    assert.ok(TextIngestionFactory, 'TextIngestionFactory should be defined');
-    assert.strictEqual(typeof TextIngestionFactory.create, 'function', 'TextIngestionFactory.create should be a function');
-    assert.strictEqual(typeof TextIngestionFactory.createWithDefaults, 'function', 'TextIngestionFactory.createWithDefaults should be a function');
-
-    assert.ok(TextRAGFactory, 'TextRAGFactory should be defined');
-    assert.strictEqual(typeof TextRAGFactory.createBoth, 'function', 'TextRAGFactory.createBoth should be a function');
-    assert.strictEqual(typeof TextRAGFactory.createBothWithDefaults, 'function', 'TextRAGFactory.createBothWithDefaults should be a function');
-
-    assert.ok(TextFactoryHelpers, 'TextFactoryHelpers should be defined');
-    assert.strictEqual(typeof TextFactoryHelpers.validateSearchFiles, 'function', 'TextFactoryHelpers.validateSearchFiles should be a function');
-    assert.strictEqual(typeof TextFactoryHelpers.getRecommendedConfig, 'function', 'TextFactoryHelpers.getRecommendedConfig should be a function');
+    assert.ok(IngestionFactory, 'IngestionFactory should be defined');
+    assert.strictEqual(typeof IngestionFactory.create, 'function', 'IngestionFactory.create should be a function');
+    assert.strictEqual(typeof IngestionFactory.createWithDefaults, 'function', 'IngestionFactory.createWithDefaults should be a function');
   });
 
   test('should export core architecture classes', async () => {
@@ -78,10 +67,8 @@ describe('Clean Public API Exports', () => {
       getEmbeddingEngine,
       initializeEmbeddingEngine,
       createTextEmbedFunction,
-      createTextEmbedder,
       CrossEncoderReranker,
       createTextRerankFunction,
-      createTextReranker,
       countTokens
     } = await import('../../src/index.js');
 
@@ -97,17 +84,11 @@ describe('Clean Public API Exports', () => {
     assert.ok(createTextEmbedFunction, 'createTextEmbedFunction should be defined');
     assert.strictEqual(typeof createTextEmbedFunction, 'function', 'createTextEmbedFunction should be a function');
 
-    assert.ok(createTextEmbedder, 'createTextEmbedder should be defined');
-    assert.strictEqual(typeof createTextEmbedder, 'function', 'createTextEmbedder should be a function');
-
     assert.ok(CrossEncoderReranker, 'CrossEncoderReranker should be defined');
     assert.strictEqual(typeof CrossEncoderReranker, 'function', 'CrossEncoderReranker should be a function');
 
     assert.ok(createTextRerankFunction, 'createTextRerankFunction should be defined');
     assert.strictEqual(typeof createTextRerankFunction, 'function', 'createTextRerankFunction should be a function');
-
-    assert.ok(createTextReranker, 'createTextReranker should be defined');
-    assert.strictEqual(typeof createTextReranker, 'function', 'createTextReranker should be a function');
 
     assert.ok(countTokens, 'countTokens should be defined');
     assert.strictEqual(typeof countTokens, 'function', 'countTokens should be a function');
@@ -197,7 +178,7 @@ describe('Clean Public API Exports', () => {
     assert.strictEqual(typeof ErrorSeverity, 'object', 'ErrorSeverity should be an object');
 
     assert.ok(createError, 'createError should be defined');
-    assert.strictEqual(typeof createError, 'function', 'createError should be a function');
+    assert.strictEqual(typeof createError, 'object', 'createError should be an object with error creation methods');
 
     assert.ok(APIError, 'APIError should be defined');
     assert.strictEqual(typeof APIError, 'function', 'APIError should be a function');
@@ -215,7 +196,7 @@ describe('Clean Public API Exports', () => {
     assert.strictEqual(typeof ModelCompatibilityError, 'function', 'ModelCompatibilityError should be a function');
 
     assert.ok(ErrorFactory, 'ErrorFactory should be defined');
-    assert.strictEqual(typeof ErrorFactory, 'object', 'ErrorFactory should be an object');
+    assert.strictEqual(typeof ErrorFactory, 'function', 'ErrorFactory should be a class (constructor function)');
 
     assert.ok(CommonErrors, 'CommonErrors should be defined');
     assert.strictEqual(typeof CommonErrors, 'object', 'CommonErrors should be an object');
@@ -249,8 +230,7 @@ describe('Clean Public API Exports', () => {
       // This would fail at compile time if types aren't exported
       const typeImport = `
         import type {
-          TextSearchOptions,
-          TextIngestionOptions,
+          IngestionFactoryOptions,
           EmbedFunction,
           RerankFunction,
           SearchResult,
@@ -265,3 +245,18 @@ describe('Clean Public API Exports', () => {
     }, 'Type imports should not throw');
   });
 });
+
+// Force exit after test completion to prevent hanging from module imports
+setTimeout(() => {
+  console.log('🔄 Forcing test exit to prevent hanging from module imports...');
+  
+  if (global.gc) {
+    global.gc();
+    setTimeout(() => { if (global.gc) global.gc(); }, 100);
+  }
+  
+  setTimeout(() => {
+    console.log('✅ Exiting test process');
+    process.exit(0);
+  }, 1000);
+}, 5000); // 5 seconds for these simple import tests

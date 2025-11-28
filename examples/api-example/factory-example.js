@@ -5,7 +5,7 @@
  * search and ingestion instances with automatic setup.
  */
 
-import { SearchFactory, IngestionFactory, RAGFactory } from 'rag-lite-ts';
+import { SearchFactory, IngestionFactory } from 'rag-lite-ts';
 
 async function main() {
     console.log('🏭 Factory Pattern API Example');
@@ -27,12 +27,9 @@ async function main() {
         await ingestion.ingestDirectory('./docs/');
         console.log('✅ Documents ingested\n');
 
-        // 3. Create search engine with factory
+        // 3. Create search engine with factory (auto-detects mode and configuration)
         console.log('Creating search engine...');
-        const search = await SearchFactory.create('./factory-index.bin', './factory-db.sqlite', {
-            enableReranking: true,
-            topK: 5
-        });
+        const search = await SearchFactory.create('./factory-index.bin', './factory-db.sqlite');
         console.log('✅ Search engine ready\n');
 
         // 4. Perform searches

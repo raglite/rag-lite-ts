@@ -73,11 +73,12 @@ describe('Mode Storage Public API Integration', () => {
     }
   });
 
-  test('should work without mode parameters (backward compatibility)', async () => {
+  test('should work without mode parameters (defaults to text mode)', async () => {
     cleanup();
 
     try {
-      // Test backward compatibility - should work without new parameters
+      // Test that mode parameter is optional and defaults to 'text'
+      // This is standard functionality, not backward compatibility
       const ingestion = new IngestionPipeline(testDbPath, testIndexPath, {
         embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
         chunkSize: 256

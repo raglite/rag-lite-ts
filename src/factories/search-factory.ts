@@ -15,22 +15,22 @@
 // Ensure DOM polyfills are set up before any transformers.js usage
 import '../dom-polyfills.js';
 
-import { SearchEngine } from './search.js';
-import { ModeDetectionService } from './mode-detection-service.js';
+import { SearchEngine } from '../core/search.js';
+import { ModeDetectionService } from '../core/mode-detection-service.js';
 import { IndexManager } from '../index-manager.js';
-import { openDatabase } from './db.js';
-import { DatabaseConnectionManager } from './database-connection-manager.js';
-import { createEmbedder } from './embedder-factory.js';
-import { ContentResolver } from './content-resolver.js';
-import { validateModeModelCompatibilityOrThrow } from './mode-model-validator.js';
+import { openDatabase } from '../core/db.js';
+import { DatabaseConnectionManager } from '../core/database-connection-manager.js';
+import { createEmbedder } from '../core/embedder-factory.js';
+import { ContentResolver } from '../core/content-resolver.js';
+import { validateModeModelCompatibilityOrThrow } from '../core/mode-model-validator.js';
 import {
   createMissingFileError,
   createFactoryCreationError
-} from './actionable-error-messages.js';
+} from '../core/actionable-error-messages.js';
 
 import type { SystemInfo, ModeType } from '../types.js';
-import type { RerankFunction } from './interfaces.js';
-import { handleError, ErrorCategory, ErrorSeverity, createError } from './error-handler.js';
+import type { RerankFunction } from '../core/interfaces.js';
+import { handleError, ErrorCategory, ErrorSeverity, createError } from '../core/error-handler.js';
 import { existsSync } from 'fs';
 
 // =============================================================================
@@ -56,7 +56,7 @@ import { existsSync } from 'fs';
  *   - True cross-modal search capabilities
  *   - Text queries find images, image queries find text
  */
-export class PolymorphicSearchFactory {
+export class SearchFactory {
   /**
    * Create a SearchEngine with automatic mode detection and configuration
    * 
@@ -89,7 +89,7 @@ export class PolymorphicSearchFactory {
    * @example
    * ```typescript
    * // Automatic mode detection and engine creation
-   * const search = await PolymorphicSearchFactory.create('./index.bin', './db.sqlite');
+   * const search = await SearchFactory.create('./index.bin', './db.sqlite');
    * 
    * // Search works based on detected mode:
    * // Text mode: fast text similarity search
@@ -101,7 +101,7 @@ export class PolymorphicSearchFactory {
    */
   static async create(indexPath: string, dbPath: string): Promise<SearchEngine> {
     try {
-      console.log('🎭 PolymorphicSearchFactory: Initializing search engine with mode detection...');
+      console.log('🎭 SearchFactory: Initializing search engine with mode detection...');
 
       // Step 1: Validate input paths
       if (!indexPath || !dbPath) {
@@ -264,7 +264,7 @@ export class PolymorphicSearchFactory {
       }
 
       // Use lazy loading to avoid loading reranking dependencies unless needed
-      const { LazyRerankerLoader } = await import('./lazy-dependency-loader.js');
+      const { LazyRerankerLoader } = await import('../core/lazy-dependency-loader.js');
 
       // For text mode, use cross-encoder reranking
       if (strategy === 'cross-encoder') {
@@ -290,7 +290,7 @@ export class PolymorphicSearchFactory {
       }
 
       // Use lazy loading to avoid loading multimodal dependencies unless needed
-      const { LazyDependencyManager } = await import('./lazy-dependency-loader.js');
+      const { LazyDependencyManager } = await import('../core/lazy-dependency-loader.js');
 
       // Load the appropriate reranker based on strategy
       return LazyDependencyManager.loadReranker(strategy);
@@ -313,13 +313,13 @@ export class PolymorphicSearchFactory {
   private static validateRequiredFiles(indexPath: string, dbPath: string): void {
     if (!existsSync(indexPath)) {
       throw createMissingFileError(indexPath, 'index', {
-        operationContext: 'PolymorphicSearchFactory.create'
+        operationContext: 'SearchFactory.create'
       });
     }
 
     if (!existsSync(dbPath)) {
       throw createMissingFileError(dbPath, 'database', {
-        operationContext: 'PolymorphicSearchFactory.create'
+        operationContext: 'SearchFactory.create'
       });
     }
   }
@@ -331,7 +331,7 @@ export class PolymorphicSearchFactory {
   private static enhanceCreationError(error: unknown, indexPath: string, dbPath: string): Error {
     if (error instanceof Error) {
       // Add context about the operation that failed
-      let enhancedMessage = `PolymorphicSearchFactory.create failed: ${error.message}`;
+      let enhancedMessage = `SearchFactory.create failed: ${error.message}`;
 
       // Provide specific guidance based on error type
       if (error.message.includes('ENOENT')) {
@@ -352,7 +352,7 @@ export class PolymorphicSearchFactory {
       return new Error(enhancedMessage);
     }
 
-    return new Error(`PolymorphicSearchFactory.create failed: Unknown error`);
+    return new Error(`SearchFactory.create failed: Unknown error`);
   }
 }
 
@@ -362,7 +362,7 @@ export class PolymorphicSearchFactory {
 
 /**
  * Quick function to create a search engine with automatic mode detection
- * Convenience wrapper around PolymorphicSearchFactory.create
+ * Convenience wrapper around SearchFactory.create
  * 
  * @param indexPath - Path to the vector index file
  * @param dbPath - Path to the database file
@@ -370,15 +370,15 @@ export class PolymorphicSearchFactory {
  * 
  * @example
  * ```typescript
- * const search = await createPolymorphicSearchEngine('./index.bin', './db.sqlite');
+ * const search = await createSearchEngine('./index.bin', './db.sqlite');
  * const results = await search.search('query');
  * ```
  */
-export async function createPolymorphicSearchEngine(
+export async function createSearchEngine(
   indexPath: string,
   dbPath: string
 ): Promise<SearchEngine> {
-  return PolymorphicSearchFactory.create(indexPath, dbPath);
+  return SearchFactory.create(indexPath, dbPath);
 }
 
 /**

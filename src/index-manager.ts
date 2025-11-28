@@ -1,5 +1,5 @@
 import { VectorIndex } from './core/vector-index.js';
-import { openDatabase, getModelVersion, setModelVersion, getStoredModelInfo, setStoredModelInfo, type DatabaseConnection } from './core/db.js';
+import { openDatabase, getSystemInfo, setSystemInfo, type DatabaseConnection } from './core/db.js';
 import type { EmbeddingResult } from './core/types.js';
 import { config, getModelDefaults } from './core/config.js';
 import { existsSync } from 'fs';
@@ -86,17 +86,17 @@ export class IndexManager {
 
     try {
       // Get stored model information
-      const storedModel = await getStoredModelInfo(this.db);
+      const systemInfo = await getSystemInfo(this.db);
       const currentModel = this.modelName || config.embedding_model;
       const currentDefaults = getModelDefaults(currentModel);
 
-      if (storedModel) {
+      if (systemInfo && systemInfo.modelName && systemInfo.modelDimensions) {
         // Check if models match
-        if (storedModel.modelName !== currentModel) {
+        if (systemInfo.modelName !== currentModel) {
           throw new Error(
             `Model mismatch detected!\n` +
             `Current model: ${currentModel} (${currentDefaults.dimensions} dimensions)\n` +
-            `Index model: ${storedModel.modelName} (${storedModel.dimensions} dimensions)\n` +
+            `Index model: ${systemInfo.modelName} (${systemInfo.modelDimensions} dimensions)\n` +
             `\n` +
             `The embedding model has changed since the index was created.\n` +
             `This requires a full index rebuild to maintain consistency.\n` +
@@ -110,11 +110,11 @@ export class IndexManager {
         }
 
         // Check if dimensions match (additional safety check)
-        if (storedModel.dimensions !== currentDefaults.dimensions) {
+        if (systemInfo.modelDimensions !== currentDefaults.dimensions) {
           throw new Error(
             `Model dimension mismatch detected!\n` +
             `Current model dimensions: ${currentDefaults.dimensions}\n` +
-            `Index model dimensions: ${storedModel.dimensions}\n` +
+            `Index model dimensions: ${systemInfo.modelDimensions}\n` +
             `\n` +
             `This indicates a configuration inconsistency.\n` +
             `Please run: npm run rebuild`
@@ -125,7 +125,10 @@ export class IndexManager {
       } else {
         // First run - store the model info
         console.log(`No model info stored yet - storing current model info: ${currentModel}`);
-        await setStoredModelInfo(this.db, currentModel, currentDefaults.dimensions);
+        await setSystemInfo(this.db, {
+          modelName: currentModel,
+          modelDimensions: currentDefaults.dimensions
+        });
       }
     } catch (error) {
       if (error instanceof Error) {
@@ -275,7 +278,10 @@ export class IndexManager {
         // Store model info for the new model
         const currentModel = this.modelName || config.embedding_model;
         const currentDefaults = getModelDefaults(currentModel);
-        await setStoredModelInfo(this.db, currentModel, currentDefaults.dimensions);
+        await setSystemInfo(this.db, {
+          modelName: currentModel,
+          modelDimensions: currentDefaults.dimensions
+        });
 
         await this.saveIndex();
         return;
@@ -316,7 +322,10 @@ export class IndexManager {
       // Store model info for the new model
       const currentModel = this.modelName || config.embedding_model;
       const currentDefaults = getModelDefaults(currentModel);
-      await setStoredModelInfo(this.db, currentModel, currentDefaults.dimensions);
+      await setSystemInfo(this.db, {
+        modelName: currentModel,
+        modelDimensions: currentDefaults.dimensions
+      });
 
       // Save the rebuilt index
       await this.saveIndex();
@@ -338,11 +347,12 @@ export class IndexManager {
     }
 
     try {
-      const storedVersion = await getModelVersion(this.db);
+      const systemInfo = await getSystemInfo(this.db);
+      const storedVersion = systemInfo?.modelVersion;
 
       if (!storedVersion || storedVersion === "") {
         // No version stored yet, this is first run - store current version
-        await setModelVersion(this.db, currentVersion);
+        await setSystemInfo(this.db, { modelVersion: currentVersion });
         console.log(`Stored initial model version: ${currentVersion}`);
         return true;
       }
@@ -372,7 +382,7 @@ export class IndexManager {
     }
 
     try {
-      await setModelVersion(this.db, version);
+      await setSystemInfo(this.db, { modelVersion: version });
       console.log(`Updated model version to: ${version}`);
     } catch (error) {
       throw new Error(`Failed to update model version: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -440,7 +450,8 @@ export class IndexManager {
     const totalVectors = this.vectorIndex.getCurrentCount();
 
     try {
-      const modelVersion = await getModelVersion(this.db);
+      const systemInfo = await getSystemInfo(this.db);
+      const modelVersion = systemInfo?.modelVersion || null;
 
       return {
         totalVectors,

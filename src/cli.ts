@@ -12,6 +12,13 @@ const packageJsonPath = join(__dirname, '..', 'package.json');
 const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
 
 /**
+ * Display version information
+ */
+function showVersion(): void {
+  console.log(`RAG-lite TS v${packageJson.version}`);
+}
+
+/**
  * Display help information
  */
 function showHelp(): void {
@@ -26,10 +33,11 @@ Commands:
   ingest <path>     Ingest documents from file or directory
   search <query>    Search indexed documents
   rebuild           Rebuild the vector index
+  version           Show version information
   help              Show this help message
 
 Examples:
-  raglite ingest ./docs/           # Ingest all .md/.txt files in docs/
+  raglite ingest ./docs/           # Ingest all .md/.txt/.docx/.pdf files in docs/
   raglite ingest ./readme.md       # Ingest single file
   raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2  # Use higher quality model
   raglite ingest ./docs/ --mode multimodal  # Enable multimodal processing
@@ -60,7 +68,8 @@ Available models:
     sentence-transformers/all-MiniLM-L6-v2  (384 dim, fast, default)
     Xenova/all-mpnet-base-v2               (768 dim, higher quality)
   Multimodal mode:
-    Xenova/clip-vit-base-patch32           (512 dim, text + image support)
+    Xenova/clip-vit-base-patch32           (512 dim, faster, default)
+    Xenova/clip-vit-base-patch16           (512 dim, more accurate, slower)
 
 Available reranking strategies (multimodal mode):
   text-derived  Use image-to-text conversion + cross-encoder (default)
@@ -85,6 +94,14 @@ function parseArgs(): {
     return { command: 'help', args: [], options: {} };
   }
 
+  // Handle --version and --help flags at the top level
+  if (args[0] === '--version' || args[0] === '-v') {
+    return { command: 'version', args: [], options: {} };
+  }
+  if (args[0] === '--help' || args[0] === '-h') {
+    return { command: 'help', args: [], options: {} };
+  }
+
   const command = args[0];
   const remainingArgs: string[] = [];
   const options: Record<string, any> = {};
@@ -105,6 +122,8 @@ function parseArgs(): {
         options.rebuildIfNeeded = true;
       } else if (optionName === 'help') {
         return { command: 'help', args: [], options: {} };
+      } else if (optionName === 'version') {
+        return { command: 'version', args: [], options: {} };
       } else {
         // Handle options with values
         const nextArg = args[i + 1];
@@ -135,7 +154,7 @@ function validateArgs(command: string, args: string[], options: Record<string, a
         console.error('Usage: raglite ingest <path>');
         console.error('');
         console.error('Examples:');
-        console.error('  raglite ingest ./docs/           # Ingest all .md/.txt files in docs/');
+        console.error('  raglite ingest ./docs/           # Ingest all .md/.txt/.docx/.pdf files in docs/');
         console.error('  raglite ingest ./readme.md       # Ingest single file');
         console.error('  raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2  # Use higher quality model');
         console.error('  raglite ingest ./docs/ --mode multimodal  # Enable multimodal processing');
@@ -179,6 +198,10 @@ function validateArgs(command: string, args: string[], options: Record<string, a
       // No arguments required
       break;
 
+    case 'version':
+      // No validation needed
+      break;
+
     case 'help':
       // No validation needed
       break;
@@ -186,7 +209,7 @@ function validateArgs(command: string, args: string[], options: Record<string, a
     default:
       console.error(`Error: Unknown command '${command}'`);
       console.error('');
-      console.error('Available commands: ingest, search, rebuild, help');
+      console.error('Available commands: ingest, search, rebuild, version, help');
       console.error('Run "raglite help" for detailed usage information');
       process.exit(EXIT_CODES.INVALID_ARGUMENTS);
   }
@@ -329,7 +352,8 @@ function validateArgs(command: string, args: string[], options: Record<string, a
       'Xenova/all-mpnet-base-v2'
     ];
     const multimodalModels = [
-      'Xenova/clip-vit-base-patch32'
+      'Xenova/clip-vit-base-patch32',
+      'Xenova/clip-vit-base-patch16'
     ];
 
     let supportedModels: string[];
@@ -352,7 +376,8 @@ function validateArgs(command: string, args: string[], options: Record<string, a
         console.error('  Xenova/all-mpnet-base-v2               (768 dim, higher quality)');
       } else {
         console.error('Supported models for multimodal mode:');
-        console.error('  Xenova/clip-vit-base-patch32           (512 dim, text + image support)');
+        console.error('  Xenova/clip-vit-base-patch32           (512 dim, faster, default)');
+        console.error('  Xenova/clip-vit-base-patch16           (512 dim, more accurate, slower)');
       }
       console.error('');
       console.error('Examples:');
@@ -361,6 +386,7 @@ function validateArgs(command: string, args: string[], options: Record<string, a
         console.error('  --model Xenova/all-mpnet-base-v2');
       } else {
         console.error('  --model Xenova/clip-vit-base-patch32 --mode multimodal');
+        console.error('  --model Xenova/clip-vit-base-patch16 --mode multimodal');
       }
       process.exit(EXIT_CODES.INVALID_ARGUMENTS);
     }
@@ -421,6 +447,10 @@ async function main(): Promise<void> {
 
     // Handle commands
     switch (command) {
+      case 'version':
+        showVersion();
+        break;
+
       case 'help':
         showHelp();
         break;

@@ -55,8 +55,8 @@ export class SearchEngine {
    * USAGE EXAMPLES:
    * ```typescript
    * // Text-only search engine
-   * const textEmbedFn = await createTextEmbedder();
-   * const textRerankFn = await createTextReranker();
+   * const textEmbedFn = createTextEmbedFunction();
+   * const textRerankFn = createTextRerankFunction();
    * const indexManager = new IndexManager('./index.bin');
    * const db = await openDatabase('./db.sqlite');
    * const search = new SearchEngine(textEmbedFn, indexManager, db, textRerankFn);

@@ -17,7 +17,7 @@ import {
   ContentErrorFactory,
   ContentErrorHandler,
   ContentErrorUtils
-} from '../../src/../src/core/content-errors.js';
+} from '../../src/core/content-errors.js';
 
 describe('Content System Error Handling', () => {
   describe('ContentNotFoundError', () => {

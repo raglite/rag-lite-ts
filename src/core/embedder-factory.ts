@@ -366,43 +366,12 @@ export function listAvailableModels(): Array<{
 }
 
 // =============================================================================
-// BACKWARD COMPATIBILITY
+// BACKWARD COMPATIBILITY - REMOVED
 // =============================================================================
-
-/**
- * @deprecated Use createEmbedder() instead
- * Legacy factory-style interface for backward compatibility
- */
-export const UniversalEmbedderFactory = {
-  /**
-   * @deprecated Use createEmbedder() instead
-   */
-  async create(modelName: string, options?: EmbedderCreationOptions): Promise<UniversalEmbedder> {
-    console.warn('UniversalEmbedderFactory.create() is deprecated. Use createEmbedder() instead.');
-    return createEmbedder(modelName, options);
-  },
-  
-  /**
-   * @deprecated Use ModelRegistry.validateModel() instead
-   */
-  validateModel(modelName: string) {
-    console.warn('UniversalEmbedderFactory.validateModel() is deprecated. Use ModelRegistry.validateModel() instead.');
-    return ModelRegistry.validateModel(modelName);
-  },
-  
-  /**
-   * @deprecated Use ModelRegistry.getModelInfo() instead
-   */
-  getModelInfo(modelName: string) {
-    console.warn('UniversalEmbedderFactory.getModelInfo() is deprecated. Use ModelRegistry.getModelInfo() instead.');
-    return ModelRegistry.getModelInfo(modelName);
-  },
-  
-  /**
-   * @deprecated Use ModelRegistry.getSupportedModels() instead
-   */
-  getSupportedModels(modelType?: ModelType) {
-    console.warn('UniversalEmbedderFactory.getSupportedModels() is deprecated. Use ModelRegistry.getSupportedModels() instead.');
-    return ModelRegistry.getSupportedModels(modelType);
-  }
-} as const;
+// The UniversalEmbedderFactory object has been removed as it was only a thin
+// wrapper around the new API with deprecation warnings. Use the following instead:
+//
+// - UniversalEmbedderFactory.create() → createEmbedder()
+// - UniversalEmbedderFactory.validateModel() → ModelRegistry.validateModel()
+// - UniversalEmbedderFactory.getModelInfo() → ModelRegistry.getModelInfo()
+// - UniversalEmbedderFactory.getSupportedModels() → ModelRegistry.getSupportedModels()

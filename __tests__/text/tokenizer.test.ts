@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { countTokens, getTokenizer, resetTokenizer } from '../../src/../src/text/tokenizer.js';
+import { countTokens, getTokenizer, resetTokenizer } from '../../src/text/tokenizer.js';
 
 describe('Tokenizer', () => {
   test('countTokens should return 0 for empty string', async () => {

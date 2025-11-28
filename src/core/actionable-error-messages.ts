@@ -88,8 +88,8 @@ export function createMissingFileError(
       messages.push('   2. Or create an ingestion pipeline programmatically:');
       if (cfg.includeExamples) {
         messages.push('      ```typescript');
-        messages.push('      import { TextIngestionFactory } from "rag-lite-ts";');
-        messages.push('      const pipeline = await TextIngestionFactory.create(');
+        messages.push('      import { IngestionFactory } from "rag-lite-ts";');
+        messages.push('      const pipeline = await IngestionFactory.create(');
         messages.push(`        "${filePath.endsWith('.bin') ? filePath.replace('.bin', '.sqlite') : filePath}",`);
         messages.push(`        "${filePath.endsWith('.sqlite') ? filePath.replace('.sqlite', '.bin') : filePath}"`);
         messages.push('      );');
@@ -285,7 +285,7 @@ export function createModeMismatchError(
     messages.push('   3. Or create a new database for the different mode:');
     if (cfg.includeExamples) {
       messages.push('      ```typescript');
-      messages.push('      const pipeline = await TextIngestionFactory.create(');
+      messages.push('      const pipeline = await IngestionFactory.create(');
       messages.push('        "./new-database.sqlite",');
       messages.push('        "./new-index.bin",');
       messages.push(`        { mode: "${actualMode}" }`);

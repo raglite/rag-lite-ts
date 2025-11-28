@@ -1,6 +1,6 @@
 import { existsSync, statSync } from 'fs';
 import { resolve } from 'path';
-import { TextIngestionFactory } from '../factories/text-factory.js';
+import { IngestionFactory } from '../factories/ingestion-factory.js';
 import { withCLIDatabaseAccess, setupCLICleanup, isDatabaseBusy } from '../core/cli-database-utils.js';
 import { EXIT_CODES, ConfigurationError } from '../core/config.js';
 
@@ -174,13 +174,35 @@ export async function runIngest(path: string, options: Record<string, any> = {})
 
     // Validate file type for single files
     if (stats.isFile()) {
-      const validExtensions = ['.md', '.txt'];
+      const mode = options.mode || 'text';
+      
+      // Only formats with actual processing implementations
+      const textExtensions = ['.md', '.txt', '.mdx', '.pdf', '.docx'];
+      const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
+      
+      const validExtensions = mode === 'multimodal' 
+        ? [...textExtensions, ...imageExtensions]
+        : textExtensions;
+      
       const hasValidExtension = validExtensions.some(ext => path.toLowerCase().endsWith(ext));
 
       if (!hasValidExtension) {
         console.error(`Error: Unsupported file type: ${path}`);
         console.error('');
-        console.error('Supported file types: .md, .txt');
+        
+        if (mode === 'multimodal') {
+          console.error('Supported file types in multimodal mode:');
+          console.error('  Text: .md, .txt, .mdx');
+          console.error('  Documents: .pdf, .docx');
+          console.error('  Images: .jpg, .jpeg, .png, .gif, .webp, .bmp');
+        } else {
+          console.error('Supported file types in text mode:');
+          console.error('  Text: .md, .txt, .mdx');
+          console.error('  Documents: .pdf, .docx');
+          console.error('');
+          console.error('For image files, use --mode multimodal:');
+          console.error('  raglite ingest <path> --mode multimodal');
+        }
         console.error('');
         console.error('If you want to ingest multiple files, provide a directory path instead.');
         process.exit(EXIT_CODES.INVALID_ARGUMENTS);
@@ -247,10 +269,10 @@ export async function runIngest(path: string, options: Record<string, any> = {})
     let pipeline;
 
     try {
-      // Create ingestion pipeline using TextIngestionFactory with database protection
+      // Create ingestion pipeline using IngestionFactory with database protection
       pipeline = await withCLIDatabaseAccess(
         dbPath,
-        () => TextIngestionFactory.create(dbPath, indexPath, factoryOptions),
+        () => IngestionFactory.create(dbPath, indexPath, factoryOptions),
         {
           commandName: 'Ingestion command',
           showProgress: true,
@@ -414,7 +436,7 @@ export async function runRebuild(): Promise<void> {
     }
 
     // Create ingestion pipeline with force rebuild using factory
-    const pipeline = await TextIngestionFactory.create(dbPath, indexPath, rebuildOptions);
+    const pipeline = await IngestionFactory.create(dbPath, indexPath, rebuildOptions);
 
     try {
       // Get all documents from database and re-ingest them

@@ -22,7 +22,7 @@ This document outlines future directions for extending the system's capabilities
 
 ### Current State
 
-```
+```text
 ✅ Text Mode: Text-only content (.md, .txt, .pdf, .docx)
 ✅ Multimodal Vision Mode: Text + Images in unified space (CLIP)
 🔄 Audio Support: Planned with CLAP + Whisper
@@ -59,7 +59,7 @@ This dual-model approach provides the best of both worlds: semantic audio search
 
 #### Architecture
 
-```
+```text
 Text Input → CLAP Text Encoder → Text Embedding (512-dim)
                                         ↓
                                   Unified Space
@@ -491,7 +491,7 @@ Implement federated search across multiple specialized indexes, allowing users t
 
 #### Architecture
 
-```
+```text
 User Query (text/image/audio)
     ↓
 Query Router
@@ -569,7 +569,7 @@ Implement a single unified embedding space for text, images, and audio using mod
 
 #### Architecture
 
-```
+```text
 Text Input ──┐
              ├──→ ImageBind Encoder → Unified Embedding (1024-dim)
 Image Input ─┤
@@ -636,8 +636,9 @@ Even with ImageBind, might want to keep specialized models:
 **Status**: Future consideration  
 **Approach**: Frame extraction + audio track separation
 
-```typescript
-// Video processing pipeline
+```text
+Video processing pipeline:
+
 Video File
     ↓
 ┌─────────────┬─────────────┐
@@ -663,7 +664,7 @@ Video Embedding
 
 #### With Whisper Integration
 
-```typescript
+```text
 Video File
     ↓
 ┌─────────────┬─────────────┬─────────────┐
@@ -684,8 +685,9 @@ Embeddings      Embeddings      Captions
 
 #### Enhanced PDF Processing
 
-```typescript
-// Multi-modal PDF understanding
+```text
+Multi-modal PDF understanding:
+
 PDF Document
     ↓
 ┌─────────┬─────────┬─────────┐
@@ -931,7 +933,7 @@ const results = await search.search('query')
 - ✅ Cross-modal search works (text finds audio, audio finds text)
 - ✅ Transcriptions are accurate (>90% for clear speech)
 - ✅ Audio similarity search works reliably
-- ✅ Processing time acceptable (<2x real-time for transcription)
+- ✅ Processing time acceptable (less than 2x real-time for transcription)
 - ✅ No breaking changes to existing API
 - ✅ Clear documentation and examples
 

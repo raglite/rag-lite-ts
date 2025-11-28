@@ -1291,41 +1291,6 @@ export class ContentManager {
     }
   }
 
-  /**
-   * Writes content to file atomically to prevent partial writes
-   * @param filePath - Path to write to
-   * @param content - Content to write
-   * @returns Promise that resolves when write is complete
-   * @deprecated Use writeFileAtomic from resource-cleanup.ts for better resource management
-   */
-  private async writeContentAtomic(filePath: string, content: Buffer): Promise<void> {
-    const tempPath = `${filePath}.tmp.${Date.now()}`;
-    
-    try {
-      // Ensure directory exists
-      await fs.mkdir(dirname(filePath), { recursive: true });
-      
-      // Write to temporary file first
-      await fs.writeFile(tempPath, content);
-      
-      // Atomically move to final location
-      await fs.rename(tempPath, filePath);
-    } catch (error) {
-      // Clean up temporary file if it exists
-      try {
-        await fs.unlink(tempPath);
-      } catch {
-        // Ignore cleanup errors
-      }
-      
-      throw new ContentDirectoryError(
-        'atomic write',
-        `Failed to write content atomically: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        'file_write'
-      );
-    }
-  }
-
   // =============================================================================
   // CONTENT DIRECTORY MANAGEMENT METHODS
   // =============================================================================

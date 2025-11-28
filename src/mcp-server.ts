@@ -32,11 +32,11 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync, statSync } from 'fs';
 import { resolve } from 'path';
-import { PolymorphicSearchFactory } from './core/polymorphic-search-factory.js';
-import { TextIngestionFactory } from './factories/text-factory.js';
+import { SearchFactory } from './factories/search-factory.js';
+import { IngestionFactory } from './factories/ingestion-factory.js';
 import type { SearchEngine } from './core/search.js';
 
-import { openDatabase } from './core/db.js';
+import { openDatabase, getSystemInfo } from './core/db.js';
 import { DatabaseConnectionManager } from './core/database-connection-manager.js';
 import { config, validateCoreConfig, ConfigurationError } from './core/config.js';
 import type { SearchOptions } from './core/types.js';
@@ -540,20 +540,29 @@ class RagLiteMCPServer {
         throw new Error(`Cannot access path: ${args.path}. Check permissions.`);
       }
 
-      // Validate file type for single files
+      // Validate mode parameter
+      const mode = args.mode || 'text';
+      
+      // Validate file type for single files (only formats with actual processing implementations)
       if (stats.isFile()) {
-        const validExtensions = ['.md', '.txt'];
+        const textExtensions = ['.md', '.txt', '.mdx', '.pdf', '.docx'];
+        const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
+        
+        const validExtensions = mode === 'multimodal' 
+          ? [...textExtensions, ...imageExtensions]
+          : textExtensions;
+        
         const hasValidExtension = validExtensions.some(ext =>
           args.path.toLowerCase().endsWith(ext)
         );
 
         if (!hasValidExtension) {
-          throw new Error(`Unsupported file type: ${args.path}. Supported types: .md, .txt`);
+          const supportedTypes = mode === 'multimodal'
+            ? '.md, .txt, .mdx, .pdf, .docx, .jpg, .jpeg, .png, .gif, .webp, .bmp'
+            : '.md, .txt, .mdx, .pdf, .docx';
+          throw new Error(`Unsupported file type: ${args.path}. Supported types: ${supportedTypes}`);
         }
       }
-
-      // Validate mode parameter
-      const mode = args.mode || 'text';
       if (!['text', 'multimodal'].includes(mode)) {
         throw new Error(`Invalid mode: ${mode}. Supported modes: text, multimodal`);
       }
@@ -615,8 +624,8 @@ class RagLiteMCPServer {
       }
 
       // Create and run ingestion pipeline using text factory
-      // The TextIngestionFactory already supports mode and reranking strategy parameters
-      const pipeline = await TextIngestionFactory.create(
+      // The IngestionFactory already supports mode and reranking strategy parameters
+      const pipeline = await IngestionFactory.create(
         config.db_file,
         config.index_file,
         factoryOptions
@@ -646,8 +655,8 @@ class RagLiteMCPServer {
           chunks_per_second: result.processingTimeMs > 0 ?
             Math.round(result.chunksCreated / (result.processingTimeMs / 1000) * 100) / 100 : 0,
           supported_file_types: mode === 'multimodal' 
-            ? ['md', 'txt', 'jpg', 'jpeg', 'png', 'gif', 'webp']
-            : ['md', 'txt'],
+            ? ['md', 'txt', 'mdx', 'pdf', 'docx', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']
+            : ['md', 'txt', 'mdx', 'pdf', 'docx'],
           success: true
         };
 
@@ -907,7 +916,7 @@ class RagLiteMCPServer {
       }
 
       // Create and run ingestion pipeline
-      const pipeline = await TextIngestionFactory.create(
+      const pipeline = await IngestionFactory.create(
         config.db_file,
         config.index_file,
         factoryOptions
@@ -1005,7 +1014,7 @@ class RagLiteMCPServer {
   private async handleRebuildIndex(_args: any) {
     try {
       // Create ingestion pipeline with force rebuild using factory
-      const pipeline = await TextIngestionFactory.create(
+      const pipeline = await IngestionFactory.create(
         config.db_file,
         config.index_file,
         { forceRebuild: true }
@@ -1099,7 +1108,6 @@ class RagLiteMCPServer {
 
       // Get model information and compatibility status
       const { getModelDefaults } = await import('./config.js');
-      const { getStoredModelInfo } = await import('./core/db.js');
       
       const currentModel = config.embedding_model;
       const currentDefaults = getModelDefaults(currentModel);
@@ -1119,15 +1127,15 @@ class RagLiteMCPServer {
         try {
           const db = await openDatabase(config.db_file);
           try {
-            const storedModel = await getStoredModelInfo(db);
+            const systemInfo = await getSystemInfo(db);
             
-            if (storedModel) {
-              stats.model_info.stored_model = storedModel.modelName;
-              stats.model_info.stored_dimensions = storedModel.dimensions;
+            if (systemInfo && systemInfo.modelName && systemInfo.modelDimensions) {
+              stats.model_info.stored_model = systemInfo.modelName;
+              stats.model_info.stored_dimensions = systemInfo.modelDimensions;
               
               // Check for compatibility issues
-              const modelMatch = storedModel.modelName === currentModel;
-              const dimensionMatch = storedModel.dimensions === currentDefaults.dimensions;
+              const modelMatch = systemInfo.modelName === currentModel;
+              const dimensionMatch = systemInfo.modelDimensions === currentDefaults.dimensions;
               
               stats.model_info.compatibility = {
                 model_matches: modelMatch,
@@ -1261,14 +1269,14 @@ class RagLiteMCPServer {
             text_search: true,
             image_search: false,
             multimodal_reranking: false,
-            supported_file_types: ['md', 'txt']
+            supported_file_types: ['md', 'txt', 'mdx', 'pdf', 'docx']
           };
         } else if (systemInfo.mode === 'multimodal') {
           modeInfo.capabilities = {
             text_search: true,
             image_search: true,
             multimodal_reranking: true,
-            supported_file_types: ['md', 'txt', 'jpg', 'png', 'gif', 'webp']
+            supported_file_types: ['md', 'txt', 'mdx', 'pdf', 'docx', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']
           };
         }
 
@@ -1733,10 +1741,10 @@ class RagLiteMCPServer {
       // Validate configuration
       validateCoreConfig(config);
 
-      // Create search engine using PolymorphicSearchFactory (auto-detects mode)
+      // Create search engine using SearchFactory (auto-detects mode)
       // This will automatically detect the mode from the database and create the appropriate engine
       console.error('🎭 MCP Server: Initializing search engine with automatic mode detection...');
-      this.searchEngine = await PolymorphicSearchFactory.create(
+      this.searchEngine = await SearchFactory.create(
         config.index_file,
         config.db_file
       );

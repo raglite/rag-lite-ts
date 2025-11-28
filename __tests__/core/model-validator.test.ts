@@ -16,13 +16,13 @@ import {
   MIN_TRANSFORMERS_VERSION,
   RECOMMENDED_TRANSFORMERS_VERSION,
   DEFAULT_SYSTEM_CAPABILITIES
-} from '../../src/../src/core/model-validator.js';
+} from '../../src/core/model-validator.js';
 
 import type {
   SystemCapabilities,
   DetailedValidationResult,
   TransformersJsInfo
-} from '../../src/../src/core/model-validator.js';
+} from '../../src/core/model-validator.js';
 
 describe('Model Validation and Compatibility System', () => {
   

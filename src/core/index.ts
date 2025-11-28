@@ -23,8 +23,8 @@
  * 3. Usage Patterns:
  * 
  *    // Direct dependency injection (advanced users)
- *    const embedFn = await createTextEmbedder();
- *    const rerankFn = await createTextReranker();
+ *    const embedFn = createTextEmbedFunction();
+ *    const rerankFn = createTextRerankFunction();
  *    const indexManager = new IndexManager('./index.bin');
  *    const db = await openDatabase('./db.sqlite');
  *    const search = new SearchEngine(embedFn, indexManager, db, rerankFn);
@@ -88,10 +88,6 @@ export {
   insertChunk,
   upsertDocument,
   getChunksByEmbeddingIds,
-  getModelVersion,
-  setModelVersion,
-  getStoredModelInfo,
-  setStoredModelInfo,
   insertContentMetadata,
   getContentMetadata,
   getContentMetadataByHash,

@@ -1,4 +1,4 @@
-import { SearchFactory, IngestionFactory, RAGFactory, SearchEngine, IngestionPipeline } from 'rag-lite-ts';
+import { SearchFactory, IngestionFactory, SearchEngine, IngestionPipeline } from 'rag-lite-ts';
 import { existsSync } from 'fs';
 
 async function runFactoryPatternExample() {
@@ -18,12 +18,9 @@ async function runFactoryPatternExample() {
         await ingestion.ingestDirectory('./docs/');
         console.log('✅ Documents ingested successfully!\n');
 
-        // Create search engine with factory
+        // Create search engine with factory (auto-detects mode and configuration)
         console.log('Creating search engine with factory...');
-        const search = await SearchFactory.create('./factory-index.bin', './factory-db.sqlite', {
-            enableReranking: true,
-            topK: 5
-        });
+        const search = await SearchFactory.create('./factory-index.bin', './factory-db.sqlite');
         console.log('✅ Search engine ready!\n');
 
         // Sample queries
@@ -127,34 +124,38 @@ async function runSimpleAPIExample() {
     }
 }
 
-async function runRAGFactoryExample() {
-    console.log('🚀 RAG Factory Example');
-    console.log('=======================\n');
+async function runCompleteRAGExample() {
+    console.log('🚀 Complete RAG System Example');
+    console.log('================================\n');
 
     try {
-        // RAG Factory - create both ingestion and search together
-        console.log('Creating complete RAG system with RAGFactory...');
-        const { searchEngine, ingestionPipeline } = await RAGFactory.createBoth(
-            './rag-index.bin',
+        // Create ingestion and search separately (RAGFactory removed in v3.0.0)
+        console.log('Creating complete RAG system...');
+        
+        // 1. Create ingestion pipeline
+        const ingestionPipeline = await IngestionFactory.create(
             './rag-db.sqlite',
+            './rag-index.bin',
             {
-                embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
-                enableReranking: true
+                embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2'
             }
         );
-        console.log('✅ Complete RAG system ready!\n');
-
-        // Ingest documents
-        console.log('Ingesting documents with RAG system...');
+        
+        // 2. Ingest documents
+        console.log('Ingesting documents...');
         await ingestionPipeline.ingestDirectory('./docs/');
         console.log('✅ Documents ingested!\n');
+        
+        // 3. Create search engine (auto-detects configuration)
+        const searchEngine = await SearchFactory.create('./rag-index.bin', './rag-db.sqlite');
+        console.log('✅ Complete RAG system ready!\n');
 
-        // Search with the same system
+        // 4. Search with the system
         console.log('Searching with RAG system...');
         const results = await searchEngine.search('RAG system architecture', { top_k: 3 });
         
-        console.log('🔍 RAG Factory search results:');
-        console.log('===============================\n');
+        console.log('🔍 Complete RAG search results:');
+        console.log('=================================\n');
 
         if (results.length === 0) {
             console.log('No results found.\n');
@@ -176,7 +177,7 @@ async function runRAGFactoryExample() {
         await ingestionPipeline.cleanup();
 
     } catch (error) {
-        console.error('❌ RAG Factory error:', error.message);
+        console.error('❌ Complete RAG system error:', error.message);
         throw error;
     }
 }
@@ -198,7 +199,7 @@ async function main() {
         await runSimpleAPIExample();
         console.log('\n' + '='.repeat(60) + '\n');
         
-        await runRAGFactoryExample();
+        await runCompleteRAGExample();
         
         console.log('🎉 All examples completed successfully!');
         console.log('\nNext steps:');

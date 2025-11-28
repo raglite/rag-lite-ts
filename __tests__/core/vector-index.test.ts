@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { VectorIndex } from '../../src/../src/core/vector-index.js';
+import { VectorIndex } from '../../src/core/vector-index.js';
 import { unlinkSync, existsSync } from 'fs';
 import { join } from 'path';
 import { TEST_MODELS } from '../../src/test-utils.js';

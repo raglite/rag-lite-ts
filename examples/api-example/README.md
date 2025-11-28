@@ -9,7 +9,7 @@ This example demonstrates the complete RAG-lite workflow using the new clean arc
 1. **Factory Pattern API**: Simple, powerful factory methods for common use cases
    - Use `SearchFactory.create()` and `IngestionFactory.create()` for easy setup
    - Automatic model loading, database initialization, and dependency injection
-   - Smart defaults with configuration options for advanced users
+   - Search factory auto-detects mode and configuration from database (Chameleon Architecture)
 
 2. **Simple Constructor API**: Clean, intuitive constructors for basic usage
    - Create instances with `new SearchEngine()` and `new IngestionPipeline()`
@@ -48,7 +48,7 @@ The example demonstrates three key API patterns:
 ### 1. Factory Pattern API
 - Uses `SearchFactory.create()` and `IngestionFactory.create()` for easy setup
 - Handles complex initialization automatically (model loading, database setup)
-- Provides configuration options for advanced users
+- Search factory auto-detects mode and configuration from database
 - Shows proper resource cleanup
 
 ### 2. Simple Constructor API
@@ -76,17 +76,12 @@ const ingestion = await IngestionFactory.create('./db.sqlite', './index.bin', {
   chunkOverlap: 50
 });
 
-// Create search engine with factory
-const search = await SearchFactory.create('./index.bin', './db.sqlite', {
-  enableReranking: true,
-  topK: 5
-});
+// Create search engine with factory (auto-detects mode and configuration)
+const search = await SearchFactory.create('./index.bin', './db.sqlite');
 
 // Create complete RAG system
-const { searchEngine, ingestionPipeline } = await RAGFactory.createBoth(
-  './index.bin', 
-  './db.sqlite'
-);
+const ingestion = await IngestionFactory.create('./db.sqlite', './index.bin');
+const search = await SearchFactory.create('./index.bin', './db.sqlite');
 ```
 
 ### Simple Constructor API
@@ -143,15 +138,7 @@ interface SearchResult {
 
 ### Factory Options Structure
 ```javascript
-interface TextSearchOptions {
-  embeddingModel?: string;     // Override embedding model
-  batchSize?: number;          // Embedding batch size
-  rerankingModel?: string;     // Override reranking model
-  enableReranking?: boolean;   // Enable/disable reranking
-  topK?: number;              // Default top-k results
-}
-
-interface TextIngestionOptions {
+interface IngestionFactoryOptions {
   embeddingModel?: string;     // Override embedding model
   batchSize?: number;          // Embedding batch size
   chunkSize?: number;          // Text chunk size
@@ -172,7 +159,7 @@ Try these queries with the factory-created engines:
 
 - **Installation**: "npm install", "getting started", "quick start"
 - **API Usage**: "factory pattern", "SearchFactory", "IngestionFactory"
-- **Configuration**: "embedding models", "reranking options", "batch size"
+- **Configuration**: "embedding models", "mode detection", "batch size"
 - **Performance**: "optimization", "memory usage", "speed"
 
 ### Simple API Queries
@@ -225,11 +212,8 @@ const ingestion = await IngestionFactory.create('./db.sqlite', './index.bin', {
   batchSize: 16
 });
 
-// Search factory with reranking
-const search = await SearchFactory.create('./index.bin', './db.sqlite', {
-  enableReranking: true,
-  topK: 10
-});
+// Search factory auto-detects mode and configuration from database
+const search = await SearchFactory.create('./index.bin', './db.sqlite');
 ```
 
 ### Simple Constructor Configuration
