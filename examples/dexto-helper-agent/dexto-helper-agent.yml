@@ -263,7 +263,7 @@ systemPrompt:
 llm:
   provider: "google"
   model: "gemini-2.0-flash"
-  apiKey: "$GOOGLE_GENERATIVE_AI_API_KEY"
+  apiKey: "$GEMINI_API_KEY"
 
 # Tool Confirmation
 toolConfirmation:

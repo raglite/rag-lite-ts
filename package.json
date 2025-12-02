@@ -88,7 +88,7 @@
     "lru-cache": "^11.2.2",
     "mammoth": "^1.11.0",
     "pdf-parse": "^2.1.10",
-    "sqlite3": "^5.1.6"
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
     "@types/jsdom": "^21.1.7",

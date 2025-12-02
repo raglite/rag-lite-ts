@@ -1,5 +1,5 @@
 ---
-sidebar_position: 3
+sidebar_position: 9
 ---
 
 # Deployment Guide
@@ -30,8 +30,25 @@ Deploy Dexto agents using Docker for local or production environments.
 
 Your Dexto server will be available at `http://localhost:3001` with:
 - ✅ SQLite database connected
-- ✅ MCP servers (filesystem & puppeteer) connected  
-- ✅ REST API + WebSocket endpoints available
+- ✅ MCP servers (filesystem & puppeteer) connected
+- ✅ REST API + SSE streaming endpoints available
+
+### Port Configuration
+
+By default, Dexto server mode runs on port 3001 and web mode on port 3000. Customize the port using the `PORT` environment variable or `--port` flag:
+
+```bash
+# Using environment variable
+docker run --env-file .env -e PORT=8080 -p 8080:8080 dexto
+
+# Using CLI flag (requires modifying Dockerfile CMD)
+docker run --env-file .env -p 8080:8080 dexto --port 8080
+```
+
+```bash
+# Web mode with custom port (serves both UI and API)
+docker run --env-file .env -p 3000:3000 dexto --port 3000
+```
 
 ### Background Mode
 
@@ -119,26 +136,31 @@ Once deployed, your Dexto server provides:
 
 ### REST API
 - `POST /api/message` - Send async message
-- `POST /api/message-sync` - Send sync message  
+- `POST /api/message-sync` - Send sync message
 - `POST /api/reset` - Reset conversation
 - `GET /api/mcp/servers` - List MCP servers
 - `GET /health` - Health check
+- And many more for sessions, LLM management, agents, webhooks, etc.
 
-### WebSocket
+**See the complete [REST API Documentation](/api/rest/)** for all available endpoints.
+
+### Server-Sent Events (SSE)
 - Real-time events and streaming responses
-- Connect to `ws://localhost:3001/ws`
+- Connect to `http://localhost:3001/api/message-stream`
+
+**See the [SDK Events Reference](/api/sdk/events)** for event types and usage.
 
 
 ## Next Steps
 
-- **[Dexto SDK Guide](./dexto-sdk)** - Integrate Dexto into your application's codebase
+- **[Dexto SDK Guide](./dexto-sdk.md)** - Integrate Dexto into your application's codebase
 - **[API Reference](/api)** - Complete API documentation
 
-For more detailed information on configuring agents, refer to the [Dexto Configuration Guide](./configuring-dexto/overview).
+For more detailed information on configuring agents, refer to the [Dexto Configuration Guide](./configuring-dexto/overview.md).
 
 ### Building with the Dexto SDK for TypeScript
 
-For custom builds and advanced integration, you can use the [Dexto SDK Guide](./dexto-sdk) to bundle Dexto into your own applications.
+For custom builds and advanced integration, you can use the [Dexto SDK Guide](./dexto-sdk.md) to bundle Dexto into your own applications.
 
 For a complete technical reference, see the [API Reference](/api).
 

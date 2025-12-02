@@ -1,5 +1,7 @@
 # Core Services
 
+import ExpandableMermaid from '@site/src/components/ExpandableMermaid';
+
 Dexto's architecture is built around core services that handle different aspects of agent functionality. Understanding these services helps with debugging, customization, and troubleshooting.
 
 ## Service Overview
@@ -11,38 +13,40 @@ Dexto's architecture is built around core services that handle different aspects
 | **ToolManager** | Tool execution | Executes tools, handles confirmations, manages internal tools |
 | **SessionManager** | Conversation state | Manages chat sessions, conversation history |
 | **StorageManager** | Data persistence | Handles cache and database storage |
-| **PromptManager** | System prompts | Manages system prompt assembly and dynamic content |
+| **SystemPromptManager** | System prompts | Manages system prompt assembly and dynamic content |
 | **AgentEventBus** | Event coordination | Handles inter-service communication |
 
 ## Service Relationships
 
+<ExpandableMermaid title="Service Relationships Diagram">
 ```mermaid
 graph TB
     DA[DextoAgent] --> SM[SessionManager]
     DA --> MM[MCPManager]
     DA --> TM[ToolManager]
-    DA --> PM[PromptManager]
+    DA --> SPM[SystemPromptManager]
     DA --> STM[StorageManager]
     DA --> AEB[AgentEventBus]
-    
+
     MM --> TM
     TM --> STM
     SM --> STM
-    PM --> STM
-    
+    SPM --> STM
+
     AEB -.-> SM
     AEB -.-> MM
     AEB -.-> TM
-    
+
     subgraph "Storage Layer"
         STM
         Cache[(Cache)]
         DB[(Database)]
     end
-    
+
     STM --> Cache
     STM --> DB
 ```
+</ExpandableMermaid>
 
 ## DextoAgent
 
@@ -50,7 +54,8 @@ graph TB
 
 ### Key Methods
 - `start()` - Initialize all services
-- `run(prompt, tools?, sessionId?)` - Execute user prompt
+- `generate(message, options)` - Execute user prompt (recommended)
+- `run(prompt, imageData?, fileData?, sessionId)` - Lower-level execution
 - `switchLLM(updates)` - Change LLM model/provider
 - `createSession(sessionId?)` - Create new chat session
 - `stop()` - Shutdown all services
@@ -60,11 +65,17 @@ graph TB
 const agent = new DextoAgent(config);
 await agent.start();
 
+// Create a session
+const session = await agent.createSession();
+
 // Run a task
-const response = await agent.run("List files in current directory");
+const response = await agent.generate("List files in current directory", {
+  sessionId: session.id
+});
+console.log(response.content);
 
 // Switch models
-await agent.switchLLM({ model: "claude-4-sonnet-20250514" });
+await agent.switchLLM({ model: "claude-sonnet-4-5-20250929" });
 
 await agent.stop();
 ```
@@ -125,10 +136,11 @@ console.log(`${stats.total} tools: ${stats.mcp} MCP, ${stats.internal} internal`
 
 ### Key Methods
 - `createSession(sessionId?)` - Create new session
-- `loadSession(sessionId)` - Load existing session
+- `getSession(sessionId)` - Retrieve existing session
 - `listSessions()` - List all sessions
 - `deleteSession(sessionId)` - Delete session
 - `getSessionHistory(sessionId)` - Get conversation history
+- `resetConversation(sessionId)` - Clear session history while keeping session active
 
 ### Session Features
 - Persistent conversation history
@@ -138,14 +150,18 @@ console.log(`${stats.total} tools: ${stats.mcp} MCP, ${stats.internal} internal`
 
 ### Usage Example
 ```typescript
-// Create and switch to new session
-const sessionId = await agent.createSession('work-session');
+// Create new session
+const session = await agent.createSession('work-session');
 
 // List all sessions
 const sessions = await agent.listSessions();
 
 // Get conversation history
 const history = await agent.getSessionHistory('work-session');
+
+// Use session in conversations
+const response = await agent.generate("Hello", { sessionId: session.id });
+console.log(response.content);
 ```
 
 ## StorageManager
@@ -175,7 +191,7 @@ storage:
     connectionString: $POSTGRES_CONNECTION_STRING
 ```
 
-## PromptManager
+## SystemPromptManager
 
 **System prompt** assembly from multiple contributors.
 
@@ -298,4 +314,4 @@ toolConfirmation:
   timeout: 30000
 ```
 
-See [Configuration Guide](../guides/configuring-dexto/overview) for complete config options.
+See [Configuration Guide](../guides/configuring-dexto/overview.md) for complete config options.

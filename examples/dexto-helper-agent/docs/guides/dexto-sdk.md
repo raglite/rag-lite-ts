@@ -1,11 +1,13 @@
 ---
-sidebar_position: 1
-title: "Dexto SDK Guide"
+sidebar_position: 5
+title: "Dexto Agent SDK Guide"
 ---
 
-# Dexto SDK Guide
+import ExpandableMermaid from '@site/src/components/ExpandableMermaid';
 
-Welcome to the Dexto SDK guide for TypeScript. This guide provides everything you need to build high-quality AI applications with Dexto.
+# Dexto Agent SDK Guide
+
+Welcome to the Dexto Agent SDK guide for TypeScript. This guide provides everything you need to build high-quality AI applications with Dexto.
 
 Whether you're creating standalone agents, integrating with existing applications, or building custom AI workflows, the SDK offers a flexible and robust set of tools.
 
@@ -32,20 +34,24 @@ import { DextoAgent } from '@dexto/core';
 const agent = new DextoAgent({
   llm: {
     provider: 'openai',
-    model: 'gpt-4',
+    model: 'gpt-5',
     apiKey: process.env.OPENAI_API_KEY,
-  },
+  }
 });
 
 await agent.start();
 
-const response = await agent.run('Hello, world!');
-console.log(response);
+// Create a session for the conversation
+const session = await agent.createSession();
+
+// Use generate() for simple request/response
+const response = await agent.generate('Hello, world!', { sessionId: session.id });
+console.log(response.content);
 
 await agent.stop();
 ```
 
-For more detailed examples, see the [Examples & Demos](/docs/category/examples--demos) section.
+For more detailed examples, see the [Examples](/examples/intro) section.
 
 ## Overview
 
@@ -83,15 +89,18 @@ import { DextoAgent } from '@dexto/core';
 const agent = new DextoAgent({
   llm: {
     provider: 'openai',
-    model: 'gpt-4o',
+    model: 'gpt-5',
     apiKey: process.env.OPENAI_API_KEY
   }
 });
 await agent.start();
 
-// Start a conversation
-const response = await agent.run('Hello! What can you help me with?');
-console.log(response);
+// Create a session and start a conversation
+const session = await agent.createSession();
+const response = await agent.generate('Hello! What can you help me with?', {
+  sessionId: session.id
+});
+console.log(response.content);
 ```
 
 ### Adding MCP Tools
@@ -100,9 +109,10 @@ console.log(response);
 const agent = new DextoAgent({
   llm: {
     provider: 'openai',
-    model: 'gpt-4o',
+    model: 'gpt-5',
     apiKey: process.env.OPENAI_API_KEY
   },
+  toolConfirmation: { mode: 'auto-approve' },
   mcpServers: {
     filesystem: {
       type: 'stdio',
@@ -110,7 +120,7 @@ const agent = new DextoAgent({
       args: ['-y', '@modelcontextprotocol/server-filesystem', '.']
     },
     web: {
-      type: 'stdio', 
+      type: 'stdio',
       command: 'npx',
       args: ['-y', '@modelcontextprotocol/server-brave-search']
     }
@@ -118,8 +128,13 @@ const agent = new DextoAgent({
 });
 await agent.start();
 
-// Now the agent can use filesystem and web search tools
-const response = await agent.run('List the files in this directory and search for recent AI news');
+// Create session and use the agent with filesystem and web search tools
+const session = await agent.createSession();
+const response = await agent.generate(
+  'List the files in this directory and search for recent AI news',
+  { sessionId: session.id }
+);
+console.log(response.content);
 ```
 
 ## Core Concepts
@@ -139,8 +154,8 @@ const userSession = await agent.createSession('user-123');
 const adminSession = await agent.createSession('admin-456');
 
 // Each session maintains separate conversation history
-await userSession.run('Help me with my account');
-await adminSession.run('Show me system metrics');
+await agent.generate('Help me with my account', { sessionId: userSession.id });
+await agent.generate('Show me system metrics', { sessionId: adminSession.id });
 ```
 
 ### Event-Driven Architecture
@@ -149,16 +164,16 @@ The SDK provides real-time events for monitoring and integration:
 
 ```typescript
 // Listen to agent-wide events
-agent.agentEventBus.on('dexto:mcpServerConnected', (data) => {
+agent.agentEventBus.on('mcp:server-connected', (data) => {
   console.log(`✅ Connected to ${data.name}`);
 });
 
 // Listen to conversation events
-agent.agentEventBus.on('llmservice:thinking', (data) => {
+agent.agentEventBus.on('llm:thinking', (data) => {
   console.log(`🤔 Agent thinking... (session: ${data.sessionId})`);
 });
 
-agent.agentEventBus.on('llmservice:toolCall', (data) => {
+agent.agentEventBus.on('llm:tool-call', (data) => {
   console.log(`🔧 Using tool: ${data.toolName}`);
 });
 ```
@@ -166,6 +181,23 @@ agent.agentEventBus.on('llmservice:toolCall', (data) => {
 ## Common Patterns
 
 ### Multi-User Chat Application
+
+<ExpandableMermaid title="Multi-User Chat Flow">
+```mermaid
+sequenceDiagram
+    participant User1 as User A
+    participant ChatApp as Chat Application
+    participant Agent as DextoAgent
+
+    User1->>ChatApp: handleUserMessage
+    ChatApp->>ChatApp: Get or create session
+    ChatApp->>Agent: createSession (if new)
+    ChatApp->>Agent: generate(message, {sessionId})
+    Agent->>Agent: Process message
+    Agent-->>ChatApp: Response
+    ChatApp-->>User1: broadcastToUser
+```
+</ExpandableMermaid>
 
 ```typescript
 import { DextoAgent } from '@dexto/core';
@@ -176,13 +208,14 @@ class ChatApplication {
 
   async initialize() {
     this.agent = new DextoAgent({
-      llm: { provider: 'openai', model: 'gpt-4o', apiKey: process.env.OPENAI_API_KEY },
+      llm: { provider: 'openai', model: 'gpt-5', apiKey: process.env.OPENAI_API_KEY },
+      toolConfirmation: { mode: 'auto-approve' },
       mcpServers: { /* your tools */ }
     });
     await this.agent.start();
 
     // Set up event monitoring
-    this.agent.agentEventBus.on('llmservice:response', (data) => {
+    this.agent.agentEventBus.on('llm:response', (data) => {
       this.broadcastToUser(data.sessionId, data.content);
     });
   }
@@ -196,12 +229,13 @@ class ChatApplication {
       this.userSessions.set(userId, sessionId);
     }
 
-    // Process message
-    return await this.agent.run(message, undefined, sessionId);
+    // Process message using generate()
+    const response = await this.agent.generate(message, { sessionId });
+    return response.content;
   }
 
   private broadcastToUser(sessionId: string, message: string) {
-    // Find user and send response via WebSocket, etc.
+    // Find user and send response via SSE, etc.
   }
 }
 ```
@@ -240,6 +274,17 @@ class AdaptiveAgent {
 
 ### Session Management with Persistence
 
+<ExpandableMermaid title="Session Management Flow">
+```mermaid
+flowchart TD
+    A[resumeConversation called] --> B{Session exists?}
+    B -->|Yes| C[Load existing session]
+    B -->|No| D[Create new session]
+    C --> E[Return sessionId, history]
+    D --> F[Return sessionId, history: null]
+```
+</ExpandableMermaid>
+
 ```typescript
 class PersistentChatBot {
   private agent: DextoAgent;
@@ -257,19 +302,25 @@ class PersistentChatBot {
 
   async resumeConversation(userId: string) {
     const sessionId = `user-${userId}`;
-    
+
     // Check if session exists
     const sessions = await this.agent.listSessions();
     if (sessions.includes(sessionId)) {
-      // Load existing session
-      await this.agent.loadSession(sessionId);
+      // Retrieve existing session history
       const history = await this.agent.getSessionHistory(sessionId);
-      return history;
+      return { sessionId, history };
     } else {
       // Create new session
-      await this.agent.createSession(sessionId);
-      return null;
+      const session = await this.agent.createSession(sessionId);
+      return { sessionId: session.id, history: null };
     }
+  }
+
+  async chat(userId: string, message: string) {
+    const sessionId = `user-${userId}`;
+    // Always pass session ID explicitly
+    const response = await this.agent.generate(message, { sessionId });
+    return response.content;
   }
 }
 ```
@@ -282,7 +333,7 @@ class PersistentChatBot {
 // OpenAI
 const openaiConfig = {
   provider: 'openai',
-  model: 'gpt-4o',
+  model: 'gpt-5',
   apiKey: process.env.OPENAI_API_KEY,
   temperature: 0.7,
   maxOutputTokens: 4000
@@ -291,7 +342,7 @@ const openaiConfig = {
 // Anthropic
 const anthropicConfig = {
   provider: 'anthropic', 
-  model: 'claude-3-opus-20240229',
+  model: 'claude-sonnet-4-5-20250929',
   apiKey: process.env.ANTHROPIC_API_KEY,
   maxIterations: 5
 };
@@ -344,7 +395,7 @@ const agent = new DextoAgent(config);
 await agent.start();
 
 // Handle MCP connection failures
-agent.agentEventBus.on('dexto:mcpServerConnected', (data) => {
+agent.agentEventBus.on('mcp:server-connected', (data) => {
   if (!data.success) {
     console.warn(`⚠️ ${data.name} unavailable: ${data.error}`);
     // Continue without this capability
@@ -352,7 +403,7 @@ agent.agentEventBus.on('dexto:mcpServerConnected', (data) => {
 });
 
 // Handle LLM errors
-agent.agentEventBus.on('llmservice:error', (data) => {
+agent.agentEventBus.on('llm:error', (data) => {
   if (data.recoverable) {
     console.log('🔄 Retrying request...');
   } else {
@@ -368,16 +419,17 @@ agent.agentEventBus.on('llmservice:error', (data) => {
 try {
   const agent = new DextoAgent({
     llm: primaryLLMConfig,
+    toolConfirmation: { mode: 'auto-approve' },
     mcpServers: allServers
   });
   await agent.start();
 } catch (error) {
   console.warn('⚠️ Full setup failed, using minimal config');
-  
+
   // Fallback to basic configuration
   const agent = new DextoAgent({
-    llm: fallbackLLMConfig,
-    mcpServers: {} // No external tools
+    llm: fallbackLLMConfig
+    // No MCP servers in fallback mode
   });
   await agent.start();
 }
@@ -416,22 +468,22 @@ await agent.start();
 
 ```typescript
 // Log all tool executions
-agent.agentEventBus.on('llmservice:toolCall', (data) => {
+agent.agentEventBus.on('llm:tool-call', (data) => {
   console.log(`[${data.sessionId}] Tool: ${data.toolName}`, data.args);
 });
 
-agent.agentEventBus.on('llmservice:toolResult', (data) => {
+agent.agentEventBus.on('llm:tool-result', (data) => {
   if (data.success) {
-    console.log(`[${data.sessionId}] ✅ ${data.toolName} completed`);
+    console.log(`[${data.sessionId}] ✅ ${data.toolName} completed`, data.sanitized);
   } else {
-    console.error(`[${data.sessionId}] ❌ ${data.toolName} failed:`, data.result);
+    console.error(`[${data.sessionId}] ❌ ${data.toolName} failed:`, data.rawResult ?? data.sanitized);
   }
 });
 ```
 
 ## Next Steps
 
-- **[DextoAgent API](/api/dexto-agent)** - Detailed method documentation
+- **[DextoAgent API](/api/sdk/dexto-agent)** - Detailed method documentation
 - **[MCP Guide](/docs/mcp/overview)** - Learn about Model Context Protocol
 - **[Deployment Guide](/docs/guides/deployment)** - Production deployment strategies
-- **[Examples](/docs/category/examples--demos)** - Complete example applications
+- **[Examples](/examples/intro)** - Complete example applications
