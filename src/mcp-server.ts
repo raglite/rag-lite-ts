@@ -30,13 +30,13 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync, statSync } from 'fs';
+import { existsSync, statSync, createWriteStream } from 'fs';
 import { resolve } from 'path';
 import { SearchFactory } from './factories/search-factory.js';
 import { IngestionFactory } from './factories/ingestion-factory.js';
 import type { SearchEngine } from './core/search.js';
 
-import { openDatabase, getSystemInfo } from './core/db.js';
+import { getSystemInfo } from './core/db.js';
 import { DatabaseConnectionManager } from './core/database-connection-manager.js';
 import { config, validateCoreConfig, ConfigurationError } from './core/config.js';
 import type { SearchOptions } from './core/types.js';
@@ -826,7 +826,7 @@ class RagLiteMCPServer {
                       return;
                     }
                     
-                    const fileStream = require('fs').createWriteStream(tempFilePath);
+                    const fileStream = createWriteStream(tempFilePath!);
                     redirectResponse.pipe(fileStream);
                     
                     fileStream.on('finish', () => {
@@ -841,7 +841,7 @@ class RagLiteMCPServer {
                 reject(new Error(`Failed to download image: HTTP ${response.statusCode}`));
                 return;
               } else {
-                const fileStream = require('fs').createWriteStream(tempFilePath);
+                const fileStream = createWriteStream(tempFilePath!);
                 response.pipe(fileStream);
                 
                 fileStream.on('finish', () => {
@@ -1021,8 +1021,8 @@ class RagLiteMCPServer {
       );
 
       try {
-        // Get all documents from database and re-ingest them
-        const db = await openDatabase(config.db_file);
+        // Get all documents from database and re-ingest them - use shared connection
+        const db = await DatabaseConnectionManager.getConnection(config.db_file);
         
         try {
           const documents = await db.all('SELECT DISTINCT source FROM documents ORDER BY source');
@@ -1083,7 +1083,8 @@ class RagLiteMCPServer {
           };
 
         } finally {
-          await db.close();
+          // Release instead of close - keeps connection alive for reuse
+          await DatabaseConnectionManager.releaseConnection(config.db_file);
         }
       } finally {
         await pipeline.cleanup();
@@ -1125,7 +1126,7 @@ class RagLiteMCPServer {
       // Check model compatibility if database exists
       if (stats.database_exists) {
         try {
-          const db = await openDatabase(config.db_file);
+          const db = await DatabaseConnectionManager.getConnection(config.db_file);
           try {
             const systemInfo = await getSystemInfo(db);
             
@@ -1159,7 +1160,8 @@ class RagLiteMCPServer {
             stats.total_documents = docCount?.count || 0;
             stats.total_chunks = chunkCount?.count || 0;
           } finally {
-            await db.close();
+            // Release instead of close - keeps connection alive for reuse
+            await DatabaseConnectionManager.releaseConnection(config.db_file);
           }
         } catch (error) {
           stats.database_error = error instanceof Error ? error.message : 'Unknown error';
@@ -1664,7 +1666,7 @@ class RagLiteMCPServer {
 
           // Add content breakdown if requested
           if (args.include_content_breakdown) {
-            const db = await openDatabase(config.db_file);
+            const db = await DatabaseConnectionManager.getConnection(config.db_file);
             try {
               // Get document count by content type
               const docsByType = await db.all(`
@@ -1691,7 +1693,8 @@ class RagLiteMCPServer {
                 }, {})
               };
             } finally {
-              await db.close();
+              // Release instead of close - keeps connection alive for reuse
+              await DatabaseConnectionManager.releaseConnection(config.db_file);
             }
           }
 
@@ -1778,6 +1781,9 @@ class RagLiteMCPServer {
       this.isSearchEngineInitialized = true;
 
     } catch (error) {
+      console.error('❌ MCP Server: Search engine initialization failed');
+      console.error(`❌ Error: ${error instanceof Error ? error.message : String(error)}`);
+      
       // Check if this is a mode detection error
       if (error instanceof Error && error.message.includes('mode detection')) {
         console.error('⚠️  MCP Server: Mode detection failed, falling back to text mode');
@@ -1792,7 +1798,6 @@ class RagLiteMCPServer {
       }
 
       // For other initialization errors, provide a generic wrapper
-      console.error('❌ MCP Server: Search engine initialization failed');
       throw new Error(`Failed to initialize search engine: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -1824,8 +1829,8 @@ class RagLiteMCPServer {
       const modeService = new ModeDetectionService(config.db_file);
       const systemInfo = await modeService.detectMode();
       
-      // Check if database has any images
-      const db = await openDatabase(config.db_file);
+      // Check if database has any images - use shared connection
+      const db = await DatabaseConnectionManager.getConnection(config.db_file);
       let hasImages = false;
       let documentCount = 0;
       
@@ -1838,7 +1843,8 @@ class RagLiteMCPServer {
         const docCount = await db.get('SELECT COUNT(*) as count FROM documents');
         documentCount = docCount?.count || 0;
       } finally {
-        await db.close();
+        // Release instead of close - keeps connection alive for reuse
+        await DatabaseConnectionManager.releaseConnection(config.db_file);
       }
 
       return {

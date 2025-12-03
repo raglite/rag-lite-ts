@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.5] - 2025-12-03
+
+### Bug Fixes
+- **Fixed critical database connection issue in MCP server**: Path normalization bug causing "Database is closed" errors
+
+---
+
 ## [2.0.4] - 2025-01-22
 
 ### Breaking Changes

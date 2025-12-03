@@ -4,6 +4,10 @@
  */
 
 import { CoreConfig, ExtensibleConfig, getDefaultModelCachePath } from './core/config.js';
+import { createRequire } from 'module';
+
+// Create require for CommonJS modules in ES module context
+const require = createRequire(import.meta.url);
 
 /**
  * Text-specific configuration properties

@@ -5,6 +5,7 @@
  */
 
 import { openDatabase, type DatabaseConnection } from './db.js';
+import { resolve as pathResolve } from 'node:path';
 
 /**
  * Connection metadata for tracking and cleanup
@@ -236,14 +237,10 @@ export class DatabaseConnectionManager {
    */
   private static normalizePath(dbPath: string): string {
     // Convert to absolute path and normalize separators
-    // Use URL constructor for cross-platform path normalization
-    try {
-      const url = new URL(`file://${dbPath.replace(/\\/g, '/')}`);
-      return url.pathname;
-    } catch {
-      // Fallback: simple normalization
-      return dbPath.replace(/\\/g, '/');
-    }
+    // Use Node.js path.resolve for proper relative path handling
+    const absolutePath = pathResolve(dbPath);
+    // Normalize separators for cross-platform consistency
+    return absolutePath.replace(/\\/g, '/');
   }
 
   /**

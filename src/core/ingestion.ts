@@ -13,6 +13,10 @@ import type { Document, EmbeddingResult } from './types.js';
 import type { EmbedFunction } from './interfaces.js';
 import { existsSync } from 'fs';
 import { ContentManager, type MemoryContentMetadata, type ContentIngestionResult } from './content-manager.js';
+import { createRequire } from 'module';
+
+// Create require for CommonJS modules in ES module context
+const require = createRequire(import.meta.url);
 
 /**
  * Options for the ingestion pipeline
