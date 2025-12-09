@@ -226,7 +226,7 @@ describe('Chameleon Error Recovery and Reliability', () => {
     });
 
     test('should handle metadata reranking with missing metadata', async () => {
-      const reranker = createReranker('multimodal', 'metadata');
+      const reranker = createReranker('multimodal', 'text-derived');
       
       if (reranker) {
         // Test with results missing metadata

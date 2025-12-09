@@ -47,9 +47,9 @@ describe('Simple Reranking Creation Function', () => {
     assert.strictEqual(typeof reranker, 'function', 'Reranker should be a function');
   });
 
-  test('should create metadata reranker for multimodal mode', () => {
-    const reranker = createReranker('multimodal', 'metadata');
-    
+  test('should create text-derived reranker for multimodal mode', () => {
+    const reranker = createReranker('multimodal', 'text-derived');
+
     assert.ok(reranker, 'Reranker should be created');
     assert.strictEqual(typeof reranker, 'function', 'Reranker should be a function');
   });
@@ -68,31 +68,27 @@ describe('Simple Reranking Creation Function', () => {
     assert.ok(multimodalReranker, 'Multimodal reranker should be created with default strategy');
   });
 
-  test('should fallback to supported strategy for unsupported combinations', () => {
-    // text-derived is not supported in text mode, should fallback
-    const reranker = createReranker('text', 'text-derived');
-    
-    // Should either create a fallback reranker or return undefined
-    // The exact behavior depends on fallback logic
-    assert.ok(reranker !== null, 'Should handle unsupported strategy gracefully');
+  test('should throw error for unsupported strategy combinations', () => {
+    // text-derived is not supported in text mode, should throw error
+    assert.throws(
+      () => createReranker('text', 'text-derived'),
+      /Strategy 'text-derived' not supported for text mode/,
+      'Should throw error for unsupported combinations'
+    );
   });
 
   test('should validate strategy support correctly', () => {
     // These should work
     const textCrossEncoder = createReranker('text', 'cross-encoder');
-    const multimodalMetadata = createReranker('multimodal', 'metadata');
+    const multimodalTextDerived = createReranker('multimodal', 'text-derived');
     
     assert.ok(textCrossEncoder, 'Cross-encoder should work in text mode');
-    assert.ok(multimodalMetadata, 'Metadata should work in multimodal mode');
+    assert.ok(multimodalTextDerived, 'Text-derived should work in multimodal mode');
   });
 
   test('should handle configuration options', () => {
-    const reranker = createReranker('multimodal', 'metadata', {
-      enabled: true,
-      weights: {
-        semantic: 0.6,
-        metadata: 0.4
-      }
+    const reranker = createReranker('multimodal', 'text-derived', {
+      enabled: true
     });
     
     assert.ok(reranker, 'Reranker should be created with configuration');
@@ -108,7 +104,7 @@ describe('Simple Reranking Creation Function', () => {
 
   test('should check reranking availability', async () => {
     const textAvailable = await isRerankingAvailable('text', 'cross-encoder');
-    const multimodalAvailable = await isRerankingAvailable('multimodal', 'metadata');
+    const multimodalAvailable = await isRerankingAvailable('multimodal', 'text-derived');
     const disabledAvailable = await isRerankingAvailable('text', 'disabled');
     
     assert.strictEqual(typeof textAvailable, 'boolean', 'Should return boolean for text availability');
@@ -133,39 +129,21 @@ describe('Simple Reranking Creation Function', () => {
     assert.ok(typeof multimodalInfo.hasAvailableStrategies === 'boolean', 'Should indicate if strategies are available');
   });
 
-  test('should handle errors gracefully', () => {
-    // Test with invalid mode (should not throw)
-    assert.doesNotThrow(() => {
-      createReranker('invalid' as any, 'cross-encoder');
-    }, 'Should handle invalid mode gracefully');
+  test('should throw error for invalid mode', () => {
+    // Test with invalid mode (should throw)
+    assert.throws(
+      () => createReranker('invalid' as any, 'cross-encoder'),
+      /Strategy 'cross-encoder' not supported for invalid mode/,
+      'Should throw error for invalid mode'
+    );
   });
 
-  test('should create hybrid reranker for multimodal mode', () => {
-    const hybridReranker = createReranker('multimodal', 'hybrid', {
-      weights: {
-        semantic: 0.5,
-        metadata: 0.5
-      }
-    });
-    
-    assert.ok(hybridReranker, 'Hybrid reranker should be created');
-    assert.strictEqual(typeof hybridReranker, 'function', 'Hybrid reranker should be a function');
-  });
-
-  test('should not create hybrid reranker for text mode', () => {
-    // Hybrid strategy should not be supported in text mode
-    const hybridReranker = createReranker('text', 'hybrid');
-    
-    // Should either fallback to a supported strategy or return undefined
-    // The exact behavior depends on fallback logic, but it should handle gracefully
-    assert.ok(hybridReranker !== null, 'Should handle unsupported hybrid strategy in text mode gracefully');
-  });
 });
 
 describe('Reranking Function Integration', () => {
-  test('should execute metadata reranking function', async () => {
-    const reranker = createReranker('multimodal', 'metadata');
-    
+  test('should execute text-derived reranking function', async () => {
+    const reranker = createReranker('multimodal', 'text-derived');
+
     if (reranker) {
       const results = await reranker('machine learning', mockSearchResults);
       
@@ -182,8 +160,8 @@ describe('Reranking Function Integration', () => {
   });
 
   test('should handle empty results gracefully', async () => {
-    const reranker = createReranker('multimodal', 'metadata');
-    
+    const reranker = createReranker('multimodal', 'text-derived');
+
     if (reranker) {
       const results = await reranker('test query', []);
       
@@ -193,8 +171,8 @@ describe('Reranking Function Integration', () => {
   });
 
   test('should handle reranking errors gracefully', async () => {
-    const reranker = createReranker('multimodal', 'metadata');
-    
+    const reranker = createReranker('multimodal', 'text-derived');
+
     if (reranker) {
       // Test with malformed results (should not throw)
       await assert.doesNotReject(async () => {
@@ -205,30 +183,27 @@ describe('Reranking Function Integration', () => {
 });
 
 describe('Configuration Validation', () => {
-  test('should validate weights in configuration', () => {
-    // Valid weights should work
+  test('should handle configuration options', () => {
+    // Valid configuration should work
     assert.doesNotThrow(() => {
-      createReranker('multimodal', 'hybrid', {
-        weights: {
-          semantic: 0.6,
-          metadata: 0.4
-        }
+      createReranker('multimodal', 'text-derived', {
+        enabled: true
       });
-    }, 'Valid weights should not throw');
+    }, 'Valid configuration should not throw');
   });
 
   test('should handle missing configuration gracefully', () => {
     // Should work without configuration
     assert.doesNotThrow(() => {
       createReranker('text', 'cross-encoder');
-      createReranker('multimodal', 'metadata');
+      createReranker('multimodal', 'text-derived');
     }, 'Should work without configuration');
   });
 
   test('should use fallback strategy when primary fails', () => {
     // This tests the fallback mechanism
     const reranker = createReranker('multimodal', 'text-derived', {
-      fallback: 'metadata'
+      fallback: 'disabled'
     });
     
     // Should create some form of reranker (either primary or fallback)

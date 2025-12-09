@@ -179,7 +179,6 @@ try {
 
 - **cross-encoder**: High accuracy, high computational cost (text mode)
 - **text-derived**: High accuracy, high computational cost (multimodal mode)
-- **metadata**: Low computational cost, medium accuracy (multimodal mode)
 - **disabled**: Minimal computational cost, baseline accuracy (all modes)
 
 ## Troubleshooting

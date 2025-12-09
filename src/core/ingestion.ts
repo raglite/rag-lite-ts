@@ -266,7 +266,24 @@ export class IngestionPipeline {
         try {
           // Convert MIME type to simple content type for embedding function
           const contentTypeForEmbedding = this.getContentTypeForEmbedding(document.metadata?.contentType);
-          const embedding = await this.embedFn(chunk.text, contentTypeForEmbedding);
+          
+          // For images, use the image path from metadata instead of text description
+          let contentForEmbedding = chunk.text;
+          if (contentTypeForEmbedding === 'image' && document.metadata) {
+            // Try to get image path from metadata (contentPath, originalPath, or source)
+            // contentPath is where the image is stored (from contentResult)
+            const imagePath = document.metadata.contentPath || 
+                             document.metadata.originalPath || 
+                             document.metadata.source;
+            if (imagePath) {
+              contentForEmbedding = imagePath;
+            } else {
+              // Fallback: try to extract path from source if available
+              console.warn(`Image chunk ${i + 1} missing image path in metadata, using text content as fallback`);
+            }
+          }
+          
+          const embedding = await this.embedFn(contentForEmbedding, contentTypeForEmbedding);
 
           // Enhance embedding result with content type metadata
           if (!embedding.contentType) {
@@ -582,7 +599,21 @@ export class IngestionPipeline {
         try {
           // Convert MIME type to simple content type for embedding function
           const contentTypeForEmbedding = this.getContentTypeForEmbedding(chunk.contentType);
-          const embedding = await this.embedFn(chunk.text, contentTypeForEmbedding);
+          
+          // For images, use the image path from metadata instead of text description
+          let contentForEmbedding = chunk.text;
+          if (contentTypeForEmbedding === 'image' && chunk.metadata) {
+            // Try to get image path from metadata (originalPath or contentPath)
+            const imagePath = chunk.metadata.originalPath || chunk.metadata.contentPath || chunk.metadata.source;
+            if (imagePath) {
+              contentForEmbedding = imagePath;
+            } else {
+              // Fallback: try to extract path from source if available
+              console.warn(`Image chunk ${i + 1} missing image path in metadata, using text content as fallback`);
+            }
+          }
+
+          const embedding = await this.embedFn(contentForEmbedding, contentTypeForEmbedding);
 
           // Enhance embedding result with content type metadata if not already present
           if (!embedding.contentType) {
@@ -763,19 +794,26 @@ export class IngestionPipeline {
    * @param mimeType - MIME type string (e.g., 'text/plain', 'image/jpeg')
    * @returns Simple content type ('text', 'image', etc.)
    */
-  private getContentTypeForEmbedding(mimeType?: string): string {
-    if (!mimeType) {
+  private getContentTypeForEmbedding(contentType?: string): string {
+    if (!contentType) {
       return 'text';
     }
 
-    // Convert MIME types to simple content types
-    if (mimeType.startsWith('text/')) {
-      return 'text';
-    } else if (mimeType.startsWith('image/')) {
+    // Handle simple content type strings (used by chunking)
+    if (contentType === 'image') {
       return 'image';
-    } else if (mimeType === 'application/pdf') {
+    } else if (contentType === 'text') {
+      return 'text';
+    }
+
+    // Convert MIME types to simple content types (legacy support)
+    if (contentType.startsWith('text/')) {
+      return 'text';
+    } else if (contentType.startsWith('image/')) {
+      return 'image';
+    } else if (contentType === 'application/pdf') {
       return 'text'; // PDFs are processed as text
-    } else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+    } else if (contentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
       return 'text'; // DOCX files are processed as text
     } else {
       return 'text'; // Default to text for unknown types
@@ -857,6 +895,7 @@ export class IngestionPipeline {
           contentType: 'image',
           contentId: contentResult.contentId,
           storageType: contentResult.storageType,
+          contentPath: contentResult.contentPath, // Store contentPath for embedding
           originalPath: metadata.originalPath,
           ...imageMetadata // Spread all image metadata fields
         }
@@ -873,6 +912,7 @@ export class IngestionPipeline {
           contentType: 'image',
           contentId: contentResult.contentId,
           storageType: contentResult.storageType,
+          contentPath: contentResult.contentPath, // Store contentPath for embedding
           originalPath: metadata.originalPath,
           processingError: error instanceof Error ? error.message : String(error)
         }

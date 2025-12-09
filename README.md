@@ -69,7 +69,7 @@ console.log(results[0].text);
 - **CLIP Integration** - Unified 512D embedding space for text and images
 - **Cross-Modal Search** - Find images with text queries, text with image queries
 - **Image-to-Text Generation** - Automatic descriptions using vision-language models
-- **Smart Reranking** - Text-derived, metadata-based, and hybrid strategies
+- **Smart Reranking** - Automatic strategy selection with cross-encoder and text-derived methods
 
 ### 🏗️ Architecture Improvements
 - **Layered Architecture** - Clean separation: core (model-agnostic) → implementation (text/multimodal) → public API
@@ -123,7 +123,7 @@ raglite ingest ./docs/
 # Search your documents
 raglite search "machine learning concepts"
 
-# Get more results with reranking
+# Get more results with reranking (use --rerank for better quality)
 raglite search "API documentation" --top-k 10 --rerank
 ```
 
@@ -172,21 +172,24 @@ raglite ingest ./docs/ --mode multimodal
 raglite search "architecture diagram" --content-type image
 raglite search "red sports car" --content-type image
 
+# Image-to-image search: Find similar images using image files
+raglite search ./photo.jpg                    # Find similar images
+raglite search ./diagram.png --top-k 5       # Find similar images with custom count
+
 # Find text documents about visual concepts
 raglite search "user interface design" --content-type text
 
 # Search across both content types (default)
 raglite search "system overview"
 
-# Use different reranking strategies for optimal results
-raglite ingest ./docs/ --mode multimodal --rerank-strategy text-derived
+# Automatic reranking based on mode (text: cross-encoder, multimodal: text-derived)
 ```
 
 **Key Features:**
 - **Unified embedding space**: Text and images embedded in the same 512-dimensional CLIP space
 - **Cross-modal search**: Text queries find semantically similar images
 - **Automatic mode detection**: Set mode once during ingestion, automatically detected during search
-- **Multiple reranking strategies**: text-derived, metadata, hybrid, or disabled
+- **Automatic reranking**: Cross-encoder for text, text-derived for multimodal, with enable/disable control
 - **Seamless experience**: Same CLI commands work for both text-only and multimodal content
 
 → **[Complete Multimodal Tutorial](docs/multimodal-tutorial.md)**
@@ -305,6 +308,10 @@ raglite ingest ./assets/ --mode multimodal
 raglite search "architecture diagram" --content-type image
 raglite search "team photo" --content-type image
 raglite search "product screenshot" --content-type image
+
+# Or find similar images using image files directly
+raglite search ./reference-diagram.png --content-type image
+raglite search ./sample-photo.jpg --top-k 5
 ```
 
 **Use case:** Digital asset management, photo libraries, design systems
@@ -412,7 +419,7 @@ Now Claude can search your docs directly! Works with any MCP-compatible AI tool.
 ### 🖼️ Multimodal Search
 - **CLIP unified space** - Text and images together
 - **Cross-modal queries** - Text finds images, vice versa
-- **Multiple strategies** - Text-derived, metadata, hybrid
+- **Smart reranking** - Automatic strategy selection by mode
 - **Seamless experience** - Same commands, more power
 
 </td>
@@ -485,7 +492,7 @@ RAG-lite TS follows a clean, efficient pipeline:
 | **4. Embedding** | Converts text/images to vectors | transformers.js |
 | **5. Storage** | Indexes vectors, stores metadata | hnswlib + SQLite |
 | **6. Search** | Finds similar chunks via cosine similarity | HNSW algorithm |
-| **7. Reranking** | Re-scores results for relevance | Cross-encoder/metadata |
+| **7. Reranking** | Re-scores results for relevance | Cross-encoder/text-derived |
 
 ### 🦎 Chameleon Architecture
 
@@ -720,7 +727,7 @@ src/
 │   └── tokenizer.ts      # Text tokenization
 ├── multimodal/           # Multimodal implementations
 │   ├── embedder.ts       # CLIP embedder (text + images)
-│   ├── reranker.ts       # Text-derived and metadata reranking
+│   ├── reranker.ts       # Text-derived reranking for multimodal
 │   ├── image-processor.ts # Image description and metadata
 │   └── content-types.ts  # Content type detection
 ├── cli.ts                # CLI interface

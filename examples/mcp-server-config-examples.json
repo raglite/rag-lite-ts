@@ -97,7 +97,7 @@
         "path": "./research-papers",
         "mode": "multimodal",
         "model": "Xenova/clip-vit-base-patch16",
-        "rerank_strategy": "hybrid"
+        "rerank_strategy": "text-derived"
       },
       "notes": "Higher memory usage but best accuracy for complex content"
     },
@@ -219,7 +219,7 @@
       "arguments": {
         "mode": "multimodal"
       },
-      "expected_strategies": ["text-derived", "metadata", "hybrid", "disabled"]
+      "expected_strategies": ["text-derived", "disabled"]
     },
     
     "get_all_reranking_strategies": {
@@ -405,7 +405,7 @@
             "path": "./test-content",
             "mode": "multimodal",
             "model": "Xenova/clip-vit-base-patch32",
-            "rerank_strategy": "hybrid"
+            "rerank_strategy": "text-derived"
           },
           "notes": "Test with balanced model and comprehensive reranking"
         },
@@ -543,7 +543,7 @@
     "accuracy_configuration": {
       "description": "Optimized for accuracy",
       "model": "Xenova/clip-vit-base-patch16",
-      "rerank_strategy": "hybrid",
+      "rerank_strategy": "text-derived",
       "use_case": "Research, high-quality retrieval"
     }
   }

@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.1.0] - 2025-12-07
+
+### Breaking Changes
+- **Removed `--rerank-strategy` option entirely**: Reranking strategy now automatically selected based on mode (text: cross-encoder, multimodal: text-derived). Use `--rerank`/`--no-rerank` to control reranking instead.
+- **Changed default reranking behavior**: Reranking is now disabled by default. Use `--rerank` to enable reranking explicitly.
+- **Disabled reranking for image-to-image searches**: Image searches now use pure CLIP visual similarity to preserve accuracy.
+
+### Improvements
+- **Simplified multimodal reranking**: Removed complex metadata and hybrid strategies, keeping only text-derived and disabled options
+- **Better image-to-image search quality**: Automatic reranking disable prevents text-conversion artifacts from interfering with visual similarity
+- **Cleaner CLI interface**: Fewer options with automatic smart defaults
+
+### Bug Fixes
+- **Fixed reranking interference with image similarity**: Text-derived reranking no longer degrades image-to-image search results
+
+
+---
+
 ## [2.0.5] - 2025-12-03
 
 ### Bug Fixes

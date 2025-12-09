@@ -103,7 +103,7 @@ export const config = {
   
   // Reranking strategy (mode-dependent)
   reranking_strategy: 'cross-encoder',  // Text: 'cross-encoder', 'disabled'
-  // Multimodal: 'text-derived', 'metadata', 'hybrid', 'disabled'
+  // Multimodal: 'text-derived', 'disabled'
   
   // Chunking parameters (auto-adjusted based on model)
   chunk_size: 250,        // Target tokens per chunk
@@ -153,7 +153,7 @@ export RAG_PATH_STORAGE_STRATEGY="relative"  # or "absolute"
 export RAG_MODE="text"  # or "multimodal"
 export RAG_EMBEDDING_MODEL="sentence-transformers/all-MiniLM-L6-v2"
 export RAG_RERANKING_STRATEGY="cross-encoder"  # text: cross-encoder, disabled
-# multimodal: text-derived, metadata, hybrid, disabled
+# multimodal: text-derived, disabled
 export RAG_CHUNK_SIZE="300"
 export RAG_CHUNK_OVERLAP="60"
 export RAG_BATCH_SIZE="32"
@@ -256,7 +256,7 @@ The Chameleon Architecture stores mode configuration in the database during inge
 raglite ingest ./docs/
 
 # Multimodal mode - stored in database with model and reranking strategy
-raglite ingest ./docs/ --mode multimodal --rerank-strategy text-derived
+raglite ingest ./docs/ --mode multimodal
 ```
 
 ### Automatic Mode Detection During Search
@@ -266,7 +266,8 @@ raglite ingest ./docs/ --mode multimodal --rerank-strategy text-derived
 raglite search "your query"  # Uses stored mode, model, and reranking strategy
 
 # No need to specify mode during search operations
-raglite search "diagram showing architecture"  # Works for both text and images
+raglite search "diagram showing architecture"  # Text-to-image search (multimodal mode)
+raglite search ./reference-diagram.png        # Image-to-image search (multimodal mode)
 ```
 
 ### Mode-Specific Configuration
@@ -331,7 +332,7 @@ The system automatically applies optimal settings based on your chosen model:
 - Chunk size: 300 tokens
 - Batch size: 8
 - Best for: Text and image understanding
-- Reranking: Text-derived, metadata, or hybrid strategies
+- Reranking: Text-derived strategy
 - Content types: Text documents + images (JPG, PNG, GIF, WebP)
 
 You can override these auto-configured values using environment variables or configuration files if needed.
@@ -556,44 +557,44 @@ Example showing different reranking strategies:
 ```typescript
 import { IngestionPipeline, SearchEngine } from 'rag-lite-ts';
 
-// Strategy 1: Text-derived reranking (converts images to text)
-const textDerivedIngestion = new IngestionPipeline('./td.sqlite', './td-index.bin', {
+// With text-derived reranking (higher quality)
+const withRerankingIngestion = new IngestionPipeline('./with-reranking.sqlite', './with-reranking-index.bin', {
   mode: 'multimodal',
   embeddingModel: 'Xenova/clip-vit-base-patch32',
   rerankingStrategy: 'text-derived'
 });
 
-await textDerivedIngestion.ingestDirectory('./content/');
-await textDerivedIngestion.cleanup();
+await withRerankingIngestion.ingestDirectory('./content/');
+await withRerankingIngestion.cleanup();
 
-// Strategy 2: Metadata-based reranking (uses filenames and properties)
-const metadataIngestion = new IngestionPipeline('./md.sqlite', './md-index.bin', {
+// Without reranking (faster)
+const withoutRerankingIngestion = new IngestionPipeline('./without-reranking.sqlite', './without-reranking-index.bin', {
   mode: 'multimodal',
   embeddingModel: 'Xenova/clip-vit-base-patch32',
-  rerankingStrategy: 'metadata'
+  rerankingStrategy: 'disabled'
 });
 
-await metadataIngestion.ingestDirectory('./content/');
-await metadataIngestion.cleanup();
+await withoutRerankingIngestion.ingestDirectory('./content/');
+await withoutRerankingIngestion.cleanup();
 
-// Compare results from different strategies
-const textDerivedSearch = new SearchEngine('./td-index.bin', './td.sqlite');
-const metadataSearch = new SearchEngine('./md-index.bin', './md.sqlite');
+// Compare results
+const withRerankingSearch = new SearchEngine('./with-reranking-index.bin', './with-reranking.sqlite');
+const withoutRerankingSearch = new SearchEngine('./without-reranking-index.bin', './without-reranking.sqlite');
 
 const query = 'flowchart showing process';
 
-const tdResults = await textDerivedSearch.search(query, { top_k: 5 });
-const mdResults = await metadataSearch.search(query, { top_k: 5 });
+const withResults = await withRerankingSearch.search(query, { top_k: 5 });
+const withoutResults = await withoutRerankingSearch.search(query, { top_k: 5 });
 
-console.log('Text-derived reranking results:');
-tdResults.forEach((r, i) => console.log(`${i+1}. ${r.document.source} (${r.score.toFixed(2)})`));
+console.log('With text-derived reranking:');
+withResults.forEach((r, i) => console.log(`${i+1}. ${r.document.source} (${r.score.toFixed(2)})`));
 
-console.log('\nMetadata-based reranking results:');
-mdResults.forEach((r, i) => console.log(`${i+1}. ${r.document.source} (${r.score.toFixed(2)})`));
+console.log('\nWithout reranking (vector similarity only):');
+withoutResults.forEach((r, i) => console.log(`${i+1}. ${r.document.source} (${r.score.toFixed(2)})`));
 
 await Promise.all([
-  textDerivedSearch.cleanup(),
-  metadataSearch.cleanup()
+  withRerankingSearch.cleanup(),
+  withoutRerankingSearch.cleanup()
 ]);
 ```
 
@@ -634,7 +635,7 @@ raglite search "architecture diagram"
 
 ```bash
 # Example 1: Documentation site with images
-raglite ingest ./docs/ --mode multimodal --rerank-strategy text-derived
+raglite ingest ./docs/ --mode multimodal
 raglite search "screenshot showing login form"
 
 # Example 2: API documentation (text-only)
@@ -642,8 +643,9 @@ raglite ingest ./api-docs/ --mode text --model Xenova/all-mpnet-base-v2
 raglite search "authentication endpoints"
 
 # Example 3: Mixed technical content
-raglite ingest ./technical-guides/ --mode multimodal --rerank-strategy metadata
+raglite ingest ./technical-guides/ --mode multimodal
 raglite search "network topology diagram"
+raglite search ./reference-diagram.png --content-type image  # Image-to-image search
 
 # Example 4: Multiple collections
 raglite ingest ./user-guides/ --mode text --db users.sqlite --index users-index.bin
@@ -651,6 +653,7 @@ raglite ingest ./admin-guides/ --mode multimodal --db admin.sqlite --index admin
 
 raglite search "user permissions" --db users.sqlite --index users-index.bin
 raglite search "system architecture" --db admin.sqlite --index admin-index.bin
+raglite search ./architecture-diagram.jpg --db admin.sqlite --index admin-index.bin
 ```
 
 These examples demonstrate the flexibility of the Chameleon Architecture in adapting to different content types and use cases while maintaining a consistent, simple interface.

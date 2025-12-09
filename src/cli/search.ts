@@ -1,12 +1,40 @@
-import { existsSync } from 'fs';
+import { existsSync, statSync } from 'fs';
+import { extname } from 'path';
 import { SearchFactory } from '../factories/search-factory.js';
 import { withCLIDatabaseAccess, setupCLICleanup } from '../core/cli-database-utils.js';
 import { config, EXIT_CODES, ConfigurationError } from '../core/config.js';
 import type { SearchOptions } from '../core/types.js';
 
 /**
+ * Detect if query is an image file path
+ * @param query - Query string to check
+ * @returns True if query is a valid image file path
+ */
+function isImageFile(query: string): boolean {
+  // Check if file exists
+  if (!existsSync(query)) {
+    return false;
+  }
+  
+  // Check if it's a file (not a directory)
+  try {
+    const stats = statSync(query);
+    if (!stats.isFile()) {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+  
+  // Check file extension
+  const ext = extname(query).toLowerCase();
+  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
+  return imageExtensions.includes(ext);
+}
+
+/**
  * Run search from CLI
- * @param query - Search query string
+ * @param query - Search query string or image file path
  * @param options - CLI options including top-k and rerank settings
  */
 export async function runSearch(query: string, options: Record<string, any> = {}): Promise<void> {
@@ -19,15 +47,20 @@ export async function runSearch(query: string, options: Record<string, any> = {}
       console.error('Error: Search query cannot be empty');
       console.error('');
       console.error('Usage: raglite search <query>');
+      console.error('       raglite search <image-path>');
       console.error('');
       console.error('Examples:');
       console.error('  raglite search "machine learning"');
       console.error('  raglite search "how to install"');
+      console.error('  raglite search ./photo.jpg');
       process.exit(EXIT_CODES.INVALID_ARGUMENTS);
     }
 
-    // Validate query length
-    if (query.trim().length > 500) {
+    // Detect if query is an image file
+    const isImage = isImageFile(query);
+    
+    // Validate query length for text queries
+    if (!isImage && query.trim().length > 500) {
       console.error('Error: Search query is too long (maximum 500 characters)');
       console.error('');
       console.error('Please use a shorter, more specific query.');
@@ -60,7 +93,12 @@ export async function runSearch(query: string, options: Record<string, any> = {}
       process.exit(EXIT_CODES.INDEX_ERROR);
     }
 
-    console.log(`Searching for: "${query}"`);
+    // Display search type
+    if (isImage) {
+      console.log(`Searching with image: "${query}"`);
+    } else {
+      console.log(`Searching for: "${query}"`);
+    }
     console.log('');
 
     // Setup graceful cleanup
@@ -68,6 +106,7 @@ export async function runSearch(query: string, options: Record<string, any> = {}
 
     // Initialize search engine using polymorphic factory with database protection
     let searchEngine;
+    let embedder;
     
     try {
       // Create search engine using SearchFactory (auto-detects mode)
@@ -83,20 +122,86 @@ export async function runSearch(query: string, options: Record<string, any> = {}
         }
       );
       
+      // For image queries, we need to check if the mode supports images
+      if (isImage) {
+        // Get system info to check mode
+        const { ModeDetectionService } = await import('../core/mode-detection-service.js');
+        const modeService = new ModeDetectionService(effectiveConfig.db_file);
+        const systemInfo = await modeService.detectMode();
+        
+        if (systemInfo.mode !== 'multimodal') {
+          console.error('Error: Image search is only supported in multimodal mode');
+          console.error('');
+          console.error('Your database is configured for text-only mode.');
+          console.error('To enable image search:');
+          console.error('1. Re-ingest your documents with multimodal mode:');
+          console.error('   raglite ingest <path> --mode multimodal');
+          console.error('2. Then search with images:');
+          console.error('   raglite search ./photo.jpg');
+          process.exit(EXIT_CODES.INVALID_ARGUMENTS);
+        }
+        
+        // Create embedder for image embedding
+        const { createEmbedder } = await import('../core/embedder-factory.js');
+        embedder = await createEmbedder(systemInfo.modelName);
+        
+        // Check if embedder supports images
+        const { supportsImages } = await import('../core/universal-embedder.js');
+        if (!supportsImages(embedder)) {
+          console.error('Error: The current model does not support image embedding');
+          console.error('');
+          console.error(`Model: ${systemInfo.modelName}`);
+          console.error('Image search requires a multimodal model like CLIP.');
+          process.exit(EXIT_CODES.MODEL_ERROR);
+        }
+      }
+      
       // Prepare search options
       const searchOptions: SearchOptions = {};
-      
+
       if (options['top-k'] !== undefined) {
         searchOptions.top_k = options['top-k'];
       }
-      
-      if (options.rerank !== undefined) {
-        searchOptions.rerank = options.rerank;
+
+      // Phase 2: Disable reranking for image-to-image searches to preserve visual similarity
+      let rerankingForciblyDisabled = false;
+      if (isImage && embedder) {
+        // Force disable reranking for image searches, regardless of user setting
+        searchOptions.rerank = false;
+        rerankingForciblyDisabled = true;
+
+        // Warn user if they tried to enable reranking for image search
+        if (options.rerank === true) {
+          console.warn('⚠️  Reranking is disabled for image-to-image search to preserve visual similarity.');
+          console.warn('   Image-to-image search uses CLIP embeddings for direct visual matching.');
+          console.warn('   For text-to-image search, use: raglite search "description" --rerank');
+          console.warn('');
+        }
+      } else {
+        // For text searches, use user setting (defaults to false from Phase 1)
+        if (options.rerank !== undefined) {
+          searchOptions.rerank = options.rerank;
+        }
       }
+
+      // Track whether reranking will actually be used in this search
+      const rerankingUsed = searchOptions.rerank === true;
       
       // Perform search
       const startTime = Date.now();
-      let results = await searchEngine.search(query, searchOptions);
+      let results;
+
+      if (isImage && embedder) {
+        // Image-based search: embed the image and search with the vector
+        console.log('Embedding image...');
+        const imageEmbedding = await embedder.embedImage!(query);
+        console.log('Searching with image embedding...');
+        results = await searchEngine.searchWithVector(imageEmbedding.vector, searchOptions);
+      } else {
+        // Text-based search
+        results = await searchEngine.search(query, searchOptions);
+      }
+      
       const searchTime = Date.now() - startTime;
       
       // Apply content type filter if specified
@@ -155,13 +260,22 @@ export async function runSearch(query: string, options: Record<string, any> = {}
         console.log('─'.repeat(50));
         console.log(`Search completed in ${searchTime}ms`);
         console.log(`Searched ${stats.totalChunks} chunks`);
-        if (stats.rerankingEnabled) {
+        if (rerankingUsed) {
           console.log('Reranking: enabled');
+        } else if (rerankingForciblyDisabled) {
+          console.log('Reranking: disabled');
+        } else if (stats.rerankingEnabled) {
+          console.log('Reranking: available (not used)');
+        } else {
+          console.log('Reranking: disabled');
         }
       }
       
     } finally {
       // Cleanup resources
+      if (embedder) {
+        await embedder.cleanup();
+      }
       if (searchEngine) {
         await searchEngine.cleanup();
       }

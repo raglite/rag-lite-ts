@@ -170,7 +170,7 @@ raglite search "architecture diagram"  # Searches both text and images
 **Multimodal mode with reranking strategy:**
 ```bash
 # Use text-derived reranking for better image search
-raglite ingest ./docs-with-images/ --mode multimodal --rerank-strategy text-derived
+raglite ingest ./docs-with-images/ --mode multimodal
 raglite search "system architecture"  # Images converted to text for reranking
 ```
 

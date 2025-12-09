@@ -42,6 +42,25 @@ import { config, validateCoreConfig, ConfigurationError } from './core/config.js
 import type { SearchOptions } from './core/types.js';
 
 /**
+ * Detect MIME type from file path or extension
+ */
+function getMimeTypeFromPath(filePath: string): string {
+  const ext = filePath.toLowerCase().split('.').pop() || '';
+  
+  const mimeTypes: Record<string, string> = {
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'webp': 'image/webp',
+    'bmp': 'image/bmp',
+    'svg': 'image/svg+xml'
+  };
+  
+  return mimeTypes[ext] || 'image/jpeg'; // Default to JPEG if unknown
+}
+
+/**
  * MCP Server class that wraps RAG-lite TS functionality
  * Implements MCP protocol interface without creating REST/GraphQL endpoints
  */
@@ -135,8 +154,8 @@ class RagLiteMCPServer {
                 },
                 rerank_strategy: {
                   type: 'string',
-                  description: 'Reranking strategy for multimodal mode. Options: text-derived (default), metadata, hybrid, disabled',
-                  enum: ['text-derived', 'metadata', 'hybrid', 'disabled']
+                  description: 'Reranking strategy for multimodal mode. Options: text-derived (default), disabled',
+                  enum: ['text-derived', 'disabled']
                 },
                 force_rebuild: {
                   type: 'boolean',
@@ -169,8 +188,8 @@ class RagLiteMCPServer {
                 },
                 rerank_strategy: {
                   type: 'string',
-                  description: 'Reranking strategy for multimodal mode. Options: text-derived (default), metadata, hybrid, disabled',
-                  enum: ['text-derived', 'metadata', 'hybrid', 'disabled'],
+                  description: 'Reranking strategy for multimodal mode. Options: text-derived (default), disabled',
+                  enum: ['text-derived', 'disabled'],
                   default: 'text-derived'
                 },
                 title: {
@@ -404,53 +423,63 @@ class RagLiteMCPServer {
       const results = await this.searchEngine!.search(args.query, searchOptions);
       const searchTime = Date.now() - startTime;
 
-      // Format results for MCP response with content type information
-      const formattedResults = {
+      // Format results for MCP response with proper image content support
+      const textResults = {
         query: args.query,
         results_count: results.length,
         search_time_ms: searchTime,
-        results: await Promise.all(results.map(async (result, index) => {
-          const formattedResult: any = {
-            rank: index + 1,
-            score: Math.round(result.score * 100) / 100, // Round to 2 decimal places
-            content_type: result.contentType,
-            document: {
-              id: result.document.id,
-              title: result.document.title,
-              source: result.document.source,
-              content_type: result.document.contentType
-            },
-            text: result.content
-          };
-
-          // For image content, include base64-encoded image data for MCP clients
-          if (result.contentType === 'image' && result.document.contentId) {
-            try {
-              const imageData = await this.searchEngine!.getContent(result.document.contentId, 'base64');
-              formattedResult.image_data = imageData;
-              formattedResult.image_format = 'base64';
-            } catch (error) {
-              // If image retrieval fails, include error but don't fail the entire search
-              formattedResult.image_error = error instanceof Error ? error.message : 'Failed to retrieve image';
-            }
-          }
-
-          // Include metadata if available
-          if (result.metadata) {
-            formattedResult.metadata = result.metadata;
-          }
-
-          return formattedResult;
+        results: results.map((result, index) => ({
+          rank: index + 1,
+          score: Math.round(result.score * 100) / 100,
+          content_type: result.contentType,
+          document: {
+            id: result.document.id,
+            title: result.document.title,
+            source: result.document.source,
+            content_type: result.document.contentType
+          },
+          text: result.content,
+          metadata: result.metadata,
+          // Reference to image content if applicable
+          has_image: result.contentType === 'image' && !!result.document.contentId
         }))
       };
 
+      // Build MCP response content array
+      const responseContent: any[] = [
+        {
+          type: 'text',
+          text: JSON.stringify(textResults, null, 2)
+        }
+      ];
+
+      // Add proper MCP image content for each image result
+      for (const result of results) {
+        if (result.contentType === 'image' && result.document.contentId) {
+          try {
+            const imageData = await this.searchEngine!.getContent(result.document.contentId, 'base64');
+            const mimeType = getMimeTypeFromPath(result.document.source);
+            
+            responseContent.push({
+              type: 'image',
+              data: imageData,
+              mimeType: mimeType,
+              annotations: {
+                audience: ['user'],
+                priority: 0.8,
+                title: result.document.title,
+                source: result.document.source
+              }
+            });
+          } catch (error) {
+            // If image retrieval fails, log but don't fail the entire search
+            console.error(`Failed to retrieve image for ${result.document.source}:`, error);
+          }
+        }
+      }
+
       return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(formattedResults, null, 2),
-          },
-        ],
+        content: responseContent
       };
 
     } catch (error) {
@@ -600,7 +629,7 @@ class RagLiteMCPServer {
           throw new Error('Reranking strategy parameter is only supported in multimodal mode');
         }
         
-        const validStrategies = ['text-derived', 'metadata', 'hybrid', 'disabled'];
+        const validStrategies = ['text-derived', 'disabled'];
         if (!validStrategies.includes(args.rerank_strategy)) {
           throw new Error(`Invalid reranking strategy: ${args.rerank_strategy}. Supported strategies: ${validStrategies.join(', ')}`);
         }
@@ -1366,50 +1395,64 @@ class RagLiteMCPServer {
       const results = await this.searchEngine!.search(args.query, searchOptions);
       const searchTime = Date.now() - startTime;
 
-      // Format results for MCP response with content type information and image data
-      const formattedResults = {
+      // Format results for MCP response with proper image content support
+      const textResults = {
         query: args.query,
         content_type_filter: args.content_type || 'all',
         results_count: results.length,
         search_time_ms: searchTime,
-        results: await Promise.all(results.map(async (result, index) => {
-          const formattedResult: any = {
-            rank: index + 1,
-            score: Math.round(result.score * 100) / 100,
-            content_type: result.contentType,
-            document: {
-              id: result.document.id,
-              title: result.document.title,
-              source: result.document.source,
-              content_type: result.document.contentType
-            },
-            text: result.content,
-            metadata: result.metadata
-          };
-
-          // For image content, include base64-encoded image data for MCP clients
-          if (result.contentType === 'image' && result.document.contentId) {
-            try {
-              const imageData = await this.searchEngine!.getContent(result.document.contentId, 'base64');
-              formattedResult.image_data = imageData;
-              formattedResult.image_format = 'base64';
-            } catch (error) {
-              // If image retrieval fails, include error but don't fail the entire search
-              formattedResult.image_error = error instanceof Error ? error.message : 'Failed to retrieve image';
-            }
-          }
-
-          return formattedResult;
+        results: results.map((result, index) => ({
+          rank: index + 1,
+          score: Math.round(result.score * 100) / 100,
+          content_type: result.contentType,
+          document: {
+            id: result.document.id,
+            title: result.document.title,
+            source: result.document.source,
+            content_type: result.document.contentType
+          },
+          text: result.content,
+          metadata: result.metadata,
+          // Reference to image content if applicable
+          has_image: result.contentType === 'image' && !!result.document.contentId
         }))
       };
 
+      // Build MCP response content array
+      const responseContent: any[] = [
+        {
+          type: 'text',
+          text: JSON.stringify(textResults, null, 2)
+        }
+      ];
+
+      // Add proper MCP image content for each image result
+      for (const result of results) {
+        if (result.contentType === 'image' && result.document.contentId) {
+          try {
+            const imageData = await this.searchEngine!.getContent(result.document.contentId, 'base64');
+            const mimeType = getMimeTypeFromPath(result.document.source);
+            
+            responseContent.push({
+              type: 'image',
+              data: imageData,
+              mimeType: mimeType,
+              annotations: {
+                audience: ['user'],
+                priority: 0.8,
+                title: result.document.title,
+                source: result.document.source
+              }
+            });
+          } catch (error) {
+            // If image retrieval fails, log but don't fail the entire search
+            console.error(`Failed to retrieve image for ${result.document.source}:`, error);
+          }
+        }
+      }
+
       return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(formattedResults, null, 2),
-          },
-        ],
+        content: responseContent
       };
 
     } catch (error) {
@@ -1574,23 +1617,6 @@ class RagLiteMCPServer {
                 strategyInfo.accuracy = 'high';
                 strategyInfo.use_cases = ['Mixed content with images', 'Visual documentation', 'Diagrams and charts'];
                 break;
-              case 'metadata':
-                strategyInfo.description = 'Uses file metadata, filenames, and content properties for scoring without model inference';
-                strategyInfo.requirements = ['None - uses file system metadata only'];
-                strategyInfo.supported_content_types = ['text', 'image', 'pdf', 'docx'];
-                strategyInfo.performance_impact = 'low';
-                strategyInfo.accuracy = 'medium';
-                strategyInfo.use_cases = ['Fast retrieval', 'Filename-based search', 'Content type filtering'];
-                break;
-              case 'hybrid':
-                strategyInfo.description = 'Combines multiple reranking signals (semantic + metadata) with configurable weights';
-                strategyInfo.requirements = ['Text-derived reranker', 'Metadata reranker'];
-                strategyInfo.supported_content_types = ['text', 'image', 'pdf', 'docx'];
-                strategyInfo.performance_impact = 'high';
-                strategyInfo.accuracy = 'very high';
-                strategyInfo.use_cases = ['Best overall accuracy', 'Complex multimodal collections', 'Production systems'];
-                strategyInfo.default_weights = { semantic: 0.7, metadata: 0.3 };
-                break;
               case 'disabled':
                 strategyInfo.description = 'No reranking applied - results ordered by vector similarity scores only';
                 strategyInfo.requirements = ['None'];
@@ -1613,8 +1639,8 @@ class RagLiteMCPServer {
         strategies_by_mode: strategiesByMode,
         recommendations: {
           text_mode: 'Use cross-encoder for best accuracy, disabled for best performance',
-          multimodal_mode: 'Use hybrid for best accuracy, text-derived for good balance, metadata for fast retrieval',
-          development: 'Start with disabled or metadata for fast iteration, upgrade to cross-encoder/text-derived for production'
+          multimodal_mode: 'Use text-derived for best accuracy, disabled for best performance',
+          development: 'Start with disabled for fast iteration, upgrade to cross-encoder/text-derived for production'
         }
       };
 

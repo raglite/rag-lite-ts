@@ -8,11 +8,9 @@
 import type { RerankFunction } from './types.js';
 
 // Basic strategy enumeration as defined in requirements
-export type RerankingStrategyType = 
+export type RerankingStrategyType =
   | 'cross-encoder'    // Text cross-encoder (text mode default)
   | 'text-derived'     // Convert images to text, then use cross-encoder (multimodal mode)
-  | 'metadata'         // Use file metadata for scoring
-  | 'hybrid'           // Combine multiple signals (text-derived + metadata)
   | 'disabled';        // No reranking
 
 // Simple configuration structure for reranking strategies
@@ -46,16 +44,14 @@ export const DEFAULT_MULTIMODAL_RERANKING_CONFIG: RerankingConfig = {
     semantic: 0.7,
     metadata: 0.3
   },
-  fallback: 'metadata'
+  fallback: 'disabled'
 };
 
 // Strategy validation without complex interface patterns
 export function validateRerankingStrategy(strategy: string): strategy is RerankingStrategyType {
   const validStrategies: RerankingStrategyType[] = [
     'cross-encoder',
-    'text-derived', 
-    'metadata',
-    'hybrid',
+    'text-derived',
     'disabled'
   ];
   
@@ -69,7 +65,7 @@ export function validateRerankingConfig(config: Partial<RerankingConfig>): Reran
   }
   
   if (!validateRerankingStrategy(config.strategy)) {
-    const validStrategies = ['cross-encoder', 'text-derived', 'metadata', 'hybrid', 'disabled'];
+    const validStrategies = ['cross-encoder', 'text-derived', 'disabled'];
     throw new Error(
       `Invalid reranking strategy '${config.strategy}'. ` +
       `Valid strategies: ${validStrategies.join(', ')}`
@@ -92,18 +88,11 @@ export function validateRerankingConfig(config: Partial<RerankingConfig>): Reran
       throw new Error('Visual weight must be between 0 and 1');
     }
     
-    // Ensure weights sum to reasonable value for hybrid strategy
-    if (config.strategy === 'hybrid') {
-      const totalWeight = (semantic || 0) + (metadata || 0) + (visual || 0);
-      if (totalWeight === 0) {
-        throw new Error('Hybrid strategy requires at least one weight to be greater than 0');
-      }
-    }
   }
   
   // Validate fallback strategy if provided
   if (config.fallback && !validateRerankingStrategy(config.fallback)) {
-    const validStrategies = ['cross-encoder', 'text-derived', 'metadata', 'hybrid', 'disabled'];
+    const validStrategies = ['cross-encoder', 'text-derived', 'disabled'];
     throw new Error(
       `Invalid fallback strategy '${config.fallback}'. ` +
       `Valid strategies: ${validStrategies.join(', ')}`
@@ -112,7 +101,7 @@ export function validateRerankingConfig(config: Partial<RerankingConfig>): Reran
   
   return {
     strategy: config.strategy,
-    enabled: config.enabled ?? true,
+    enabled: config.strategy === 'disabled' ? false : (config.enabled ?? true),
     model: config.model,
     weights: config.weights,
     fallback: config.fallback || 'disabled'
@@ -137,7 +126,7 @@ export function isStrategySupported(strategy: RerankingStrategyType, mode: 'text
     case 'text':
       return strategy === 'cross-encoder' || strategy === 'disabled';
     case 'multimodal':
-      return ['text-derived', 'metadata', 'hybrid', 'disabled'].includes(strategy);
+      return ['text-derived', 'disabled'].includes(strategy);
     default:
       return false;
   }
@@ -149,7 +138,7 @@ export function getSupportedStrategies(mode: 'text' | 'multimodal'): RerankingSt
     case 'text':
       return ['cross-encoder', 'disabled'];
     case 'multimodal':
-      return ['text-derived', 'metadata', 'hybrid', 'disabled'];
+      return ['text-derived', 'disabled'];
     default:
       return ['disabled'];
   }
@@ -201,7 +190,7 @@ export class RerankingConfigBuilder {
       .strategy('text-derived')
       .enabled(true)
       .weights({ semantic: 0.7, metadata: 0.3 })
-      .fallback('metadata');
+      .fallback('disabled');
   }
   
   static disabled(): RerankingConfigBuilder {

@@ -45,7 +45,6 @@ raglite ingest <path> [options]
 #### Options
 - `--model <name>`: Embedding model to use
 - `--mode <mode>`: Processing mode (`text` or `multimodal`)
-- `--rerank-strategy <strategy>`: Reranking strategy for multimodal mode
 - `--rebuild-if-needed`: Auto-rebuild if model mismatch detected ⚠️ **Rebuilds entire index**
 - `--path-strategy <strategy>`: Path storage strategy (`relative` or `absolute`)
 - `--path-base <path>`: Base directory for relative paths
@@ -85,7 +84,6 @@ raglite ingest <path> [options]
 
 **Multimodal Mode:**
 - `text-derived` - Convert images to text, then use cross-encoder (default)
-- `metadata` - Use filename and metadata-based scoring
 - `disabled` - No reranking, use vector similarity only
 
 **Note:** The search command automatically detects the mode and uses the model that was configured during ingestion (stored in database). To search with a different model or mode, you need to re-ingest with that configuration first.
@@ -115,11 +113,8 @@ raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2 --rebuild-if-needed
 # Enable multimodal mode for text and image content
 raglite ingest ./docs/ --mode multimodal
 
-# Use specific multimodal model and reranking strategy
-raglite ingest ./docs/ --mode multimodal --model Xenova/clip-vit-base-patch32 --rerank-strategy metadata
-
-# Multimodal with text-derived reranking (default)
-raglite ingest ./docs/ --mode multimodal --rerank-strategy text-derived
+# Multimodal ingestion (uses text-derived reranking by default)
+raglite ingest ./docs/ --mode multimodal --model Xenova/clip-vit-base-patch32
 ```
 
 **Path strategies:**
@@ -157,8 +152,8 @@ raglite search <query> [options]
 
 #### Options
 - `--top-k <number>`: Number of results to return (default: 10)
-- `--rerank`: Enable cross-encoder reranking for better relevance
-- `--no-rerank`: Explicitly disable reranking
+- `--rerank`: Enable reranking for better relevance (disabled by default for performance)
+- `--no-rerank`: Explicitly disable reranking (same as default behavior)
 - `--content-type <type>`: Filter results by content type (`text` or `image`)
 - `--db <path>`: Database file path
 - `--index <path>`: Index file path
@@ -182,6 +177,10 @@ raglite search "diagram showing architecture"
 # Find images using text query
 raglite search "red sports car" --content-type image
 
+# Find similar images using image files
+raglite search ./reference-photo.jpg              # Find similar images
+raglite search ./diagram.png --top-k 5           # Find similar images with custom count
+
 # Find text documents only
 raglite search "vehicle specifications" --content-type text
 
@@ -190,14 +189,15 @@ raglite search "vehicles and transportation"
 
 # Combine content type filter with other options
 raglite search "mountain sunset" --content-type image --top-k 5 --rerank
+# Note: --rerank is disabled for image-to-image searches (preserves visual similarity)
 ```
 
 **Reranking:**
 ```bash
-# Enable reranking for better quality
+# Enable reranking for better quality (disabled by default for performance)
 raglite search "typescript examples" --rerank
 
-# Disable reranking for speed
+# Disable reranking explicitly (same as default behavior)
 raglite search "database queries" --no-rerank
 ```
 
@@ -320,8 +320,7 @@ raglite ingest ./docs/ --mode multimodal
 # Search works the same - mode is auto-detected
 raglite search "diagram showing data flow"
 
-# Use different reranking strategy
-raglite ingest ./docs/ --mode multimodal --rerank-strategy metadata
+# Multimodal search (reranking strategy auto-selected based on mode)
 raglite search "chart with performance metrics"
 ```
 
@@ -423,14 +422,18 @@ raglite ingest ./content/ --mode multimodal --model Xenova/clip-vit-base-patch32
 # 2. Search for images using text query
 raglite search "red sports car" --content-type image
 
-# 3. Search for all related content (default - no filter needed)
+# 3. Search using image files directly (image-to-image)
+raglite search ./reference-car.jpg --content-type image
+
+# 4. Search for all related content (default - no filter needed)
 raglite search "vehicles"
 
-# 4. Filter to text documents only
+# 5. Filter to text documents only
 raglite search "vehicle specifications" --content-type text
 
-# 5. Combine with other options
+# 6. Combine with other options
 raglite search "mountain landscape" --content-type image --top-k 5 --rerank
+raglite search ./photo.jpg --content-type image --top-k 3
 ```
 
 ### Example: Content Type Filtering

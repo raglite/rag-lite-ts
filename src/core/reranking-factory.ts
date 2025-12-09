@@ -149,29 +149,6 @@ function createRerankingFunction(
         );
         break;
 
-      case 'metadata':
-        console.log(`Creating metadata reranker for ${mode} mode`);
-        reranker = createMetadataRerankFunction({
-          weights: config.weights ? {
-            filename: config.weights.metadata || 0.4,
-            contentType: 0.3,
-            metadata: config.weights.metadata || 0.3
-          } : undefined
-        });
-        break;
-
-      case 'hybrid':
-        if (mode !== 'multimodal') {
-          throw new RerankingStrategyError(
-            strategy,
-            mode,
-            'Hybrid strategy only supported in multimodal mode',
-            'UNSUPPORTED_MODE'
-          );
-        }
-        console.log('Creating hybrid reranker for multimodal mode');
-        reranker = createHybridRerankFunction(config);
-        break;
 
       case 'disabled':
         console.log('Reranking explicitly disabled');
@@ -226,7 +203,7 @@ function createRerankingFunction(
  */
 class RerankingStrategyError extends Error {
   constructor(
-    public strategy: RerankingStrategyType,
+    public strategy: string,
     public mode: 'text' | 'multimodal',
     message: string,
     public errorCode: string
@@ -337,202 +314,15 @@ function wrapRerankFunctionWithErrorRecovery(
 
 
 /**
- * Create hybrid reranking function that combines multiple strategies with enhanced error recovery
+ * Hybrid reranking strategy removed in Phase 3 - throwing error for backward compatibility
  */
 function createHybridRerankFunction(config: RerankingConfig): RerankFunction {
-  // Default weights if not specified
-  const weights = config.weights || {
-    semantic: 0.6,
-    metadata: 0.4,
-    visual: 0.0 // Not implemented yet
-  };
-
-  // Track which strategies are available
-  const availableStrategies: {
-    textDerived?: RerankFunction;
-    metadata?: RerankFunction;
-  } = {};
-
-  // Initialize strategies with error handling
-  try {
-    if (weights.semantic && weights.semantic > 0) {
-      availableStrategies.textDerived = createTextDerivedRerankFunction();
-      console.log('✅ Text-derived strategy initialized for hybrid reranking');
-    }
-  } catch (error) {
-    console.warn(`⚠️ Text-derived strategy initialization failed for hybrid reranking: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-
-  try {
-    if (weights.metadata && weights.metadata > 0) {
-      availableStrategies.metadata = createMetadataRerankFunction();
-      console.log('✅ Metadata strategy initialized for hybrid reranking');
-    }
-  } catch (error) {
-    console.warn(`⚠️ Metadata strategy initialization failed for hybrid reranking: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-
-  // Check if any strategies are available
-  const hasAvailableStrategies = Object.keys(availableStrategies).length > 0;
-  if (!hasAvailableStrategies) {
-    throw new RerankingStrategyError(
-      'hybrid',
-      'multimodal',
-      'No hybrid reranking strategies could be initialized',
-      'NO_STRATEGIES_AVAILABLE'
-    );
-  }
-
-  console.log(`Hybrid reranking initialized with ${Object.keys(availableStrategies).length} available strategies`);
-
-  return async (query: string, results: SearchResult[], contentType?: string) => {
-    const startTime = Date.now();
-    const strategyResults: Record<string, { success: boolean; error?: string; duration?: number }> = {};
-    
-    try {
-      console.log(`🔄 Running hybrid reranking with ${Object.keys(availableStrategies).length} strategies`);
-      
-      // Start with original results
-      let hybridResults = [...results];
-      let successfulStrategies = 0;
-      
-      // Apply text-derived reranking if available and enabled
-      if (availableStrategies.textDerived && weights.semantic && weights.semantic > 0) {
-        const strategyStartTime = Date.now();
-        try {
-          console.log(`🔧 Applying text-derived reranking (weight: ${weights.semantic})`);
-          const textDerivedResults = await availableStrategies.textDerived(query, hybridResults, contentType);
-          
-          // Combine scores with semantic weight
-          hybridResults = hybridResults.map((result, index) => {
-            const textDerivedScore = textDerivedResults[index]?.score || result.score;
-            const combinedScore = result.score * (1 - weights.semantic!) + textDerivedScore * weights.semantic!;
-            
-            return {
-              ...result,
-              score: combinedScore,
-              metadata: {
-                ...result.metadata,
-                hybridScores: {
-                  ...((result.metadata?.hybridScores as any) || {}),
-                  textDerived: textDerivedScore,
-                  semantic: combinedScore
-                }
-              }
-            };
-          });
-          
-          const strategyDuration = Date.now() - strategyStartTime;
-          strategyResults.textDerived = { success: true, duration: strategyDuration };
-          successfulStrategies++;
-          console.log(`✅ Text-derived reranking completed (${strategyDuration}ms)`);
-          
-        } catch (error) {
-          const strategyDuration = Date.now() - strategyStartTime;
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          strategyResults.textDerived = { success: false, error: errorMessage, duration: strategyDuration };
-          console.warn(`❌ Text-derived reranking failed in hybrid mode (${strategyDuration}ms): ${errorMessage}`);
-        }
-      }
-      
-      // Apply metadata reranking if available and enabled
-      if (availableStrategies.metadata && weights.metadata && weights.metadata > 0) {
-        const strategyStartTime = Date.now();
-        try {
-          console.log(`🔧 Applying metadata reranking (weight: ${weights.metadata})`);
-          const metadataResults = await availableStrategies.metadata(query, hybridResults, contentType);
-          
-          // Combine scores with metadata weight
-          hybridResults = hybridResults.map((result, index) => {
-            const metadataScore = metadataResults[index]?.score || result.score;
-            const currentScore = result.score;
-            const combinedScore = currentScore * (1 - weights.metadata!) + metadataScore * weights.metadata!;
-            
-            return {
-              ...result,
-              score: combinedScore,
-              metadata: {
-                ...result.metadata,
-                hybridScores: {
-                  ...((result.metadata?.hybridScores as any) || {}),
-                  metadata: metadataScore,
-                  combined: combinedScore
-                }
-              }
-            };
-          });
-          
-          const strategyDuration = Date.now() - strategyStartTime;
-          strategyResults.metadata = { success: true, duration: strategyDuration };
-          successfulStrategies++;
-          console.log(`✅ Metadata reranking completed (${strategyDuration}ms)`);
-          
-        } catch (error) {
-          const strategyDuration = Date.now() - strategyStartTime;
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          strategyResults.metadata = { success: false, error: errorMessage, duration: strategyDuration };
-          console.warn(`❌ Metadata reranking failed in hybrid mode (${strategyDuration}ms): ${errorMessage}`);
-        }
-      }
-      
-      // Sort by final combined scores
-      hybridResults.sort((a, b) => b.score - a.score);
-      
-      const totalDuration = Date.now() - startTime;
-      
-      // Add hybrid reranking metadata to results
-      hybridResults = hybridResults.map(result => ({
-        ...result,
-        metadata: {
-          ...result.metadata,
-          hybridRerankingInfo: {
-            totalDuration,
-            successfulStrategies,
-            strategyResults,
-            weights
-          }
-        }
-      }));
-      
-      if (successfulStrategies > 0) {
-        console.log(`✅ Hybrid reranking completed successfully (${totalDuration}ms, ${successfulStrategies}/${Object.keys(availableStrategies).length} strategies succeeded)`);
-      } else {
-        console.warn(`⚠️ Hybrid reranking completed with no successful strategies (${totalDuration}ms), returning original results`);
-        return results; // Return original results if no strategies succeeded
-      }
-      
-      return hybridResults;
-      
-    } catch (error) {
-      const totalDuration = Date.now() - startTime;
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.warn(
-        `❌ Hybrid reranking failed (${totalDuration}ms): ${errorMessage}. ` +
-        `Returning original results.`
-      );
-      
-      // Log detailed error information
-      console.error('Hybrid reranking error details:', {
-        query: query.substring(0, 100) + (query.length > 100 ? '...' : ''),
-        resultCount: results.length,
-        contentType,
-        availableStrategies: Object.keys(availableStrategies),
-        weights,
-        strategyResults,
-        error: errorMessage
-      });
-      
-      return results.map(result => ({
-        ...result,
-        metadata: {
-          ...result.metadata,
-          hybridRerankingFailed: true,
-          hybridRerankingError: errorMessage,
-          fallbackToVectorSimilarity: true
-        }
-      }));
-    }
-  };
+  throw new RerankingStrategyError(
+    'hybrid',
+    'multimodal',
+    'Hybrid reranking strategy has been removed in this version. Use text-derived instead.',
+    'STRATEGY_REMOVED'
+  );
 }
 
 /**
@@ -768,8 +558,6 @@ export function getRerankingStats(): {
     strategiesUsed: {
       'cross-encoder': 0,
       'text-derived': 0,
-      'metadata': 0,
-      'hybrid': 0,
       'disabled': 0
     }
   };

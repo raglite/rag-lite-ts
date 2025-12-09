@@ -100,11 +100,12 @@ export const config = {
 **CLI Usage:**
 ```bash
 # Ingest documentation with screenshots
-raglite ingest ./docs/ --mode multimodal --rerank-strategy text-derived
+raglite ingest ./docs/ --mode multimodal
 
 # Search works for both text and visual content
 raglite search "login form screenshot"
 raglite search "API authentication guide"
+raglite search ./ui-mockup.png --content-type image  # Image-to-image search
 ```
 
 ### Technical Diagrams Collection
@@ -116,7 +117,7 @@ Optimized for technical diagrams, flowcharts, and architectural drawings:
 export const config = {
   mode: 'multimodal',
   embedding_model: 'Xenova/clip-vit-base-patch32',
-  reranking_strategy: 'metadata',  // Fast, filename-based
+  reranking_strategy: 'text-derived',  // Semantic understanding
   
   // Conservative settings for large diagrams
   chunk_size: 250,
@@ -137,11 +138,10 @@ export const config = {
 ```bash
 export RAG_MODE="multimodal"
 export RAG_EMBEDDING_MODEL="Xenova/clip-vit-base-patch32"
-export RAG_RERANKING_STRATEGY="metadata"
+export RAG_RERANKING_STRATEGY="text-derived"
 export RAG_BATCH_SIZE="4"
 
-# Use descriptive filenames for better metadata matching
-# architecture-diagram.png, user-flow-chart.jpg, etc.
+# Text-derived reranking provides semantic understanding of diagrams
 ```
 
 ### Mixed Content Knowledge Base
@@ -329,6 +329,7 @@ echo "Testing multimodal search..."
 raglite search "architecture diagram" --top-k 10
 raglite search "API documentation" --top-k 10
 raglite search "user interface mockup" --top-k 10
+raglite search ./test-diagram.png --content-type image --top-k 5  # Image-to-image search
 ```
 
 ### Production Environment
@@ -341,7 +342,7 @@ High-quality, optimized for performance:
 
 export RAG_MODE="multimodal"
 export RAG_EMBEDDING_MODEL="Xenova/clip-vit-base-patch32"
-export RAG_RERANKING_STRATEGY="hybrid"
+export RAG_RERANKING_STRATEGY="text-derived"
 export RAG_BATCH_SIZE="6"
 export RAG_CHUNK_SIZE="400"
 export RAG_CHUNK_OVERLAP="80"
@@ -417,7 +418,7 @@ import { IngestionPipeline } from 'rag-lite-ts';
 const qualityConfig = {
   mode: 'multimodal' as const,
   embeddingModel: 'Xenova/clip-vit-base-patch16',  // Higher quality model
-  rerankingStrategy: 'hybrid' as const,  // Best reranking
+  rerankingStrategy: 'text-derived' as const,  // Semantic reranking
   chunkSize: 500,  // Larger chunks for context
   chunkOverlap: 100,  // More overlap
   batchSize: 4  // Conservative for stability

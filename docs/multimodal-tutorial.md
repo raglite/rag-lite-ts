@@ -95,7 +95,7 @@ raglite ingest ./docs/ --mode multimodal
 # With specific model and reranking strategy
 raglite ingest ./docs/ --mode multimodal \
   --model Xenova/clip-vit-base-patch32 \
-  --rerank-strategy text-derived
+  # Reranking automatically uses text-derived for multimodal mode
 
 # Search automatically detects multimodal mode
 raglite search "flowchart showing process"
@@ -203,7 +203,7 @@ Multimodal mode supports several reranking strategies to optimize search results
 Converts images to text descriptions, then applies cross-encoder reranking:
 
 ```bash
-raglite ingest ./content/ --mode multimodal --rerank-strategy text-derived
+raglite ingest ./content/ --mode multimodal
 ```
 
 **How it works:**
@@ -213,42 +213,12 @@ raglite ingest ./content/ --mode multimodal --rerank-strategy text-derived
 
 **Best for:** High-quality semantic matching across text and images
 
-### Metadata-Based Reranking
-
-Uses filename and image properties for scoring:
-
-```bash
-raglite ingest ./content/ --mode multimodal --rerank-strategy metadata
-```
-
-**How it works:**
-1. Filename keyword matching with query terms
-2. Boost factors for specific patterns (diagram, chart, mockup)
-3. Image metadata scoring (dimensions, format)
-
-**Best for:** Fast reranking when filenames are descriptive
-
-### Hybrid Reranking
-
-Combines multiple scoring signals:
-
-```bash
-raglite ingest ./content/ --mode multimodal --rerank-strategy hybrid
-```
-
-**How it works:**
-1. Text-derived scoring for semantic relevance
-2. Metadata scoring for filename/property matching
-3. Weighted combination of scores
-
-**Best for:** Maximum search quality with balanced performance
-
 ### Disabled Reranking
 
 Uses only vector similarity scores:
 
 ```bash
-raglite ingest ./content/ --mode multimodal --rerank-strategy disabled
+raglite ingest ./content/ --mode multimodal --no-rerank
 ```
 
 **Best for:** Maximum speed when reranking quality isn't critical
@@ -259,7 +229,7 @@ raglite ingest ./content/ --mode multimodal --rerank-strategy disabled
 import { IngestionPipeline, SearchEngine } from 'rag-lite-ts';
 
 // Test different strategies
-const strategies = ['text-derived', 'metadata', 'hybrid'];
+const strategies = ['text-derived', 'disabled'];
 
 for (const strategy of strategies) {
   const ingestion = new IngestionPipeline(
@@ -445,6 +415,30 @@ raglite search "mountain sunset landscape" --content-type image
 raglite search "architecture diagram" --content-type image
 ```
 
+### Image-to-Image Search
+
+You can also search using image files directly to find semantically similar images:
+
+```bash
+# Find images similar to a reference image
+raglite search ./reference-photo.jpg
+
+# Find similar images with custom result count
+raglite search ./diagram.png --top-k 10
+
+# Image search with content type filtering
+raglite search ./photo.jpg --content-type image
+
+# Image search works with standard options (reranking disabled to preserve visual similarity)
+raglite search ./reference.png --content-type image --top-k 10
+```
+
+**Key Features:**
+- **Direct image queries**: Use image files as search input instead of text
+- **Find similar images**: System finds semantically similar images in your collection
+- **Cross-modal results**: Can return both images and related text content
+- **All options supported**: Works with `--top-k`, `--content-type`, `--rerank`, etc.
+
 **Programmatic usage:**
 ```typescript
 import { SearchEngine } from 'rag-lite-ts';
@@ -531,7 +525,7 @@ raglite search "person standing on mountain peak" --content-type image
 
 ```bash
 # Perfect for documentation with UI screenshots
-raglite ingest ./docs/ --mode multimodal --rerank-strategy text-derived
+raglite ingest ./docs/ --mode multimodal
 
 # Search for UI elements
 raglite search "login button screenshot"
@@ -542,9 +536,9 @@ raglite search "navigation menu example"
 
 ```bash
 # Optimize for technical diagrams and flowcharts
-raglite ingest ./diagrams/ --mode multimodal --rerank-strategy metadata
+raglite ingest ./diagrams/ --mode multimodal
 
-# Search works great with descriptive filenames
+# Search works with semantic understanding
 raglite search "database schema diagram"
 raglite search "network topology chart"
 ```
@@ -558,7 +552,7 @@ import { IngestionPipeline, SearchEngine } from 'rag-lite-ts';
 const ingestion = new IngestionPipeline('./kb.sqlite', './kb-index.bin', {
   mode: 'multimodal',
   embeddingModel: 'Xenova/clip-vit-base-patch32',
-  rerankingStrategy: 'hybrid',
+  rerankingStrategy: 'text-derived',
   chunkSize: 300,
   chunkOverlap: 60
 });

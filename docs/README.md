@@ -14,7 +14,7 @@ New to RAG-lite TS? Start with the [CLI Reference](cli-reference.md) for install
   - All commands and options
   - Usage examples and workflows
   - MCP server integration
-  - **NEW**: Multimodal mode support with `--mode` and `--rerank-strategy` parameters
+  - **NEW**: Multimodal mode support with `--mode` and automatic reranking parameters
 
 - **[API Reference](api-reference.md)** - Comprehensive programmatic API documentation
   - Simple constructors and factory patterns

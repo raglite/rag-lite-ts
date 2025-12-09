@@ -78,11 +78,10 @@ describe('Enhanced System Info Table', () => {
         supportedContentTypes: ['text', 'image'],
         rerankingStrategy: 'text-derived',
         rerankingModel: 'cross-encoder-model',
-        rerankingConfig: { 
+        rerankingConfig: {
           strategy: 'text-derived',
           enabled: true,
-          weights: { semantic: 0.7, metadata: 0.3 },
-          fallback: 'metadata'
+          fallback: 'disabled'
         }
       };
       
@@ -98,11 +97,10 @@ describe('Enhanced System Info Table', () => {
       assert.deepStrictEqual(retrieved.supportedContentTypes, ['text', 'image']);
       assert.strictEqual(retrieved.rerankingStrategy, 'text-derived');
       assert.strictEqual(retrieved.rerankingModel, 'cross-encoder-model');
-      assert.deepStrictEqual(retrieved.rerankingConfig, { 
+      assert.deepStrictEqual(retrieved.rerankingConfig, {
         strategy: 'text-derived',
         enabled: true,
-        weights: { semantic: 0.7, metadata: 0.3 },
-        fallback: 'metadata'
+        fallback: 'disabled'
       });
       assert.ok(retrieved.createdAt instanceof Date);
       assert.ok(retrieved.updatedAt instanceof Date);
@@ -184,13 +182,13 @@ describe('Enhanced System Info Table', () => {
       // Update only specific fields
       await setSystemInfo(connection, {
         mode: 'multimodal',
-        rerankingStrategy: 'hybrid'
+        rerankingStrategy: 'text-derived'
       });
       
       const retrieved = await getSystemInfo(connection);
       assert.ok(retrieved, 'should retrieve updated system info');
       assert.strictEqual(retrieved.mode, 'multimodal', 'mode should be updated');
-      assert.strictEqual(retrieved.rerankingStrategy, 'hybrid', 'reranking strategy should be updated');
+      assert.strictEqual(retrieved.rerankingStrategy, 'text-derived', 'reranking strategy should be updated');
       assert.strictEqual(retrieved.modelName, 'sentence-transformers/all-MiniLM-L6-v2', 'model name should be preserved');
       assert.strictEqual(retrieved.modelDimensions, 384, 'model dimensions should be preserved');
     } finally {
@@ -207,10 +205,9 @@ describe('Enhanced System Info Table', () => {
       await initializeSchema(connection);
       
       const complexConfig = {
-        strategy: 'hybrid' as const,
+        strategy: 'text-derived' as const,
         enabled: true,
-        weights: { semantic: 0.6, metadata: 0.4 },
-        fallback: 'metadata' as const
+        fallback: 'disabled' as const
       };
       
       await setSystemInfo(connection, {

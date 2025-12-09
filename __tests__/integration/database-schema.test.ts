@@ -277,10 +277,9 @@ describe('Database Schema Testing', () => {
       
       // Test system_info JSON fields
       const testRerankingConfig = {
-        strategy: 'hybrid' as const,
+        strategy: 'text-derived' as const,
         enabled: true,
-        weights: { semantic: 0.6, metadata: 0.4 },
-        fallback: 'metadata' as const
+        fallback: 'disabled' as const
       };
       
       await setSystemInfo(connection, {

@@ -204,7 +204,7 @@ export async function initializeSchema(connection: DatabaseConnection): Promise<
         
         -- Reranking configuration
         reranking_strategy TEXT DEFAULT 'cross-encoder' CHECK (
-          reranking_strategy IN ('cross-encoder', 'text-derived', 'metadata', 'hybrid', 'disabled')
+          reranking_strategy IN ('cross-encoder', 'text-derived', 'disabled')
         ),
         reranking_model TEXT,
         reranking_config TEXT, -- JSON configuration for strategy-specific settings

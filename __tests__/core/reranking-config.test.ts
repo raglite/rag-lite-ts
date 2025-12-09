@@ -21,7 +21,7 @@ describe('Reranking Configuration System', () => {
   
   describe('Strategy Validation', () => {
     test('should validate correct reranking strategies', () => {
-      const validStrategies = ['cross-encoder', 'text-derived', 'metadata', 'hybrid', 'disabled'];
+      const validStrategies = ['cross-encoder', 'text-derived', 'disabled'];
       
       for (const strategy of validStrategies) {
         assert.ok(
@@ -73,49 +73,26 @@ describe('Reranking Configuration System', () => {
       );
     });
     
-    test('should validate weights for hybrid strategy', () => {
+    test('should validate text-derived strategy', () => {
       const config = {
-        strategy: 'hybrid' as const,
-        weights: {
-          semantic: 0.7,
-          metadata: 0.3
-        }
+        strategy: 'text-derived' as const
       };
-      
+
       const validated = validateRerankingConfig(config);
-      
-      assert.deepStrictEqual(validated.weights, { semantic: 0.7, metadata: 0.3 });
+
+      assert.strictEqual(validated.strategy, 'text-derived');
     });
     
-    test('should reject invalid weight values', () => {
-      assert.throws(
-        () => validateRerankingConfig({
-          strategy: 'hybrid',
-          weights: { semantic: 1.5 }
-        }),
-        /Semantic weight must be between 0 and 1/,
-        'Should reject weights > 1'
-      );
+    test('should validate disabled strategy', () => {
+      const config = {
+        strategy: 'disabled' as const
+      };
+
+      const validated = validateRerankingConfig(config);
+
+      assert.strictEqual(validated.strategy, 'disabled');
+      assert.strictEqual(validated.enabled, false);
       
-      assert.throws(
-        () => validateRerankingConfig({
-          strategy: 'hybrid',
-          weights: { metadata: -0.1 }
-        }),
-        /Metadata weight must be between 0 and 1/,
-        'Should reject negative weights'
-      );
-    });
-    
-    test('should require at least one weight for hybrid strategy', () => {
-      assert.throws(
-        () => validateRerankingConfig({
-          strategy: 'hybrid',
-          weights: { semantic: 0, metadata: 0, visual: 0 }
-        }),
-        /Hybrid strategy requires at least one weight to be greater than 0/,
-        'Should require non-zero weights for hybrid'
-      );
     });
     
     test('should validate fallback strategy', () => {
@@ -144,7 +121,7 @@ describe('Reranking Configuration System', () => {
       
       assert.strictEqual(config.strategy, 'text-derived');
       assert.strictEqual(config.enabled, true);
-      assert.strictEqual(config.fallback, 'metadata');
+      assert.strictEqual(config.fallback, 'disabled');
       assert.deepStrictEqual(config.weights, { semantic: 0.7, metadata: 0.3 });
     });
     
@@ -162,15 +139,11 @@ describe('Reranking Configuration System', () => {
       assert.ok(isStrategySupported('cross-encoder', 'text'));
       assert.ok(isStrategySupported('disabled', 'text'));
       assert.ok(!isStrategySupported('text-derived', 'text'));
-      assert.ok(!isStrategySupported('metadata', 'text'));
-      assert.ok(!isStrategySupported('hybrid', 'text'));
     });
     
     test('should correctly identify supported strategies for multimodal mode', () => {
       assert.ok(!isStrategySupported('cross-encoder', 'multimodal'));
       assert.ok(isStrategySupported('text-derived', 'multimodal'));
-      assert.ok(isStrategySupported('metadata', 'multimodal'));
-      assert.ok(isStrategySupported('hybrid', 'multimodal'));
       assert.ok(isStrategySupported('disabled', 'multimodal'));
     });
     
@@ -179,7 +152,7 @@ describe('Reranking Configuration System', () => {
       const multimodalStrategies = getSupportedStrategies('multimodal');
       
       assert.deepStrictEqual(textStrategies, ['cross-encoder', 'disabled']);
-      assert.deepStrictEqual(multimodalStrategies, ['text-derived', 'metadata', 'hybrid', 'disabled']);
+      assert.deepStrictEqual(multimodalStrategies, ['text-derived', 'disabled']);
     });
   });
   
@@ -197,16 +170,14 @@ describe('Reranking Configuration System', () => {
       assert.strictEqual(config.fallback, 'disabled');
     });
     
-    test('should build configuration with weights', () => {
+    test('should build text-derived configuration', () => {
       const config = new RerankingConfigBuilder()
-        .strategy('hybrid')
-        .weights({ semantic: 0.6, metadata: 0.4 })
-        .fallback('metadata')
+        .strategy('text-derived')
+        .fallback('disabled')
         .build();
-      
-      assert.strictEqual(config.strategy, 'hybrid');
-      assert.deepStrictEqual(config.weights, { semantic: 0.6, metadata: 0.4 });
-      assert.strictEqual(config.fallback, 'metadata');
+
+      assert.strictEqual(config.strategy, 'text-derived');
+      assert.strictEqual(config.fallback, 'disabled');
     });
     
     test('should provide text mode convenience method', () => {
@@ -223,7 +194,7 @@ describe('Reranking Configuration System', () => {
       assert.strictEqual(config.strategy, 'text-derived');
       assert.strictEqual(config.enabled, true);
       assert.deepStrictEqual(config.weights, { semantic: 0.7, metadata: 0.3 });
-      assert.strictEqual(config.fallback, 'metadata');
+      assert.strictEqual(config.fallback, 'disabled');
     });
     
     test('should provide disabled convenience method', () => {
@@ -252,7 +223,7 @@ describe('Reranking Configuration System', () => {
     test('should have correct default multimodal configuration', () => {
       assert.strictEqual(DEFAULT_MULTIMODAL_RERANKING_CONFIG.strategy, 'text-derived');
       assert.strictEqual(DEFAULT_MULTIMODAL_RERANKING_CONFIG.enabled, true);
-      assert.strictEqual(DEFAULT_MULTIMODAL_RERANKING_CONFIG.fallback, 'metadata');
+      assert.strictEqual(DEFAULT_MULTIMODAL_RERANKING_CONFIG.fallback, 'disabled');
       assert.deepStrictEqual(DEFAULT_MULTIMODAL_RERANKING_CONFIG.weights, { semantic: 0.7, metadata: 0.3 });
     });
   });

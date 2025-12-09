@@ -11,7 +11,7 @@ Comprehensive testing and example plan for rag-lite-ts multimodal functionality,
 - **Image Processing**: Automatic description generation with vit-gpt2-image-captioning
 - **Image Metadata**: Comprehensive extraction (dimensions, format, file size)
 - **Multimodal Reranking**: Text-derived, metadata, hybrid, and disabled strategies
-- **CLI Support**: `--mode multimodal`, `--rerank-strategy`, `--content-type` filtering
+- **CLI Support**: `--mode multimodal`, `--rerank`/`--no-rerank`, `--content-type` filtering
 - **MCP Integration**: Multimodal search tools, base64 image delivery
 - **Unified Content System**: Memory ingestion, format-adaptive retrieval
 - **Mode Persistence**: Automatic detection from database

@@ -31,7 +31,7 @@ Usage:
 
 Commands:
   ingest <path>     Ingest documents from file or directory
-  search <query>    Search indexed documents
+  search <query>    Search indexed documents (text or image)
   rebuild           Rebuild the vector index
   version           Show version information
   help              Show this help message
@@ -41,11 +41,12 @@ Examples:
   raglite ingest ./readme.md       # Ingest single file
   raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2  # Use higher quality model
   raglite ingest ./docs/ --mode multimodal  # Enable multimodal processing
-  raglite ingest ./docs/ --mode multimodal --rerank-strategy metadata  # Use metadata reranking
   raglite ingest ./docs/ --path-strategy relative --path-base /project  # Use relative paths
   raglite search "machine learning" # Search for documents about machine learning
   raglite search "API documentation" --top-k 10  # Get top 10 results
   raglite search "red car" --content-type image  # Search only image results
+  raglite search ./photo.jpg       # Search with image (multimodal mode only)
+  raglite search ./image.png --top-k 5  # Find similar images
 
   raglite rebuild                  # Rebuild the entire index
 
@@ -58,7 +59,6 @@ Options for search:
 Options for ingest:
   --model <name>       Use specific embedding model
   --mode <mode>        Processing mode: 'text' (default) or 'multimodal'
-  --rerank-strategy <strategy>  Reranking strategy for multimodal mode
   --rebuild-if-needed  Automatically rebuild if model mismatch detected (WARNING: rebuilds entire index)
   --path-strategy <strategy>  Path storage strategy: 'relative' (default) or 'absolute'
   --path-base <path>   Base directory for relative paths (defaults to current directory)
@@ -73,7 +73,6 @@ Available models:
 
 Available reranking strategies (multimodal mode):
   text-derived  Use image-to-text conversion + cross-encoder (default)
-  metadata      Use filename and metadata-based scoring
   disabled      No reranking, use vector similarity only
 
 For more information, visit: https://github.com/your-repo/rag-lite-ts
@@ -113,9 +112,15 @@ function parseArgs(): {
     if (arg.startsWith('--')) {
       const optionName = arg.slice(2);
 
-      // Handle boolean flags
+      // Handle boolean flags with optional values
       if (optionName === 'rerank') {
-        options.rerank = true;
+        const nextArg = args[i + 1];
+        if (nextArg && (nextArg === 'true' || nextArg === 'false')) {
+          options.rerank = nextArg === 'true';
+          i++; // Skip the next argument as it's the value
+        } else {
+          options.rerank = true;
+        }
       } else if (optionName === 'no-rerank') {
         options.rerank = false;
       } else if (optionName === 'rebuild-if-needed') {
@@ -146,6 +151,18 @@ function parseArgs(): {
  * Validate command line arguments
  */
 function validateArgs(command: string, args: string[], options: Record<string, any>): void {
+  // Phase 3: Reject the removed --rerank-strategy option
+  if (options['rerank-strategy'] !== undefined) {
+    console.error('Error: --rerank-strategy option has been removed in this version');
+    console.error('');
+    console.error('Reranking strategy is now automatically selected based on mode:');
+    console.error('  Text mode: cross-encoder (or disabled)');
+    console.error('  Multimodal mode: text-derived (or disabled)');
+    console.error('');
+    console.error('Use --rerank or --no-rerank to control reranking instead.');
+    process.exit(EXIT_CODES.INVALID_ARGUMENTS);
+  }
+
   switch (command) {
     case 'ingest':
       if (args.length === 0) {
@@ -158,12 +175,10 @@ function validateArgs(command: string, args: string[], options: Record<string, a
         console.error('  raglite ingest ./readme.md       # Ingest single file');
         console.error('  raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2  # Use higher quality model');
         console.error('  raglite ingest ./docs/ --mode multimodal  # Enable multimodal processing');
-        console.error('  raglite ingest ./docs/ --mode multimodal --rerank-strategy metadata  # Use metadata reranking');
         console.error('');
         console.error('Options:');
         console.error('  --model <name>         Use specific embedding model');
         console.error('  --mode <mode>          Processing mode: text (default) or multimodal');
-        console.error('  --rerank-strategy <strategy>  Reranking strategy for multimodal mode');
         console.error('  --rebuild-if-needed    Automatically rebuild if model mismatch detected');
         console.error('');
         console.error('The path can be either a file (.md or .txt) or a directory.');
@@ -176,12 +191,15 @@ function validateArgs(command: string, args: string[], options: Record<string, a
         console.error('Error: search command requires a query argument');
         console.error('');
         console.error('Usage: raglite search <query> [options]');
+        console.error('       raglite search <image-path> [options]');
         console.error('');
         console.error('Examples:');
         console.error('  raglite search "machine learning"');
         console.error('  raglite search "API documentation" --top-k 10');
         console.error('  raglite search "tutorial" --rerank');
         console.error('  raglite search "red car" --content-type image');
+        console.error('  raglite search ./photo.jpg              # Image search (multimodal mode)');
+        console.error('  raglite search ./image.png --top-k 5    # Find similar images');
 
         console.error('');
         console.error('Options:');
@@ -294,43 +312,6 @@ function validateArgs(command: string, args: string[], options: Record<string, a
     }
   }
 
-  // Validate rerank-strategy option (only for ingest command with multimodal mode)
-  if (options['rerank-strategy'] !== undefined) {
-    if (command !== 'ingest') {
-      console.error(`Error: --rerank-strategy option is only available for the 'ingest' command`);
-      console.error('');
-      console.error('Reranking strategy is configured during ingestion and used automatically during search.');
-      process.exit(EXIT_CODES.INVALID_ARGUMENTS);
-    }
-
-    const mode = options.mode || 'text';
-    if (mode !== 'multimodal') {
-      console.error(`Error: --rerank-strategy option is only available in multimodal mode`);
-      console.error('');
-      console.error('To use reranking strategies, specify --mode multimodal');
-      console.error('');
-      console.error('Examples:');
-      console.error('  raglite ingest ./docs/ --mode multimodal --rerank-strategy text-derived');
-      console.error('  raglite ingest ./docs/ --mode multimodal --rerank-strategy metadata');
-      process.exit(EXIT_CODES.INVALID_ARGUMENTS);
-    }
-
-    const supportedStrategies = ['text-derived', 'metadata', 'disabled'];
-    if (!supportedStrategies.includes(options['rerank-strategy'])) {
-      console.error(`Error: Unsupported reranking strategy '${options['rerank-strategy']}'`);
-      console.error('');
-      console.error('Supported strategies for multimodal mode:');
-      console.error('  text-derived  Convert images to text, then use cross-encoder (default)');
-      console.error('  metadata      Use filename and metadata-based scoring');
-      console.error('  disabled      No reranking, use vector similarity only');
-      console.error('');
-      console.error('Examples:');
-      console.error('  --rerank-strategy text-derived');
-      console.error('  --rerank-strategy metadata');
-      console.error('  --rerank-strategy disabled');
-      process.exit(EXIT_CODES.INVALID_ARGUMENTS);
-    }
-  }
 
   // Validate model option (only for ingest command)
   if (options.model !== undefined) {

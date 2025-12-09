@@ -387,8 +387,7 @@ export class CLIPEmbedder extends BaseUniversalEmbedder {
       throw new Error('CLIP text model or tokenizer not initialized');
     }
 
-    try {
-      // Use the validated CLIPTextModelWithProjection approach (no pixel_values errors)
+    // Use the validated CLIPTextModelWithProjection approach (no pixel_values errors)
       // Tokenize text with CLIP's requirements
       // The tokenizer handles truncation at 77 TOKENS (not characters)
       const tokens = await this.tokenizer(processedText, {
@@ -445,6 +444,9 @@ export class CLIPEmbedder extends BaseUniversalEmbedder {
         console.warn(`Warning: Embedding normalization may be imprecise (magnitude: ${magnitudeAfterNorm.toFixed(6)})`);
       }
 
+      // Log text embedding generation
+      console.log(`[CLIP] Generated text embedding for: "${processedText.substring(0, 30)}${processedText.length > 30 ? '...' : ''}"`);
+
       // Generate unique embedding ID
       const embeddingId = this.generateEmbeddingId(processedText, 'text');
 
@@ -465,9 +467,6 @@ export class CLIPEmbedder extends BaseUniversalEmbedder {
         }
       };
 
-    } catch (error) {
-      throw error;
-    }
   }
 
   // =============================================================================
@@ -690,10 +689,12 @@ export class CLIPEmbedder extends BaseUniversalEmbedder {
       
       // Try to use Sharp for better Node.js support
       try {
-        const sharp = await import('sharp');
+        const sharpModule = await import('sharp');
+        const sharp = sharpModule.default;
+        sharp.concurrency(2);
         
         // Use Sharp to load and get raw pixel data
-        const { data, info } = await sharp.default(absolutePath)
+        const { data, info } = await sharp(absolutePath)
           .resize(variant.imageSize, variant.imageSize, {
             fit: 'cover',
             position: 'center'

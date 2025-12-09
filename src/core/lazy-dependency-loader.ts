@@ -263,43 +263,27 @@ export class LazyRerankerLoader {
     });
   }
 
+
   /**
-   * Lazily load metadata-based reranker for multimodal mode
-   * Only imports when specifically needed
+   * Lazily load CLIP AutoProcessor for consistent image preprocessing
+   * Shares processor instances across embedder instances to ensure identical preprocessing
    */
-  static async loadMetadataReranker(): Promise<RerankFunction> {
-    const cacheKey = 'reranker:metadata';
-    
+  static async loadCLIPAutoProcessor(modelName: string): Promise<any> {
+    const cacheKey = `processor:clip:${modelName}`;
+
     return this.cache.getOrLoad(cacheKey, async () => {
-      console.log('🔄 Lazy loading metadata reranker (multimodal)');
-      
-      // Dynamic import - only loaded when multimodal mode uses metadata reranking
-      const { MetadataRerankingStrategy } = await import('./reranking-strategies.js');
-      
-      const reranker = new MetadataRerankingStrategy();
-      
-      console.log('✅ Metadata reranker loaded');
-      return reranker.rerank.bind(reranker);
+      console.log(`🔄 Lazy loading CLIP AutoProcessor: ${modelName}`);
+
+      // Dynamic import - only loaded when CLIP models are used
+      const { AutoProcessor } = await import('@huggingface/transformers');
+
+      const processor = await AutoProcessor.from_pretrained(modelName);
+
+      console.log(`✅ CLIP AutoProcessor loaded: ${modelName}`);
+      return processor;
     });
   }
 
-  /**
-   * Lazily load hybrid reranker for multimodal mode
-   * Combines multiple reranking strategies (uses text-derived for now)
-   */
-  static async loadHybridReranker(): Promise<RerankFunction> {
-    const cacheKey = 'reranker:hybrid';
-    
-    return this.cache.getOrLoad(cacheKey, async () => {
-      console.log('🔄 Lazy loading hybrid reranker (multimodal)');
-      
-      // For now, hybrid reranking uses text-derived
-      // TODO: Implement proper hybrid reranking in future tasks
-      console.log('🔄 Hybrid reranking not yet implemented, using text-derived');
-      
-      return this.loadTextDerivedReranker();
-    });
-  }
 
   /**
    * Check if a reranker is already loaded in cache
@@ -482,18 +466,12 @@ export class LazyDependencyManager {
     switch (strategy) {
       case 'cross-encoder':
         return LazyRerankerLoader.loadTextReranker();
-      
+
       case 'text-derived':
         return LazyRerankerLoader.loadTextDerivedReranker();
-      
-      case 'metadata':
-        return LazyRerankerLoader.loadMetadataReranker();
-      
-      case 'hybrid':
-        return LazyRerankerLoader.loadHybridReranker();
-      
+
       default:
-        throw new Error(`Unknown reranking strategy '${strategy}'. Supported strategies: cross-encoder, text-derived, metadata, hybrid, disabled`);
+        throw new Error(`Unknown reranking strategy '${strategy}'. Supported strategies: cross-encoder, text-derived, disabled`);
     }
   }
 

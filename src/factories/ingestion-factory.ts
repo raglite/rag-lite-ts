@@ -409,7 +409,9 @@ export class IngestionFactory {
     
     // Determine the effective mode and reranking strategy
     const effectiveMode = options.mode || 'text';
-    const effectiveRerankingStrategy = options.rerankingStrategy || 'cross-encoder';
+    // Phase 1: Fix mode-specific reranking strategy defaults
+    const effectiveRerankingStrategy = options.rerankingStrategy ||
+      (effectiveMode === 'multimodal' ? 'text-derived' : 'cross-encoder');
     
     // Determine model type based on model name
     let modelType: 'sentence-transformer' | 'clip';

@@ -113,8 +113,6 @@ export class SearchEngine {
     }
 
     const startTime = performance.now();
-    const topK = options.top_k || config.top_k || 10;
-    const shouldRerank = options.rerank !== undefined ? options.rerank : (this.rerankFn !== undefined);
 
     try {
       // Step 1: Build query embedding using injected embed function
@@ -122,11 +120,43 @@ export class SearchEngine {
       const queryEmbedding = await this.embedFn(query);
       const embeddingTime = performance.now() - embeddingStartTime;
 
-      // Step 2: Search using IndexManager (which handles hash mapping properly)
+      // Step 2: Search with the vector
+      const results = await this.searchWithVector(queryEmbedding.vector, options, query, embeddingTime);
+
+      return results;
+
+    } catch (error) {
+      throw new Error(`Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Perform semantic search using a pre-computed embedding vector
+   * Useful for image-based search or when embedding is computed externally
+   * @param queryVector - Pre-computed query embedding vector
+   * @param options - Search options including top_k and rerank settings
+   * @param originalQuery - Optional original query for reranking (text or image path)
+   * @param embeddingTime - Optional embedding time for logging
+   * @returns Promise resolving to array of search results
+   */
+  async searchWithVector(
+    queryVector: Float32Array, 
+    options: SearchOptions = {},
+    originalQuery?: string,
+    embeddingTime?: number
+  ): Promise<SearchResult[]> {
+    const startTime = performance.now();
+    const topK = options.top_k || config.top_k || 10;
+    // Phase 1: Disable reranking by default for better performance
+    // Users must explicitly opt-in with --rerank flag
+    const shouldRerank = options.rerank === true;
+
+    try {
+      // Step 1: Search using IndexManager (which handles hash mapping properly)
       const searchStartTime = performance.now();
       let searchResult;
       try {
-        searchResult = this.indexManager.search(queryEmbedding.vector, topK);
+        searchResult = this.indexManager.search(queryVector, topK);
       } catch (error) {
         if (error instanceof Error && error.message.includes('No embedding ID found for hash')) {
           console.warn(`Hash mapping issue detected: ${error.message}`);
@@ -143,20 +173,20 @@ export class SearchEngine {
         return [];
       }
 
-      // Step 3: Retrieve chunks from database using embedding IDs
+      // Step 2: Retrieve chunks from database using embedding IDs
       const retrievalStartTime = performance.now();
       const chunks = await getChunksByEmbeddingIds(this.db, searchResult.embeddingIds);
       const retrievalTime = performance.now() - retrievalStartTime;
 
-      // Step 4: Format results as JSON with text, score, and document metadata
+      // Step 3: Format results as JSON with text, score, and document metadata
       let results = this.formatSearchResults(chunks, searchResult.distances, searchResult.embeddingIds);
 
-      // Step 5: Optional reranking with injected rerank function
+      // Step 4: Optional reranking with injected rerank function
       let rerankTime = 0;
-      if (shouldRerank && this.rerankFn && results.length > 1) {
+      if (shouldRerank && this.rerankFn && results.length > 1 && originalQuery) {
         try {
           const rerankStartTime = performance.now();
-          results = await this.rerankFn(query, results);
+          results = await this.rerankFn(originalQuery, results);
           rerankTime = performance.now() - rerankStartTime;
         } catch (error) {
           // Fallback to vector search results and log the error
@@ -167,14 +197,15 @@ export class SearchEngine {
       const totalTime = performance.now() - startTime;
       
       // Measure latency without premature optimization - just log for monitoring
+      const embedTimeStr = embeddingTime !== undefined ? `embed: ${embeddingTime.toFixed(2)}ms, ` : '';
       console.log(`Search completed: ${results.length} results in ${totalTime.toFixed(2)}ms ` +
-        `(embed: ${embeddingTime.toFixed(2)}ms, vector: ${vectorSearchTime.toFixed(2)}ms, ` +
+        `(${embedTimeStr}vector: ${vectorSearchTime.toFixed(2)}ms, ` +
         `retrieval: ${retrievalTime.toFixed(2)}ms${rerankTime > 0 ? `, rerank: ${rerankTime.toFixed(2)}ms` : ''})`);
 
       return results;
 
     } catch (error) {
-      throw new Error(`Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`Vector search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

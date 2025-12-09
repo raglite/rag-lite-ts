@@ -446,7 +446,7 @@ sqlite3 db.sqlite "SELECT content, metadata FROM chunks WHERE content_type='imag
 # This is currently the best available transformers.js compatible model
 
 # Try different reranking strategy that relies less on descriptions
-raglite ingest ./docs/ --mode multimodal --rerank-strategy metadata
+raglite ingest ./docs/ --mode multimodal # metadata reranking removed
 
 # Use descriptive filenames to improve metadata-based search
 # Rename files: diagram.png -> architecture-diagram.png
@@ -457,8 +457,8 @@ raglite ingest ./docs/ --mode multimodal --rerank-strategy metadata
 # Test with high-quality, simple images first
 # Complex diagrams may not generate good descriptions
 
-# Consider hybrid reranking for better results
-raglite ingest ./docs/ --mode multimodal --rerank-strategy hybrid
+# Reranking is now automatic - hybrid strategy removed
+raglite ingest ./docs/ --mode multimodal
 ```
 
 ### Mixed Content Search Issues
@@ -486,9 +486,8 @@ raglite search "architecture" --content-type image
 
 **Solutions:**
 ```bash
-# Try different reranking strategies for better mixed results
-raglite ingest ./docs/ --mode multimodal --rerank-strategy text-derived
-raglite ingest ./docs/ --mode multimodal --rerank-strategy hybrid
+# Reranking is now automatic based on mode
+raglite ingest ./docs/ --mode multimodal  # Uses text-derived reranking automatically
 
 # Increase result count to see more diverse results
 raglite search "architecture" --top-k 20
@@ -524,19 +523,13 @@ raglite search "test query" --top-k 10
 
 **Solutions:**
 ```bash
-# Try different strategies based on your content:
+# Reranking is now automatic based on mode:
 
-# For semantic accuracy (slower but better quality)
-raglite ingest ./docs/ --mode multimodal --rerank-strategy text-derived
+# Multimodal mode automatically uses text-derived reranking
+raglite ingest ./docs/ --mode multimodal
 
-# For filename-based matching (faster)
-raglite ingest ./docs/ --mode multimodal --rerank-strategy metadata
-
-# For balanced approach
-raglite ingest ./docs/ --mode multimodal --rerank-strategy hybrid
-
-# For maximum speed (no reranking)
-raglite ingest ./docs/ --mode multimodal --rerank-strategy disabled
+# For maximum speed, disable reranking explicitly
+raglite ingest ./docs/ --mode multimodal --no-rerank
 ```
 
 ### Chameleon Architecture Polymorphic Runtime Issues

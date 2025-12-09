@@ -12,7 +12,6 @@ import { EXIT_CODES, ConfigurationError } from '../core/config.js';
 async function validateModeConfiguration(options: Record<string, any>): Promise<void> {
   const mode = options.mode || 'text';
   const model = options.embeddingModel;
-  const rerankingStrategy = options.rerankingStrategy;
 
   // Define supported models for each mode
   const textModels = [
@@ -20,7 +19,8 @@ async function validateModeConfiguration(options: Record<string, any>): Promise<
     'Xenova/all-mpnet-base-v2'
   ];
   const multimodalModels = [
-    'Xenova/clip-vit-base-patch32'
+    'Xenova/clip-vit-base-patch32',
+    'Xenova/clip-vit-base-patch16'
   ];
 
   // Validate model compatibility with mode
@@ -79,43 +79,6 @@ async function validateModeConfiguration(options: Record<string, any>): Promise<
     }
   }
 
-  // Validate reranking strategy compatibility with mode
-  if (rerankingStrategy) {
-    const textStrategies = ['cross-encoder', 'disabled'];
-    const multimodalStrategies = ['text-derived', 'metadata', 'disabled'];
-
-    if (mode === 'text' && !textStrategies.includes(rerankingStrategy)) {
-      throw new ConfigurationError(
-        `Reranking strategy '${rerankingStrategy}' is not supported for text mode.\n` +
-        `\n` +
-        `Supported strategies for text mode:\n` +
-        `  cross-encoder  Use cross-encoder model for reranking (default)\n` +
-        `  disabled       No reranking, use vector similarity only\n` +
-        `\n` +
-        `Examples:\n` +
-        `  raglite ingest <path> --mode text --rerank-strategy cross-encoder\n` +
-        `  raglite ingest <path> --mode text --rerank-strategy disabled\n`,
-        EXIT_CODES.INVALID_ARGUMENTS
-      );
-    }
-
-    if (mode === 'multimodal' && !multimodalStrategies.includes(rerankingStrategy)) {
-      throw new ConfigurationError(
-        `Reranking strategy '${rerankingStrategy}' is not supported for multimodal mode.\n` +
-        `\n` +
-        `Supported strategies for multimodal mode:\n` +
-        `  text-derived  Convert images to text, then use cross-encoder (default)\n` +
-        `  metadata      Use filename and metadata-based scoring\n` +
-        `  disabled      No reranking, use vector similarity only\n` +
-        `\n` +
-        `Examples:\n` +
-        `  raglite ingest <path> --mode multimodal --rerank-strategy text-derived\n` +
-        `  raglite ingest <path> --mode multimodal --rerank-strategy metadata\n` +
-        `  raglite ingest <path> --mode multimodal --rerank-strategy disabled\n`,
-        EXIT_CODES.INVALID_ARGUMENTS
-      );
-    }
-  }
 
   // Log the final configuration
   console.log('✅ Mode configuration validated successfully');
@@ -124,9 +87,6 @@ async function validateModeConfiguration(options: Record<string, any>): Promise<
   }
   if (model) {
     console.log(`   Model: ${model}`);
-  }
-  if (rerankingStrategy) {
-    console.log(`   Reranking: ${rerankingStrategy}`);
   }
 }
 
@@ -225,10 +185,6 @@ export async function runIngest(path: string, options: Record<string, any> = {})
       console.log(`Using processing mode: ${options.mode}`);
     }
 
-    if (options['rerank-strategy']) {
-      factoryOptions.rerankingStrategy = options['rerank-strategy'];
-      console.log(`Using reranking strategy: ${options['rerank-strategy']}`);
-    }
 
     if (options.rebuildIfNeeded) {
       factoryOptions.forceRebuild = true;

@@ -595,7 +595,7 @@ export class ModeDetectionService {
      * @private
      */
     private validateRerankingStrategy(strategy: RerankingStrategyType): void {
-        const validStrategies: RerankingStrategyType[] = ['cross-encoder', 'text-derived', 'metadata', 'hybrid', 'disabled'];
+        const validStrategies: RerankingStrategyType[] = ['cross-encoder', 'text-derived', 'disabled'];
         if (!validStrategies.includes(strategy)) {
             throw createError.validation(`Invalid reranking strategy '${strategy}'. Must be one of: ${validStrategies.join(', ')}`);
         }

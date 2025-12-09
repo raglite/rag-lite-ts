@@ -365,13 +365,13 @@ DEBUG=1 raglite search "test query" --rerank
 **Solutions:**
 ```bash
 # Try different reranking strategy
-raglite ingest ./docs/ --mode multimodal --rerank-strategy metadata
+raglite ingest ./docs/ --mode multimodal
 
 # Or disable reranking for speed
-raglite ingest ./docs/ --mode multimodal --rerank-strategy disabled
+raglite ingest ./docs/ --mode multimodal --no-rerank
 
 # For hybrid approach
-raglite ingest ./docs/ --mode multimodal --rerank-strategy hybrid
+raglite ingest ./docs/ --mode multimodal  # hybrid reranking removed
 ```
 
 ### "Metadata reranking not effective"
@@ -390,7 +390,7 @@ mv chart.jpg user-flow-chart.jpg
 sqlite3 db.sqlite "SELECT source, metadata FROM chunks WHERE content_type='image' LIMIT 3;"
 
 # Try text-derived reranking instead
-raglite ingest ./docs/ --mode multimodal --rerank-strategy text-derived
+raglite ingest ./docs/ --mode multimodal  # text-derived reranking automatic
 ```
 
 ### "Hybrid reranking too slow"
@@ -400,14 +400,14 @@ raglite ingest ./docs/ --mode multimodal --rerank-strategy text-derived
 **Solutions:**
 ```bash
 # Use simpler strategy
-raglite ingest ./docs/ --mode multimodal --rerank-strategy metadata
+raglite ingest ./docs/ --mode multimodal
 
 # Or disable reranking
-raglite ingest ./docs/ --mode multimodal --rerank-strategy disabled
+raglite ingest ./docs/ --mode multimodal --no-rerank
 
 # Reduce batch size to manage memory
 export RAG_BATCH_SIZE="4"
-raglite ingest ./docs/ --mode multimodal --rerank-strategy hybrid
+raglite ingest ./docs/ --mode multimodal  # hybrid reranking removed
 ```
 
 ## Performance Issues
@@ -430,7 +430,7 @@ raglite ingest ./docs/ --mode multimodal --model Xenova/clip-vit-base-patch32  #
 # Instead of: Xenova/clip-vit-base-patch16  # Slower but higher quality
 
 # Skip reranking during ingestion for speed
-raglite ingest ./docs/ --mode multimodal --rerank-strategy disabled
+raglite ingest ./docs/ --mode multimodal --no-rerank
 ```
 
 ### "High memory usage with images"
@@ -463,7 +463,7 @@ mogrify -resize 1920x1080> ./docs/images/*.jpg
 raglite search "query" --no-rerank
 
 # Use metadata reranking (faster than text-derived)
-raglite ingest ./docs/ --mode multimodal --rerank-strategy metadata
+raglite ingest ./docs/ --mode multimodal
 
 # Reduce result count
 raglite search "query" --top-k 5
