@@ -692,7 +692,7 @@ async function generateImageDescription(
 ): Promise<ImageDescriptionResult> {
   try {
     const pipeline = await initializeImageToTextPipeline(options.model);
-
+    
     // Load image using RawImage.fromURL which works with local file paths
     const { RawImage } = await import('@huggingface/transformers');
     const image = await RawImage.fromURL(imagePath);

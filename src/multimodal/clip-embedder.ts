@@ -387,7 +387,8 @@ export class CLIPEmbedder extends BaseUniversalEmbedder {
       throw new Error('CLIP text model or tokenizer not initialized');
     }
 
-    // Use the validated CLIPTextModelWithProjection approach (no pixel_values errors)
+    try {
+      // Use the validated CLIPTextModelWithProjection approach (no pixel_values errors)
       // Tokenize text with CLIP's requirements
       // The tokenizer handles truncation at 77 TOKENS (not characters)
       const tokens = await this.tokenizer(processedText, {
@@ -467,6 +468,9 @@ export class CLIPEmbedder extends BaseUniversalEmbedder {
         }
       };
 
+    } catch (error) {
+      throw error;
+    }
   }
 
   // =============================================================================

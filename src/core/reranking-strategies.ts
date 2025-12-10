@@ -255,9 +255,9 @@ export class TextDerivedRerankingStrategy implements RerankingStrategy {
       return result.description;
     } catch (error) {
       console.warn(`Failed to generate description for image ${imagePath}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-
+      
       // Fallback to filename-based description
-      const filename = imagePath.split('/').pop() || imagePath.split('\\').pop() || imagePath;
+      const filename = imagePath.split('/').pop() || imagePath;
       return `Image file: ${filename}`;
     }
   }
@@ -266,8 +266,8 @@ export class TextDerivedRerankingStrategy implements RerankingStrategy {
    * Rerank search results using text-derived approach
    */
   rerank: RerankFunction = async (
-    query: string,
-    results: SearchResult[],
+    query: string, 
+    results: SearchResult[], 
     contentType?: string
   ): Promise<SearchResult[]> => {
     // Validate content type
@@ -283,18 +283,17 @@ export class TextDerivedRerankingStrategy implements RerankingStrategy {
       const processedResults = await Promise.all(
         results.map(async (result) => {
           if (result.contentType === 'image') {
-            // Generate text description for image using the file path from document.source
-            const description = await this.generateImageDescription(result.document.source);
-
-            return {
-              ...result,
-              content: description,
-              contentType: 'text', // Change to 'text' so cross-encoder will process it
+            // Generate text description for image
+            const description = await this.generateImageDescription(result.content);
+            
+            return { 
+              ...result, 
+              content: description, 
               originalContent: result.content,
               originalContentType: result.contentType,
               metadata: {
                 ...result.metadata,
-                originalImagePath: result.document.source,
+                originalImagePath: result.content,
                 generatedDescription: description
               }
             };
@@ -305,7 +304,7 @@ export class TextDerivedRerankingStrategy implements RerankingStrategy {
 
       // Step 2: Use cross-encoder reranking on the text descriptions
       const rerankedResults = await this.crossEncoderReranker.rerank(query, processedResults);
-
+      
       // Step 3: Restore original content for images
       return rerankedResults.map(result => {
         if ((result as any).originalContent && (result as any).originalContentType) {

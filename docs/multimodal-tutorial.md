@@ -105,28 +105,15 @@ raglite search "flowchart showing process"
 
 ```bash
 # Set multimodal defaults
-export RAG_MODE="multimodal"
 export RAG_EMBEDDING_MODEL="Xenova/clip-vit-base-patch32"
-export RAG_RERANKING_STRATEGY="text-derived"
+export RAG_BATCH_SIZE="8"
+export RAG_CHUNK_SIZE="300"
 
-# Ingest and search
-raglite ingest ./content/
+# Ingest and search with CLI flags
+raglite ingest ./content/ --mode multimodal --model Xenova/clip-vit-base-patch32
 raglite search "diagram"
 ```
 
-### Configuration File
-
-```javascript
-// raglite.config.js
-export const config = {
-  mode: 'multimodal',
-  embedding_model: 'Xenova/clip-vit-base-patch32',
-  reranking_strategy: 'text-derived',
-  chunk_size: 300,
-  chunk_overlap: 60,
-  batch_size: 8
-};
-```
 
 ## Processing Mixed Content
 
@@ -299,14 +286,20 @@ for (const dir of directories) {
 }
 ```
 
-### Content-Type Optimization
+### Content Organization Tips
+
+For optimal performance, organize your content thoughtfully:
 
 ```bash
-# Process only specific content types
-raglite ingest ./docs/ --mode multimodal --include "*.md,*.png,*.jpg"
+# Process text-heavy directories first
+raglite ingest ./docs/ --mode multimodal
 
-# Exclude large files that might cause memory issues
-raglite ingest ./content/ --mode multimodal --exclude "*.gif,*.webp"
+# Then add image collections separately
+raglite ingest ./images/ --mode multimodal
+
+# Use smaller batch sizes for memory-intensive processing
+export RAG_BATCH_SIZE="4"
+raglite ingest ./large-images/ --mode multimodal
 ```
 
 ## Troubleshooting
