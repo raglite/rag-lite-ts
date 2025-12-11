@@ -70,7 +70,7 @@ export interface RerankingInterface {
 export interface SearchOptions {
   top_k?: number;
   rerank?: boolean;
-  contentType?: string;
+  contentType?: 'text' | 'image' | 'combined';
 }
 
 // Core chunking interfaces

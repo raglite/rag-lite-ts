@@ -163,6 +163,12 @@ export async function runSearch(query: string, options: Record<string, any> = {}
         searchOptions.top_k = options['top-k'];
       }
 
+      // Set content type filter for search-level filtering
+      const contentTypeFilter = options['content-type'];
+      if (contentTypeFilter && contentTypeFilter !== 'all') {
+        searchOptions.contentType = contentTypeFilter as 'text' | 'image' | 'combined';
+      }
+
       // Phase 2: Disable reranking for image-to-image searches to preserve visual similarity
       let rerankingForciblyDisabled = false;
       if (isImage && embedder) {
@@ -203,18 +209,6 @@ export async function runSearch(query: string, options: Record<string, any> = {}
       }
       
       const searchTime = Date.now() - startTime;
-      
-      // Apply content type filter if specified
-      const contentTypeFilter = options['content-type'];
-      if (contentTypeFilter && contentTypeFilter !== 'all') {
-        const originalCount = results.length;
-        results = results.filter(r => r.contentType === contentTypeFilter);
-        
-        if (results.length < originalCount) {
-          console.log(`Filtered to ${results.length} ${contentTypeFilter} result${results.length === 1 ? '' : 's'} (from ${originalCount} total)`);
-          console.log('');
-        }
-      }
       
       // Display results
       if (results.length === 0) {

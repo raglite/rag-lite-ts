@@ -145,7 +145,7 @@ No additional configuration needed - the feature works automatically once you ha
 
 - [MCP Server Multimodal Guide](./mcp-server-multimodal-guide.md) - Complete guide to MCP server features
 - [Running Multiple MCP Server Instances](./mcp-server-multimodal-guide.md#running-multiple-mcp-server-instances) - Detailed multi-instance setup
-- [MCP Configuration Examples](../examples/mcp-server-config-examples.json) - Ready-to-use configuration examples
+- Ready-to-use configuration examples
 
 ## Summary
 

@@ -236,7 +236,7 @@ export async function runIngest(path: string, options: Record<string, any> = {})
         }
       );
 
-      const result = await pipeline.ingestPath(resolvedPath);
+      const result = await pipeline.ingestPath(resolvedPath, { mode: factoryOptions.mode });
 
       // Display final results
       console.log('\n' + '='.repeat(50));

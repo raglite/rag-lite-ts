@@ -381,15 +381,25 @@ export class IngestionPipeline {
     try {
       // Phase 1: File Discovery and Processing with Content-Type Detection
       console.log('\n--- Phase 1: File Discovery and Processing ---');
-      const fileResult = await discoverAndProcessFiles(path, options.fileOptions, this.pathManager);
+      const mode = options.mode || 'text';
+      const fileOptions = {
+        recursive: true,
+        maxFileSize: 10 * 1024 * 1024, // 10MB
+        ...options.fileOptions,
+        mode
+      };
+      const fileResult = await discoverAndProcessFiles(path, fileOptions, this.pathManager);
 
-      if (fileResult.documents.length === 0) {
+      // Additional filtering as fallback (should be minimal with mode-aware discovery)
+      const filteredResult = this.filterDocumentsByMode(fileResult, mode);
+
+      if (filteredResult.documents.length === 0) {
         console.log('No documents found to process');
         return {
           documentsProcessed: 0,
           chunksCreated: 0,
           embeddingsGenerated: 0,
-          documentErrors: fileResult.processingResult.errors.length,
+          documentErrors: filteredResult.processingResult.errors.length,
           embeddingErrors: 0,
           processingTimeMs: Date.now() - startTime,
           contentIds: []
@@ -397,7 +407,7 @@ export class IngestionPipeline {
       }
 
       // Content-type detection and routing
-      const contentTypeStats = this.analyzeContentTypes(fileResult.documents);
+      const contentTypeStats = this.analyzeContentTypes(filteredResult.documents);
       console.log(`📊 Content analysis: ${contentTypeStats.text} text, ${contentTypeStats.image} image, ${contentTypeStats.other} other files`);
 
       // Phase 2: Document Chunking with Content-Type Awareness
@@ -406,7 +416,7 @@ export class IngestionPipeline {
         chunkSize: config.chunk_size,
         chunkOverlap: config.chunk_overlap
       };
-      const chunkingResult = await this.chunkDocumentsWithContentTypes(fileResult.documents, effectiveChunkConfig, options.mode);
+      const chunkingResult = await this.chunkDocumentsWithContentTypes(filteredResult.documents, effectiveChunkConfig, options.mode);
 
       if (chunkingResult.totalChunks === 0) {
         console.log('No chunks created from documents');
@@ -440,10 +450,10 @@ export class IngestionPipeline {
       const processingTimeMs = endTime - startTime;
 
       const result: IngestionResult = {
-        documentsProcessed: fileResult.documents.length,
+        documentsProcessed: filteredResult.documents.length,
         chunksCreated: chunkingResult.totalChunks,
         embeddingsGenerated: embeddingResult.embeddings.length,
-        documentErrors: fileResult.processingResult.errors.length,
+        documentErrors: filteredResult.processingResult.errors.length,
         embeddingErrors: embeddingResult.errors,
         processingTimeMs,
         contentIds
@@ -770,9 +780,11 @@ export class IngestionPipeline {
   }
 
   /**
-   * Update vector index with new embeddings
+   * Update vector index with new embeddings (supports grouped content type storage)
    */
   private async updateVectorIndex(embeddings: EmbeddingResult[]): Promise<void> {
+    console.log('updateVectorIndex called with', embeddings.length, 'embeddings');
+
     if (embeddings.length === 0) {
       console.log('No embeddings to add to vector index');
       return;
@@ -781,12 +793,84 @@ export class IngestionPipeline {
     console.log(`Adding ${embeddings.length} vector${embeddings.length === 1 ? '' : 's'} to search index...`);
 
     try {
-      await this.indexManager.addVectors(embeddings);
+      // Group embeddings by content type for optimized storage
+      const groupedEmbeddings = embeddings.reduce(
+        (groups, embedding) => {
+          const contentType = embedding.contentType || 'text';
+          if (!groups[contentType]) {
+            groups[contentType] = [];
+          }
+          groups[contentType].push(embedding);
+          return groups;
+        },
+        {} as Record<string, EmbeddingResult[]>
+      );
+
+      const textEmbeddings = groupedEmbeddings.text || [];
+      const imageEmbeddings = groupedEmbeddings.image || [];
+
+      console.log(`Grouped: ${textEmbeddings.length} text, ${imageEmbeddings.length} image vectors`);
+
+      // Use grouped storage method if available, fallback to regular method
+      if ((this.indexManager as any).addGroupedEmbeddings) {
+        await (this.indexManager as any).addGroupedEmbeddings(textEmbeddings, imageEmbeddings);
+      } else {
+        await this.indexManager.addVectors(embeddings);
+      }
+
       console.log(`✓ Vector index updated successfully with ${embeddings.length} new vectors`);
     } catch (error) {
       console.error('Failed to update vector index:', error instanceof Error ? error.message : String(error));
       throw error;
     }
+  }
+
+  /**
+   * Filter documents based on ingestion mode to avoid processing incompatible content types
+   */
+  private filterDocumentsByMode(
+    fileResult: { documents: Document[]; discoveryResult: any; processingResult: any },
+    mode: 'text' | 'multimodal'
+  ): { documents: Document[]; discoveryResult: any; processingResult: any } {
+    if (mode === 'multimodal') {
+      // In multimodal mode, keep all documents
+      return fileResult;
+    }
+
+    // In text mode, filter out image documents
+    const filteredDocuments = fileResult.documents.filter(doc => {
+      const contentType = doc.metadata?.contentType || 'text';
+      const isCompatible = contentType === 'text' ||
+                          contentType.startsWith('text/') ||
+                          contentType === 'application/pdf' ||
+                          contentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+      if (!isCompatible) {
+        console.log(`⚠️ Skipping ${doc.source} (${contentType}) - not compatible with text mode`);
+      }
+
+      return isCompatible;
+    });
+
+    // Update processing result to reflect filtering
+    const filteredProcessingResult = {
+      ...fileResult.processingResult,
+      skippedFiles: [
+        ...(fileResult.processingResult.skippedFiles || []),
+        ...fileResult.documents
+          .filter(doc => !filteredDocuments.includes(doc))
+          .map(doc => ({
+            path: doc.source,
+            reason: `Content type not compatible with ${mode} mode`
+          }))
+      ]
+    };
+
+    return {
+      documents: filteredDocuments,
+      discoveryResult: fileResult.discoveryResult,
+      processingResult: filteredProcessingResult
+    };
   }
 
   /**

@@ -63,6 +63,8 @@ export interface FileProcessorOptions {
   recursive?: boolean;
   /** Maximum file size in bytes (default: 10MB) */
   maxFileSize?: number;
+  /** Processing mode to filter compatible files */
+  mode?: 'text' | 'multimodal';
 }
 
 /**
@@ -290,12 +292,22 @@ async function discoverFilesRecursive(
             // Check file size based on content type
             const stats = await fs.stat(fullPath);
             const contentType = getContentType(fullPath);
-            
+
+            // Filter by mode: skip incompatible content types
+            const mode = options.mode || 'text';
+            if (mode === 'text' && contentType === 'image') {
+              result.skipped.push({
+                path: fullPath,
+                reason: `Image files not supported in text mode. Use --mode multimodal for image processing.`
+              });
+              continue;
+            }
+
             // Different size limits for different content types
-            const maxSize = contentType === 'image' 
+            const maxSize = contentType === 'image'
               ? 50 * 1024 * 1024  // 50MB for images
               : (options.maxFileSize || 10 * 1024 * 1024); // 10MB for text files
-            
+
             if (stats.size > maxSize) {
               result.skipped.push({
                 path: fullPath,
@@ -362,12 +374,24 @@ export async function discoverFiles(
       }
 
       const contentType = getContentType(resolvedPath);
-      
+
+      // Filter by mode: skip incompatible content types
+      const mode = options.mode || 'text';
+      if (mode === 'text' && contentType === 'image') {
+        return {
+          files: [],
+          skipped: [{
+            path: resolvedPath,
+            reason: `Image files not supported in text mode. Use --mode multimodal for image processing.`
+          }]
+        };
+      }
+
       // Check file size based on content type
-      const maxSize = contentType === 'image' 
+      const maxSize = contentType === 'image'
         ? 50 * 1024 * 1024  // 50MB for images
         : (options.maxFileSize || 10 * 1024 * 1024); // 10MB for text files
-      
+
       if (stats.size > maxSize) {
         return {
           files: [],

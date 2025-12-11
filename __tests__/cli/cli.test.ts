@@ -345,7 +345,7 @@ test('should handle model mismatch correctly - STRICT', async () => {
 
             assert.strictEqual(firstIngest.exitCode, 0, 'First ingest must succeed');
 
-            const rebuildIngest = testCLI(['ingest', 'rebuild-test.md', '--model', 'Xenova/all-mpnet-base-v2', '--rebuild-if-needed'], 30000);
+            const rebuildIngest = testCLI(['ingest', 'rebuild-test.md', '--model', 'Xenova/all-mpnet-base-v2', '--rebuild-d'], 30000);
 
             if (rebuildIngest.exitCode !== 0) {
                 if (isGenuineEnvironmentIssue(rebuildIngest.stderr)) {
@@ -360,7 +360,7 @@ test('should handle model mismatch correctly - STRICT', async () => {
             
             const hasRebuildIndicator =
                 rebuildIngest.stdout.includes('Force rebuild enabled') ||
-                rebuildIngest.stdout.includes('rebuild-if-needed') ||
+                rebuildIngest.stdout.includes('rebuild-d') ||
                 rebuildIngest.stdout.includes('Removed old index');
 
             assert(hasRebuildIndicator, 'Rebuild output must show evidence of rebuild process');

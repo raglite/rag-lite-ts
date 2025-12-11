@@ -96,7 +96,7 @@ export class CrossModalSearchEngine extends SearchEngine {
     // Step 2: Perform base search with detected content type
     const baseResults = await this.search(query, {
       ...options,
-      contentType: queryContentType
+      contentType: queryContentType as 'text' | 'image' | 'combined'
     });
 
     // Step 3: Convert to cross-modal results with enhanced metadata

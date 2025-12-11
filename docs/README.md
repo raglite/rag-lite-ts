@@ -30,12 +30,6 @@ New to RAG-lite TS? Start with the [CLI Reference](cli-reference.md) for install
   - Performance optimization and troubleshooting
   - **NEW**: Complete guide for modern AI workflow integration
 
-- **[Migration Guide](unified-content-migration-guide.md)** - Upgrading to unified content system
-  - Backward compatibility and zero breaking changes
-  - New memory ingestion and content retrieval features
-  - Configuration updates and troubleshooting
-  - **NEW**: Seamless migration path for existing users
-
 - **[Configuration Guide](configuration.md)** - Advanced configuration options
   - Configuration file setup
   - Environment variables

@@ -402,4 +402,11 @@ export class VectorIndex {
       throw new Error(`Failed to resize index: ${error}`);
     }
   }
+
+  /**
+   * Get index options (for external access to configuration)
+   */
+  getOptions(): VectorIndexOptions {
+    return { ...this.options };
+  }
 }
