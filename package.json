@@ -1,33 +1,51 @@
 {
   "name": "rag-lite-ts",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "Local-first TypeScript retrieval engine with Chameleon Multimodal Architecture for semantic search over text and image content",
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/cjs/index.js",
+  "types": "./dist/cjs/index.d.ts",
   "bin": {
-    "raglite": "./dist/cli.js",
-    "raglite-mcp": "./dist/mcp-server.js"
+    "raglite": "./dist/esm/cli.js",
+    "raglite-mcp": "./dist/esm/mcp-server.js"
   },
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.ts",
+        "default": "./dist/cjs/index.js"
+      },
+      "types": "./dist/esm/index.d.ts"
     },
     "./mcp": {
-      "import": "./dist/mcp-server.js",
-      "types": "./dist/mcp-server.d.ts"
+      "import": {
+        "types": "./dist/esm/mcp-server.d.ts",
+        "default": "./dist/esm/mcp-server.js"
+      },
+      "require": {
+        "types": "./dist/cjs/mcp-server.d.ts",
+        "default": "./dist/cjs/mcp-server.js"
+      },
+      "types": "./dist/esm/mcp-server.d.ts"
     }
   },
   "files": [
-    "dist/**/*.js",
-    "dist/**/*.d.ts",
+    "dist/esm/**/*.js",
+    "dist/cjs/**/*.js",
+    "dist/esm/**/*.d.ts",
+    "dist/cjs/**/*.d.ts",
     "!dist/**/*.map",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "npm run build:esm && npm run build:cjs",
+    "build:esm": "tsc -p tsconfig.esm.json",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
     "build:test": "tsc --project tsconfig.test.json",
     "clean": "rimraf dist",
     "dev": "tsc --watch",

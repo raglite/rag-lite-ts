@@ -109,7 +109,8 @@ export class VectorIndex {
           };
           
           try {
-            const { loadHnswlib } = await import('hnswlib-wasm/dist/hnswlib.js');
+            const hnswlibModule = await import('hnswlib-wasm/dist/hnswlib.js') as any;
+            const { loadHnswlib } = hnswlibModule;
             this.hnswlib = await loadHnswlib();
           } finally {
             // Restore original output streams
@@ -184,7 +185,8 @@ export class VectorIndex {
         };
         
         try {
-          const { loadHnswlib } = await import('hnswlib-wasm/dist/hnswlib.js');
+          const hnswlibModule = await import('hnswlib-wasm/dist/hnswlib.js') as any;
+          const { loadHnswlib } = hnswlibModule;
           this.hnswlib = await loadHnswlib();
         } finally {
           // Restore original output streams

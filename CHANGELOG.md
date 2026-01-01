@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.2.0] - 2026-01-01
+
+### Features
+- **Dual Package Support (ESM + CommonJS)**: Package now supports both ESM (`import`) and CommonJS (`require`) import styles
+  - Separate builds for ESM (`dist/esm/`) and CommonJS (`dist/cjs/`)
+  - Automatic module resolution via `package.json` `exports` field
+  - Node.js automatically selects the correct format based on import style
+  - Both import styles fully tested and verified
+
+### Improvements
+- **Build System**: Enhanced build process with separate TypeScript configurations for ESM and CommonJS
+  - `tsconfig.esm.json` for ESM builds
+  - `tsconfig.cjs.json` for CommonJS builds (using NodeNext module system)
+  - Updated build scripts: `build:esm` and `build:cjs` for individual builds
+- **Package Configuration**: Updated `package.json` exports field for proper dual package routing
+  - Supports both `import` and `require` conditions
+  - Separate type definitions for each format
+  - Maintains backward compatibility
+
+### Technical Details
+- Uses `NodeNext` module system for CommonJS build to handle `import.meta` usage
+- Type assertions added for dynamic imports to ensure compatibility
+- Both builds output successfully and are fully functional
+
 ## [2.1.1] - 2025-12-11
 
 Improved multimodal search for more accurate, content-type–specific results

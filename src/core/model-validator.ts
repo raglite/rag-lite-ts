@@ -167,7 +167,7 @@ export class ModelValidator {
       
       // Fallback: try to detect from package.json import
       try {
-        const packageInfo = await import('@huggingface/transformers/package.json');
+        const packageInfo = await import('@huggingface/transformers/package.json' + '') as any;
         if (packageInfo.version) {
           this.currentTransformersVersion = packageInfo.version;
           return packageInfo.version;
