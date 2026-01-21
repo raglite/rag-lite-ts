@@ -17,7 +17,7 @@ raglite search "test" --top-k 5
 find ./docs/ -name "*.jpg" -o -name "*.png" -o -name "*.gif" -o -name "*.webp"
 
 # Re-ingest with multimodal mode
-raglite ingest ./docs/ --mode multimodal --rebuild-if-needed
+raglite ingest ./docs/ --mode multimodal --force-rebuild
 ```
 
 ### Model Not Supported
@@ -38,7 +38,7 @@ raglite ingest ./docs/ --mode multimodal --no-rerank
 ### Cross-Modal Search Not Working
 ```bash
 # Ensure multimodal mode was used
-raglite ingest ./docs/ --mode multimodal --rebuild-if-needed
+raglite ingest ./docs/ --mode multimodal --force-rebuild
 
 # Use descriptive queries
 raglite search "red sports car" --content-type image

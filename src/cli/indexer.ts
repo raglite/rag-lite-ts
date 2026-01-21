@@ -97,7 +97,7 @@ async function validateModeConfiguration(options: Record<string, any>): Promise<
  */
 export async function runIngest(path: string, options: Record<string, any> = {}): Promise<void> {
   try {
-    // Handle --rebuild-if-needed flag immediately to prevent dimension mismatch error
+    // Handle --force-rebuild flag immediately to prevent dimension mismatch errors
     // Validate path exists
     const resolvedPath = resolve(path);
     if (!existsSync(resolvedPath)) {
@@ -186,21 +186,9 @@ export async function runIngest(path: string, options: Record<string, any> = {})
     }
 
 
-    if (options.rebuildIfNeeded) {
+    if (options.forceRebuild) {
       factoryOptions.forceRebuild = true;
-      console.log('Force rebuild enabled due to rebuildIfNeeded option');
-
-      // Delete old index file immediately to prevent dimension mismatch errors
-      const indexPath = process.env.RAG_INDEX_FILE || './vector-index.bin';
-      const { existsSync, unlinkSync } = await import('fs');
-      if (existsSync(indexPath)) {
-        try {
-          unlinkSync(indexPath);
-          console.log('🗑️ Removed old index file to prevent dimension mismatch');
-        } catch (error) {
-          console.warn(`⚠️ Could not remove old index file: ${error}`);
-        }
-      }
+      console.log('Force rebuild enabled (--force-rebuild)');
     }
 
     // Validate mode-specific model and strategy combinations
@@ -208,6 +196,44 @@ export async function runIngest(path: string, options: Record<string, any> = {})
 
     const dbPath = process.env.RAG_DB_FILE || './db.sqlite';
     const indexPath = process.env.RAG_INDEX_FILE || './vector-index.bin';
+
+    // --force-rebuild: Always delete DB (and sidecars) and index to guarantee a clean rebuild.
+    if (options.forceRebuild) {
+      try {
+        const { existsSync: fsExistsSync, unlinkSync } = await import('fs');
+        console.log('🗑️ Deleting existing database and index to perform a clean rebuild...');
+
+        // Remove WAL/SHM if present (common on SQLite with WAL journaling).
+        const sidecars = [`${dbPath}-wal`, `${dbPath}-shm`];
+        for (const p of sidecars) {
+          if (fsExistsSync(p)) {
+            try {
+              unlinkSync(p);
+            } catch (e) {
+              console.warn(`⚠️ Could not remove SQLite sidecar file (${p}):`, e);
+            }
+          }
+        }
+
+        if (fsExistsSync(dbPath)) {
+          try {
+            unlinkSync(dbPath);
+          } catch (e) {
+            console.warn(`⚠️ Could not remove database file (${dbPath}):`, e);
+          }
+        }
+
+        if (fsExistsSync(indexPath)) {
+          try {
+            unlinkSync(indexPath);
+          } catch (e) {
+            console.warn(`⚠️ Could not remove index file (${indexPath}):`, e);
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️ Could not delete existing database/index for clean rebuild:', error instanceof Error ? error.message : String(error));
+      }
+    }
 
     // Setup graceful cleanup
     setupCLICleanup(dbPath);
@@ -262,6 +288,21 @@ export async function runIngest(path: string, options: Record<string, any> = {})
       }
 
       console.log('\nIngestion completed successfully!');
+
+      // Run VACUUM to compact the SQLite database after ingestion
+      try {
+        const { openDatabase } = await import('../core/db.js');
+        const vacuumDb = await openDatabase(dbPath);
+        try {
+          console.log('Running VACUUM to optimize database size...');
+          await vacuumDb.run('VACUUM');
+          console.log('VACUUM completed successfully.');
+        } finally {
+          await vacuumDb.close();
+        }
+      } catch (vacuumError) {
+        console.warn('⚠️  VACUUM operation failed or was skipped:', vacuumError instanceof Error ? vacuumError.message : String(vacuumError));
+      }
 
       // Display mode-specific information
       const mode = options.mode || 'text';
@@ -453,6 +494,21 @@ export async function runRebuild(): Promise<void> {
         console.log('All embeddings have been regenerated with the current model.');
         console.log('');
         console.log('You can now search your documents using: raglite search "your query"');
+
+        // Run VACUUM to compact the SQLite database after rebuild
+        try {
+          const { openDatabase } = await import('../core/db.js');
+          const vacuumDb = await openDatabase(dbPath);
+          try {
+            console.log('Running VACUUM to optimize database size after rebuild...');
+            await vacuumDb.run('VACUUM');
+            console.log('VACUUM completed successfully.');
+          } finally {
+            await vacuumDb.close();
+          }
+        } catch (vacuumError) {
+          console.warn('⚠️  VACUUM operation failed or was skipped:', vacuumError instanceof Error ? vacuumError.message : String(vacuumError));
+        }
 
       } finally {
         await db.close();

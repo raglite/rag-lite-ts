@@ -64,6 +64,10 @@ coverage/
 tmp/
 temp/
 
+# UI build outputs
+ui/frontend/dist/
+ui/backend/dist/
+
 # Test data should be tracked in git
 # test-data/ - keeping this tracked for tests
 

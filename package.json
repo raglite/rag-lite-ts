@@ -11,6 +11,7 @@
   },
   "exports": {
     ".": {
+      "types": "./dist/esm/index.d.ts",
       "import": {
         "types": "./dist/esm/index.d.ts",
         "default": "./dist/esm/index.js"
@@ -18,10 +19,10 @@
       "require": {
         "types": "./dist/cjs/index.d.ts",
         "default": "./dist/cjs/index.js"
-      },
-      "types": "./dist/esm/index.d.ts"
+      }
     },
     "./mcp": {
+      "types": "./dist/esm/mcp-server.d.ts",
       "import": {
         "types": "./dist/esm/mcp-server.d.ts",
         "default": "./dist/esm/mcp-server.js"
@@ -29,8 +30,7 @@
       "require": {
         "types": "./dist/cjs/mcp-server.d.ts",
         "default": "./dist/cjs/mcp-server.js"
-      },
-      "types": "./dist/esm/mcp-server.d.ts"
+      }
     }
   },
   "files": [

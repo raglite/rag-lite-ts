@@ -342,7 +342,7 @@ raglite ingest ./images/batch2/ --mode multimodal
 **Solution:**
 ```bash
 # Rebuild with multimodal mode
-raglite ingest ./content/ --mode multimodal --rebuild-if-needed
+raglite ingest ./content/ --mode multimodal --force-rebuild
 ```
 
 #### "No image descriptions generated"

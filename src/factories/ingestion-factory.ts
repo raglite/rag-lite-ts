@@ -367,8 +367,7 @@ export class IngestionFactory {
       if (error instanceof Error && (
         error.message.includes('Model mismatch') || 
         error.message.includes('Mode mismatch') ||
-        error.message.includes('--force-rebuild') ||
-        error.message.includes('--rebuild-if-needed')
+        error.message.includes('--force-rebuild')
       )) {
         throw error; // Re-throw custom validation errors as-is
       }
@@ -458,13 +457,10 @@ export class IngestionFactory {
               `❌ Model mismatch: Database is configured for '${existingSystemInfo.modelName}', but '${effectiveModel}' was requested.`,
               '',
               '🛠️  How to fix this:',
-              '   1. Use --force-rebuild to change models:',
+              '   1. Use --force-rebuild to rebuild from scratch:',
               '      raglite ingest <path> --model ' + effectiveModel + ' --force-rebuild',
               '',
-              '   2. Or use --rebuild-if-needed for automatic handling:',
-              '      raglite ingest <path> --model ' + effectiveModel + ' --rebuild-if-needed',
-              '',
-              '   3. Or continue using the existing model:',
+              '   2. Or continue using the existing model:',
               '      raglite ingest <path>  # Uses ' + existingSystemInfo.modelName,
               '',
               '🔍 Model switching requires rebuilding the vector index because different models',

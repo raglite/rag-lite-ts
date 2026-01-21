@@ -45,7 +45,7 @@ raglite ingest <path> [options]
 #### Options
 - `--model <name>`: Embedding model to use
 - `--mode <mode>`: Processing mode (`text` or `multimodal`)
-- `--rebuild-if-needed`: Auto-rebuild if model mismatch detected ⚠️ **Rebuilds entire index**
+- `--force-rebuild`: ⚠️ **DESTRUCTIVE** — Wipe DB+index and rebuild from scratch
 - `--path-strategy <strategy>`: Path storage strategy (`relative` or `absolute`)
 - `--path-base <path>`: Base directory for relative paths
 - `--db <path>`: Database file path
@@ -104,8 +104,8 @@ raglite ingest ./README.md
 # Use higher quality model
 raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2
 
-# Auto-rebuild if switching models (WARNING: rebuilds entire index)
-raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2 --rebuild-if-needed
+# Force rebuild (WARNING: wipes DB+index and rebuilds from scratch)
+raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2 --force-rebuild
 ```
 
 **Multimodal processing:**
@@ -304,8 +304,8 @@ raglite search "error handling patterns" --top-k 15 --rerank
 # Start with default model
 raglite ingest ./docs/
 
-# Switch to higher quality model (rebuilds automatically)
-raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2 --rebuild-if-needed
+# Switch to higher quality model (DESTRUCTIVE: wipes DB+index and rebuilds from scratch)
+raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2 --force-rebuild
 
 # Search uses the model from ingestion automatically
 raglite search "complex query"

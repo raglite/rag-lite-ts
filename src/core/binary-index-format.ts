@@ -43,10 +43,13 @@ export class BinaryIndexFormat {
    * @param data Index data to serialize
    */
   static async save(indexPath: string, data: BinaryIndexData): Promise<void> {
-    // Calculate total size
+    // Use actual vector count to ensure accurate file size
+    const actualVectorCount = data.vectors.length;
+    
+    // Calculate total size based on actual vectors
     const headerSize = 24; // 6 uint32 fields
     const vectorSize = 4 + (data.dimensions * 4); // id + vector
-    const totalSize = headerSize + (data.currentSize * vectorSize);
+    const totalSize = headerSize + (actualVectorCount * vectorSize);
     
     const buffer = new ArrayBuffer(totalSize);
     const view = new DataView(buffer);
@@ -59,7 +62,8 @@ export class BinaryIndexFormat {
     view.setUint32(offset, data.M, true); offset += 4;
     view.setUint32(offset, data.efConstruction, true); offset += 4;
     view.setUint32(offset, data.seed, true); offset += 4;
-    view.setUint32(offset, data.currentSize, true); offset += 4;
+    // Write actual vector count in header
+    view.setUint32(offset, actualVectorCount, true); offset += 4;
     
     // Write vectors
     for (const item of data.vectors) {

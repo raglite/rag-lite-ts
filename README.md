@@ -130,8 +130,11 @@ raglite search "API documentation" --top-k 10 --rerank
 ### Using Different Models
 
 ```bash
-# Use higher quality model (auto-rebuilds if needed)
-raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2 --rebuild-if-needed
+# Use higher quality model
+raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2
+
+# Switch models or refresh your data (DESTRUCTIVE: wipes DB+index and rebuilds from scratch)
+raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2 --force-rebuild
 
 # Search automatically uses the correct model
 raglite search "complex query"

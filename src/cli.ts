@@ -8,8 +8,17 @@ import { EXIT_CODES, ConfigurationError } from './core/config.js';
 // Get package.json for version info
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const packageJsonPath = join(__dirname, '..', 'package.json');
-const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+// When built, CLI is at dist/esm/cli.js, so go up two levels to root
+// When running from source, CLI is at src/cli.ts, so go up one level to root
+const packageJsonPath = join(__dirname, '..', '..', 'package.json');
+let packageJson: any;
+try {
+  packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+} catch {
+  // Fallback: try one level up (for source execution)
+  const fallbackPath = join(__dirname, '..', 'package.json');
+  packageJson = JSON.parse(readFileSync(fallbackPath, 'utf-8'));
+}
 
 /**
  * Display version information
@@ -32,6 +41,7 @@ Usage:
 Commands:
   ingest <path>     Ingest documents from file or directory
   search <query>    Search indexed documents (text or image)
+  ui                Launch the web interface
   rebuild           Rebuild the vector index
   version           Show version information
   help              Show this help message
@@ -47,6 +57,7 @@ Examples:
   raglite search "red car" --content-type image  # Search only image results
   raglite search ./photo.jpg       # Search with image (multimodal mode only)
   raglite search ./image.png --top-k 5  # Find similar images
+  raglite ui                       # Launch web interface
 
   raglite rebuild                  # Rebuild the entire index
 
@@ -59,7 +70,7 @@ Options for search:
 Options for ingest:
   --model <name>       Use specific embedding model
   --mode <mode>        Processing mode: 'text' (default) or 'multimodal'
-  --rebuild-if-needed  Automatically rebuild if model mismatch detected (WARNING: rebuilds entire index)
+  --force-rebuild      Wipe DB+index and rebuild from scratch (DESTRUCTIVE)
   --path-strategy <strategy>  Path storage strategy: 'relative' (default) or 'absolute'
   --path-base <path>   Base directory for relative paths (defaults to current directory)
 
@@ -123,8 +134,8 @@ function parseArgs(): {
         }
       } else if (optionName === 'no-rerank') {
         options.rerank = false;
-      } else if (optionName === 'rebuild-if-needed') {
-        options.rebuildIfNeeded = true;
+      } else if (optionName === 'force-rebuild') {
+        options.forceRebuild = true;
       } else if (optionName === 'help') {
         return { command: 'help', args: [], options: {} };
       } else if (optionName === 'version') {
@@ -179,7 +190,7 @@ function validateArgs(command: string, args: string[], options: Record<string, a
         console.error('Options:');
         console.error('  --model <name>         Use specific embedding model');
         console.error('  --mode <mode>          Processing mode: text (default) or multimodal');
-        console.error('  --rebuild-if-needed    Automatically rebuild if model mismatch detected');
+        console.error('  --force-rebuild        Wipe DB+index and rebuild from scratch (DESTRUCTIVE)');
         console.error('');
         console.error('The path can be either a file (.md or .txt) or a directory.');
         process.exit(EXIT_CODES.INVALID_ARGUMENTS);
@@ -213,6 +224,10 @@ function validateArgs(command: string, args: string[], options: Record<string, a
       break;
 
     case 'rebuild':
+      // No arguments required
+      break;
+
+    case 'ui':
       // No arguments required
       break;
 
@@ -450,6 +465,11 @@ async function main(): Promise<void> {
       case 'rebuild':
         const { runRebuild } = await import('./cli/indexer.js');
         await runRebuild();
+        break;
+
+      case 'ui':
+        const { runUI } = await import('./cli/ui-server.js');
+        await runUI(options);
         break;
 
       default:

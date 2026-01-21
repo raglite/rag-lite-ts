@@ -992,5 +992,5 @@ The key is to wait for the right tools (CLAP in transformers.js), then implement
 
 ---
 
-*Last Updated: January 2025*  
+*Last Updated: October 2025*  
 *Status: Living document - will be updated as plans evolve*

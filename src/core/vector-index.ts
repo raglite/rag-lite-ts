@@ -236,10 +236,37 @@ export class VectorIndex {
       // Clear and repopulate vector storage
       this.vectorStorage.clear();
       
-      // Add all stored vectors to HNSW index
-      for (const item of data.vectors) {
-        this.index.addPoint(item.vector, item.id, false);
-        this.vectorStorage.set(item.id, item.vector);
+      // Add all stored vectors to HNSW index in batches to reduce memory pressure
+      const batchSize = 1000; // Process 1000 vectors at a time
+      const totalVectors = data.vectors.length;
+      console.log(`Loading ${totalVectors} vectors in batches of ${batchSize}...`);
+      
+      for (let i = 0; i < totalVectors; i += batchSize) {
+        const batch = data.vectors.slice(i, i + batchSize);
+        for (const item of batch) {
+          try {
+            this.index.addPoint(item.vector, item.id, false);
+            this.vectorStorage.set(item.id, item.vector);
+          } catch (error: any) {
+            // Check if it's a memory limit error
+            if (error?.message?.includes('Cannot enlarge memory') || 
+                error?.message?.includes('memory') ||
+                (error?.name === 'WebAssembly.Exception' && error?.message?.includes('memory'))) {
+              throw new Error(
+                `WebAssembly memory limit exceeded while loading vector index. ` +
+                `Index contains ${totalVectors} vectors which requires more than 2GB of memory. ` +
+                `Consider: 1) Rebuilding the index with fewer vectors, 2) Using a smaller embedding model, ` +
+                `3) Splitting your data into multiple smaller indexes, or 4) Increasing Node.js memory with --max-old-space-size=4096`
+              );
+            }
+            throw error;
+          }
+        }
+        
+        // Log progress for large indexes
+        if (totalVectors > 10000 && (i + batchSize) % 10000 === 0) {
+          console.log(`  Loaded ${Math.min(i + batchSize, totalVectors)}/${totalVectors} vectors...`);
+        }
       }
       
       this.currentSize = data.currentSize;
@@ -264,6 +291,15 @@ export class VectorIndex {
         vector
       }));
       
+      // Use actual vector count from storage to ensure accuracy
+      const actualSize = vectors.length;
+      
+      // Update currentSize to match actual storage
+      if (actualSize !== this.currentSize) {
+        console.log(`⚠️  Size mismatch: currentSize=${this.currentSize}, vectorStorage.size=${actualSize}. Using actual size.`);
+        this.currentSize = actualSize;
+      }
+      
       // Save to binary format
       await BinaryIndexFormat.save(this.indexPath, {
         dimensions: this.options.dimensions,
@@ -271,11 +307,11 @@ export class VectorIndex {
         M: this.options.M || 16,
         efConstruction: this.options.efConstruction || 200,
         seed: this.options.seed || 100,
-        currentSize: this.currentSize,
+        currentSize: actualSize,
         vectors
       });
       
-      console.log(`✓ Saved HNSW index with ${this.currentSize} vectors to ${this.indexPath}`);
+      console.log(`✓ Saved HNSW index with ${actualSize} vectors (${(actualSize * this.options.dimensions * 4 / 1024).toFixed(2)} KB of vector data) to ${this.indexPath}`);
     } catch (error) {
       throw new Error(`Failed to save index to ${this.indexPath}: ${error}`);
     }

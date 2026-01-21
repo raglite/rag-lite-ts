@@ -148,15 +148,15 @@ raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2
 
 **Switch to high-quality model:**
 ```bash
-# Automatically rebuilds index if needed
-raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2 --rebuild-if-needed
+# DESTRUCTIVE: wipes DB+index and rebuilds from scratch
+raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2 --force-rebuild
 raglite search "complex query"  # Uses MPNet automatically
 ```
 
 **Switch back to fast model:**
 ```bash
-# Automatically rebuilds index if needed
-raglite ingest ./docs/ --model sentence-transformers/all-MiniLM-L6-v2 --rebuild-if-needed
+# DESTRUCTIVE: wipes DB+index and rebuilds from scratch
+raglite ingest ./docs/ --model sentence-transformers/all-MiniLM-L6-v2 --force-rebuild
 raglite search "simple query"  # Uses MiniLM automatically
 ```
 

@@ -537,11 +537,11 @@ This additional content ensures we have enough text to create multiple chunks an
         }
     });
 
-    test('should handle --rebuild-if-needed flag with search gracefully', () => {
-        const result = testCLI(['search', 'test', '--rebuild-if-needed']);
+    test('should handle --force-rebuild flag with search gracefully', () => {
+        const result = testCLI(['search', 'test', '--force-rebuild']);
 
         assert.notEqual(result.exitCode, 0, 'Should fail due to no database');
-        assert(!result.stderr.includes('rebuild-if-needed'), 'Should not complain about rebuild flag');
+        assert(!result.stderr.includes('force-rebuild'), 'Should not complain about rebuild flag');
         assert(result.stderr.includes('No vector index found') || result.stderr.includes('database'), 'Should show database error');
     });
 
@@ -658,8 +658,8 @@ More content to create multiple chunks and verify the configuration differences 
         }
     });
 
-    test('should handle --rebuild-if-needed with same model (no rebuild) - STRICT', async () => {
-        const testContent = '# No Rebuild Test\n\nThis document tests that --rebuild-if-needed does not rebuild when the model is the same.';
+    test('should handle --force-rebuild with same model (always rebuild) - STRICT', async () => {
+        const testContent = '# Force Rebuild Test\n\nThis document tests that --force-rebuild performs a clean rebuild even when the model is the same.';
         writeFileSync('no-rebuild-test.md', testContent);
 
         try {
@@ -675,7 +675,7 @@ More content to create multiple chunks and verify the configuration differences 
 
             assert.strictEqual(firstIngest.exitCode, 0, 'First ingest must succeed');
 
-            const secondIngest = testCLI(['ingest', 'no-rebuild-test.md', '--rebuild-if-needed'], 30000);
+            const secondIngest = testCLI(['ingest', 'no-rebuild-test.md', '--force-rebuild'], 30000);
 
             if (secondIngest.exitCode !== 0) {
                 if (isGenuineEnvironmentIssue(secondIngest.stderr)) {
@@ -687,7 +687,7 @@ More content to create multiple chunks and verify the configuration differences 
 
             assert.strictEqual(secondIngest.exitCode, 0, 'Second ingest must succeed');
 
-            console.log('✅ STRICT no-rebuild behavior verified');
+            console.log('✅ STRICT force-rebuild behavior verified');
 
         } finally {
             await afterTest();
@@ -711,7 +711,7 @@ More content to create multiple chunks and verify the configuration differences 
 
             assert.strictEqual(firstIngest.exitCode, 0, 'First ingest must succeed');
 
-            const rebuildIngest = testCLI(['ingest', 'metadata-test.md', '--model', 'Xenova/all-mpnet-base-v2', '--rebuild-if-needed'], 30000);
+            const rebuildIngest = testCLI(['ingest', 'metadata-test.md', '--model', 'Xenova/all-mpnet-base-v2', '--force-rebuild'], 30000);
 
             if (rebuildIngest.exitCode !== 0) {
                 if (isGenuineEnvironmentIssue(rebuildIngest.stderr)) {
@@ -842,7 +842,7 @@ The implementation of machine learning systems involves data preprocessing, mode
             assert.strictEqual(initialSearch.exitCode, 0, 'Initial search must succeed');
             assert(initialSearch.stdout.includes('Found') || initialSearch.stdout.includes('result'), 'Initial search must return results');
 
-            const modelSwitch = testCLI(['ingest', 'integration-workflow-test.md', '--model', 'Xenova/all-mpnet-base-v2', '--rebuild-if-needed'], 30000);
+            const modelSwitch = testCLI(['ingest', 'integration-workflow-test.md', '--model', 'Xenova/all-mpnet-base-v2', '--force-rebuild'], 30000);
 
             if (modelSwitch.exitCode !== 0) {
                 if (isGenuineEnvironmentIssue(modelSwitch.stderr)) {
@@ -1005,7 +1005,6 @@ The implementation of machine learning systems involves data preprocessing, mode
 
             const hasRebuildSuggestion =
                 mismatchResult.stderr.includes('rebuild') ||
-                mismatchResult.stderr.includes('--rebuild-if-needed') ||
                 mismatchResult.stderr.includes('--force-rebuild') ||
                 mismatchResult.stderr.includes('Use --force-rebuild to change models');
 

@@ -347,6 +347,16 @@ export class SearchFactory {
         enhancedMessage += '\n\n💡 Vector dimension mismatch detected.';
         enhancedMessage += '\n   The index was created with a different model. Rebuild the index:';
         enhancedMessage += '\n   raglite ingest <directory> --force-rebuild';
+      } else if (error.message.includes('Cannot enlarge memory') || 
+                 error.message.includes('WebAssembly memory limit') ||
+                 error.message.includes('memory limit exceeded')) {
+        enhancedMessage += '\n\n💡 WebAssembly memory limit exceeded.';
+        enhancedMessage += '\n   Your vector index is too large for the 2GB WebAssembly memory limit.';
+        enhancedMessage += '\n   Solutions:';
+        enhancedMessage += '\n   1. Increase Node.js memory: node --max-old-space-size=4096 ...';
+        enhancedMessage += '\n   2. Split your data into smaller indexes';
+        enhancedMessage += '\n   3. Use a smaller embedding model (fewer dimensions)';
+        enhancedMessage += '\n   4. Rebuild the index with fewer vectors';
       }
 
       return new Error(enhancedMessage);

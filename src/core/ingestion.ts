@@ -446,6 +446,10 @@ export class IngestionPipeline {
       console.log('\n--- Phase 5: Vector Index Updates ---');
       await this.updateVectorIndex(embeddingResult.embeddings);
 
+      // Final save to ensure all vectors are persisted
+      console.log('Performing final index save...');
+      await this.indexManager.saveIndex();
+
       const endTime = Date.now();
       const processingTimeMs = endTime - startTime;
 

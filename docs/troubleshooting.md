@@ -87,8 +87,8 @@ Run 'raglite rebuild' to rebuild the index with the new model.
 # Rebuild index with new model
 raglite rebuild
 
-# Or use CLI flag to auto-rebuild
-raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2 --rebuild-if-needed
+# Or wipe DB+index and rebuild from scratch (DESTRUCTIVE)
+raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2 --force-rebuild
 ```
 
 ### "No documents found in path"
@@ -187,7 +187,7 @@ Run 'raglite rebuild' to rebuild the index with the new mode.
 raglite rebuild
 
 # Or re-ingest with desired mode
-raglite ingest ./docs/ --mode multimodal --rebuild-if-needed
+raglite ingest ./docs/ --mode multimodal --force-rebuild
 
 # Check current mode
 sqlite3 db.sqlite "SELECT mode FROM system_info;"
@@ -365,7 +365,7 @@ sqlite3 db.sqlite ".schema system_info"
 **Solutions:**
 ```bash
 # Re-ingest with explicit mode to store configuration
-raglite ingest ./docs/ --mode multimodal --rebuild-if-needed
+raglite ingest ./docs/ --mode multimodal --force-rebuild
 
 # For existing databases, migrate to new schema
 raglite migrate-database --backup
@@ -499,8 +499,8 @@ raglite search "architecture documentation"    # Better for text
 # Test polymorphic runtime behavior
 raglite search "architecture" --debug  # Should show mode auto-detection
 
-# Ensure proper mode storage and detection
-raglite ingest ./docs/ --mode multimodal --rebuild-if-needed
+# Ensure proper mode storage and detection (DESTRUCTIVE: wipes DB+index and rebuilds from scratch)
+raglite ingest ./docs/ --mode multimodal --force-rebuild
 ```
 
 ### Reranking Strategy Problems
@@ -700,7 +700,7 @@ raglite rebuild
 raglite search "query" --rerank
 
 # Use higher quality model
-raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2 --rebuild-if-needed
+raglite ingest ./docs/ --model Xenova/all-mpnet-base-v2 --force-rebuild
 
 # Adjust preprocessing
 export RAG_PREPROCESSING_MODE="rich"
@@ -717,7 +717,7 @@ raglite search "query" --top-k 20
 **Solutions:**
 ```bash
 # Use faster model
-raglite ingest ./docs/ --model sentence-transformers/all-MiniLM-L6-v2 --rebuild-if-needed
+raglite ingest ./docs/ --model sentence-transformers/all-MiniLM-L6-v2 --force-rebuild
 
 # Disable reranking
 raglite search "query" --no-rerank
