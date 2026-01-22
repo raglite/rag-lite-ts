@@ -594,4 +594,57 @@ export class IndexManager {
             this.db = null;
         }
     }
+    /**
+     * Reset the vector index by clearing all vectors while keeping the index structure.
+     * This is a safer alternative to file deletion that avoids file locking issues on Windows.
+     *
+     * The reset operation:
+     * 1. Clears in-memory HNSW index
+     * 2. Clears in-memory vector storage and ID mappings
+     * 3. Reinitializes an empty index with the same parameters
+     * 4. Saves the empty index to disk (overwrites existing file)
+     *
+     * @returns Promise that resolves when reset is complete
+     */
+    async reset() {
+        console.log('🔄 Starting index reset...');
+        const startTime = Date.now();
+        try {
+            // Clear in-memory mappings
+            const previousVectorCount = this.vectorIndex.getCurrentCount();
+            this.hashToEmbeddingId.clear();
+            this.embeddingIdToHash.clear();
+            // Clear grouped embeddings if any
+            this.groupedEmbeddings = undefined;
+            // Clear specialized indexes if they exist
+            if (this.textIndex) {
+                this.textIndex = undefined;
+            }
+            if (this.imageIndex) {
+                this.imageIndex = undefined;
+            }
+            // Reinitialize the main vector index (this creates a fresh empty HNSW graph)
+            console.log('  Reinitializing HNSW index...');
+            await this.vectorIndex.initialize();
+            // Save the empty index to disk (this overwrites the existing file)
+            console.log('  Saving empty index to disk...');
+            await this.vectorIndex.saveIndex();
+            const resetTimeMs = Date.now() - startTime;
+            console.log(`✓ Index reset complete in ${resetTimeMs}ms`);
+            console.log(`  Vectors cleared: ${previousVectorCount}`);
+            console.log(`  Current vector count: ${this.vectorIndex.getCurrentCount()}`);
+        }
+        catch (error) {
+            const resetTimeMs = Date.now() - startTime;
+            console.error(`❌ Index reset failed after ${resetTimeMs}ms:`, error);
+            throw new Error(`Failed to reset index: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+    /**
+     * Check if the index has any vectors
+     * @returns true if the index contains vectors, false if empty
+     */
+    hasVectors() {
+        return this.vectorIndex.getCurrentCount() > 0;
+    }
 }

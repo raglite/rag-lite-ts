@@ -46,7 +46,7 @@ export class SearchService {
     const workingDir = SearchService.getWorkingDir();
     return path.resolve(workingDir, providedPath);
   }
-
+  
   // Validate that paths exist
   private static async validatePaths(dbPath: string, indexPath: string): Promise<void> {
     try {
@@ -62,6 +62,59 @@ export class SearchService {
     }
   }
 
+  /**
+   * Reset cached search engine instance.
+   * Used by ingestion force-rebuild to ensure no long-lived search
+   * connections are holding the SQLite database open.
+   * 
+   * This is critical for the reset approach to work properly:
+   * - Releases the SearchEngine's database connection
+   * - Releases the IndexManager's database connection
+   * - Allows KnowledgeBaseManager.reset() to operate without conflicts
+   */
+  static async reset(dbPath?: string, indexPath?: string): Promise<void> {
+    console.log('🔄 SearchService.reset() called');
+    
+    if (!this.instance) {
+      console.log('  No cached search engine instance to reset');
+      return;
+    }
+
+    // If specific paths are provided, only reset when they match
+    if (this.instancePaths && (dbPath || indexPath)) {
+      const resolvedDbPath = this.resolvePath(dbPath, this.getDefaultDbPath());
+      const resolvedIndexPath = this.resolvePath(indexPath, this.getDefaultIndexPath());
+
+      if (this.instancePaths.dbPath !== resolvedDbPath ||
+          this.instancePaths.indexPath !== resolvedIndexPath) {
+        console.log('  Paths do not match cached instance, skipping reset');
+        return;
+      }
+    }
+
+    console.log('  Cleaning up cached search engine instance...');
+    try {
+      if (typeof this.instance.cleanup === 'function') {
+        await this.instance.cleanup();
+        console.log('  ✓ Search engine cleanup completed');
+      }
+    } catch (error) {
+      console.warn('  ⚠️ Error during search engine cleanup:', error);
+    } finally {
+      this.instance = null;
+      this.instancePaths = null;
+      console.log('  ✓ Search engine instance cleared');
+    }
+  }
+
+  /**
+   * Check if there's an active search engine instance.
+   * Useful for debugging connection issues.
+   */
+  static hasActiveInstance(): boolean {
+    return this.instance !== null;
+  }
+  
   static async getSearchEngine(dbPath?: string, indexPath?: string) {
     const resolvedDbPath = this.resolvePath(dbPath, this.getDefaultDbPath());
     const resolvedIndexPath = this.resolvePath(indexPath, this.getDefaultIndexPath());
@@ -93,7 +146,7 @@ export class SearchService {
     
     return engine;
   }
-
+  
   static async search(query: string, options: any = {}) {
     const { dbPath, indexPath } = options;
     const engine = await this.getSearchEngine(dbPath, indexPath);

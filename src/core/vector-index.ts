@@ -388,7 +388,40 @@ export class VectorIndex {
   /**
    * Get current number of vectors in the index
    */
-  getCurrentCount(): number {
+  /**
+   * Reset the vector index to an empty state.
+   * Clears all vectors from the HNSW graph and vectorStorage.
+   * The index parameters (dimensions, M, efConstruction) are preserved.
+   */
+  async reset(): Promise<void> {
+    console.log('🔄 VectorIndex: Resetting to empty state...');
+    
+    // Clear the vector storage
+    const previousCount = this.vectorStorage.size;
+    this.vectorStorage.clear();
+    this.currentSize = 0;
+    
+    // Reinitialize the HNSW index (creates empty graph with same parameters)
+    if (this.hnswlib && this.index) {
+      // Create a new empty index with the same parameters
+      this.index = new this.hnswlib.HierarchicalNSW('cosine', this.options.dimensions, '');
+      
+      // Initialize with same capacity
+      this.index.initIndex(
+        this.options.maxElements,
+        this.options.M,
+        this.options.efConstruction,
+        this.options.seed
+      );
+      
+      // Set efSearch for query time
+      this.index.setEfSearch(50);
+    }
+    
+    console.log(`✓ VectorIndex reset: cleared ${previousCount} vectors`);
+  }
+
+    getCurrentCount(): number {
     return this.currentSize;
   }
 

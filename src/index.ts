@@ -186,8 +186,19 @@ export {
   insertChunk,
   upsertDocument,
   getChunksByEmbeddingIds,
-  type DatabaseConnection
+  resetDatabase,
+  hasDatabaseData,
+  type DatabaseConnection,
+  type DatabaseResetOptions,
+  type DatabaseResetResult
 } from './core/db.js';
+
+// Knowledge Base Manager (for reset operations)
+export {
+  KnowledgeBaseManager,
+  type KnowledgeBaseResetOptions,
+  type KnowledgeBaseResetResult
+} from './core/knowledge-base-manager.js';
 
 // Vector index management
 export { IndexManager } from './index-manager.js';

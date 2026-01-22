@@ -83,7 +83,9 @@ export { validateRerankingStrategy, validateRerankingConfig, getDefaultReranking
 // CORE INFRASTRUCTURE (FOR ADVANCED USERS)
 // =============================================================================
 // Database operations
-export { openDatabase, initializeSchema, insertDocument, insertChunk, upsertDocument, getChunksByEmbeddingIds } from './core/db.js';
+export { openDatabase, initializeSchema, insertDocument, insertChunk, upsertDocument, getChunksByEmbeddingIds, resetDatabase, hasDatabaseData } from './core/db.js';
+// Knowledge Base Manager (for reset operations)
+export { KnowledgeBaseManager } from './core/knowledge-base-manager.js';
 // Vector index management
 export { IndexManager } from './index-manager.js';
 export { VectorIndex } from './core/vector-index.js';

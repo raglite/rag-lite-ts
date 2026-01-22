@@ -892,3 +892,108 @@ export async function updateStorageStats(connection, stats) {
         throw new Error(`Failed to update storage stats: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 }
+/**
+ * Reset the database by deleting all data while keeping the schema intact.
+ * This is a safer alternative to file deletion that avoids file locking issues on Windows.
+ *
+ * This function:
+ * 1. Deletes all rows from chunks, documents, content_metadata tables
+ * 2. Optionally clears system_info (mode/model configuration)
+ * 3. Resets storage_stats counters
+ * 4. Optionally runs VACUUM to reclaim disk space
+ *
+ * @param connection - Database connection object
+ * @param options - Reset options
+ * @returns Promise resolving to reset result statistics
+ *
+ * @example
+ * ```typescript
+ * const db = await openDatabase('./db.sqlite');
+ * const result = await resetDatabase(db, { preserveSystemInfo: false });
+ * console.log(`Deleted ${result.documentsDeleted} documents and ${result.chunksDeleted} chunks`);
+ * ```
+ */
+export async function resetDatabase(connection, options = {}) {
+    const startTime = Date.now();
+    const { preserveSystemInfo = false, runVacuum = true } = options;
+    try {
+        console.log('🔄 Starting database reset...');
+        // Get counts before deletion for reporting
+        const docCountResult = await connection.get('SELECT COUNT(*) as count FROM documents');
+        const chunkCountResult = await connection.get('SELECT COUNT(*) as count FROM chunks');
+        const contentMetadataCountResult = await connection.get('SELECT COUNT(*) as count FROM content_metadata');
+        const documentsDeleted = docCountResult?.count || 0;
+        const chunksDeleted = chunkCountResult?.count || 0;
+        const contentMetadataDeleted = contentMetadataCountResult?.count || 0;
+        // Delete in order respecting foreign key constraints
+        // chunks → documents → content_metadata (chunks reference documents, documents reference content_metadata)
+        console.log('  Deleting chunks...');
+        await connection.run('DELETE FROM chunks');
+        console.log('  Deleting documents...');
+        await connection.run('DELETE FROM documents');
+        console.log('  Deleting content_metadata...');
+        await connection.run('DELETE FROM content_metadata');
+        // Reset storage_stats counters
+        console.log('  Resetting storage_stats...');
+        await connection.run(`
+      UPDATE storage_stats SET 
+        content_dir_files = 0,
+        content_dir_size = 0,
+        filesystem_refs = 0,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = 1
+    `);
+        // Optionally clear system_info
+        let systemInfoCleared = false;
+        if (!preserveSystemInfo) {
+            console.log('  Clearing system_info...');
+            await connection.run('DELETE FROM system_info WHERE id = 1');
+            systemInfoCleared = true;
+        }
+        else {
+            console.log('  Preserving system_info (mode/model configuration)');
+        }
+        // Run VACUUM to reclaim disk space
+        if (runVacuum) {
+            console.log('  Running VACUUM to reclaim disk space...');
+            await connection.run('VACUUM');
+        }
+        const resetTimeMs = Date.now() - startTime;
+        console.log(`✓ Database reset complete in ${resetTimeMs}ms`);
+        console.log(`  Documents deleted: ${documentsDeleted}`);
+        console.log(`  Chunks deleted: ${chunksDeleted}`);
+        console.log(`  Content metadata deleted: ${contentMetadataDeleted}`);
+        console.log(`  System info cleared: ${systemInfoCleared}`);
+        return {
+            success: true,
+            documentsDeleted,
+            chunksDeleted,
+            contentMetadataDeleted,
+            systemInfoCleared,
+            resetTimeMs
+        };
+    }
+    catch (error) {
+        const resetTimeMs = Date.now() - startTime;
+        console.error(`❌ Database reset failed after ${resetTimeMs}ms:`, error);
+        throw new Error(`Failed to reset database: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+}
+/**
+ * Check if the database has any data (documents, chunks, or content)
+ * Useful for determining if a reset is needed
+ *
+ * @param connection - Database connection object
+ * @returns Promise resolving to true if database has data, false if empty
+ */
+export async function hasDatabaseData(connection) {
+    try {
+        const docCount = await connection.get('SELECT COUNT(*) as count FROM documents');
+        const chunkCount = await connection.get('SELECT COUNT(*) as count FROM chunks');
+        return (docCount?.count || 0) > 0 || (chunkCount?.count || 0) > 0;
+    }
+    catch (error) {
+        // If tables don't exist, consider it empty
+        return false;
+    }
+}

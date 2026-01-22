@@ -1,5 +1,6 @@
-import { IngestionFactory, openDatabase } from '../../../../src/index.js';
+import { IngestionFactory, openDatabase, KnowledgeBaseManager } from '../../../../src/index.js';
 import { DatabaseConnectionManager } from '../../../../src/core/database-connection-manager.js';
+import { SearchService } from './searchService.js';
 import path from 'path';
 import fs from 'fs/promises';
 import { existsSync, unlinkSync } from 'fs';
@@ -85,14 +86,14 @@ export class IngestService {
   }
 
   /**
-   * ISSUE #5 FIX: Pre-flight check for force rebuild
-   * Verifies that database and index files can be deleted before attempting ingestion.
-   * Returns detailed status including which files exist and whether they can be deleted.
+   * Pre-flight check for force rebuild
+   * With the new reset approach, we no longer need to check if files can be deleted.
+   * Instead, we verify that the database exists and can be opened for reset.
+   * This is much more reliable than file deletion checks on Windows.
    */
   static async checkForceRebuildPreflight(): Promise<ForceRebuildPreflightResult> {
     const dbPath = this.getDbPath();
     const indexPath = this.getIndexPath();
-    const candidates = [`${dbPath}-wal`, `${dbPath}-shm`, dbPath, indexPath];
     
     const result: ForceRebuildPreflightResult = {
       canProceed: true,
@@ -101,55 +102,38 @@ export class IngestService {
       filesChecked: []
     };
 
-    for (const filePath of candidates) {
-      const fileCheck: ForceRebuildPreflightResult['filesChecked'][0] = {
-        path: filePath,
-        exists: false,
-        canDelete: true
-      };
+    // Check database file
+    const dbCheck: ForceRebuildPreflightResult['filesChecked'][0] = {
+      path: dbPath,
+      exists: existsSync(dbPath),
+      canDelete: true // With reset approach, we don't need to delete
+    };
+    result.filesChecked.push(dbCheck);
 
+    // Check index file
+    const indexCheck: ForceRebuildPreflightResult['filesChecked'][0] = {
+      path: indexPath,
+      exists: existsSync(indexPath),
+      canDelete: true // With reset approach, we don't need to delete
+    };
+    result.filesChecked.push(indexCheck);
+
+    // If database exists, verify we can open it
+    if (dbCheck.exists) {
       try {
-        // Check if file exists
-        await fs.access(filePath);
-        fileCheck.exists = true;
-
-        // Try to open file for writing to check if it's locked
-        // On Windows, this will fail if another process has the file open
-        const handle = await fs.open(filePath, 'r+');
-        await handle.close();
-        fileCheck.canDelete = true;
+        const db = await openDatabase(dbPath);
+        await db.close();
+        console.log('✓ Database is accessible for reset');
       } catch (e: any) {
-        if (e?.code === 'ENOENT') {
-          // File doesn't exist - that's fine for force rebuild
-          fileCheck.exists = false;
-          fileCheck.canDelete = true;
-        } else if (e?.code === 'EBUSY' || e?.code === 'EACCES' || e?.code === 'EPERM') {
-          // File is locked or permission denied
-          fileCheck.exists = true;
-          fileCheck.canDelete = false;
-          fileCheck.error = e.message;
-          result.canProceed = false;
-          result.errors.push(`Cannot delete ${path.basename(filePath)}: ${e.code} - File may be in use by another process`);
-        } else {
-          // Other error
-          fileCheck.exists = true;
-          fileCheck.canDelete = false;
-          fileCheck.error = e.message;
-          result.warnings.push(`Unknown error checking ${path.basename(filePath)}: ${e.message}`);
-        }
+        // Even if we can't open it, the reset might still work
+        // Just add a warning
+        result.warnings.push(`Note: Could not verify database access: ${e?.message || 'Unknown error'}`);
       }
-
-      result.filesChecked.push(fileCheck);
     }
 
-    // Add helpful message if we can't proceed
-    if (!result.canProceed) {
-      result.errors.push('');
-      result.errors.push('💡 To fix this:');
-      result.errors.push('   1. Close any other applications using the database');
-      result.errors.push('   2. Stop any running search operations');
-      result.errors.push('   3. Try again after a few seconds');
-    }
+    // With the reset approach, we can almost always proceed
+    // The actual reset will handle any issues gracefully
+    console.log('✓ Pre-flight check passed (using reset approach)');
 
     return result;
   }
@@ -190,77 +174,70 @@ export class IngestService {
   }
 
   /**
-   * ISSUE #2 & #4 FIX: Synchronous deletion with proper error handling
-   * Uses sync unlink like CLI does, and fails loudly on errors instead of silent continue.
+   * Reset the knowledge base using in-place reset instead of file deletion.
+   * This approach avoids EBUSY/EACCES errors on Windows by:
+   * 1. Clearing database tables instead of deleting the file
+   * 2. Reinitializing the vector index instead of deleting the file
    * 
-   * ⚠️ DESTRUCTIVE: wipe DB + index for a clean rebuild (CLI parity with `--force-rebuild`)
+   * This is the recommended approach for force rebuild operations in the UI
+   * where multiple components may hold connections to the database.
    */
-  private static async wipeDbAndIndex(): Promise<void> {
+  private static async resetKnowledgeBase(): Promise<void> {
     const dbPath = this.getDbPath();
     const indexPath = this.getIndexPath();
 
-    console.log('🗑️ Deleting existing database and index to perform a clean rebuild...');
+    console.log('🔄 Resetting knowledge base for clean rebuild...');
+    console.log('   (Using in-place reset to avoid file locking issues)');
 
-    // ISSUE #3: Close all connections BEFORE attempting deletion
-    await this.closeAllDatabaseConnections();
-
-    // Remove WAL/SHM if present (common on SQLite with WAL journaling).
-    const candidates = [`${dbPath}-wal`, `${dbPath}-shm`, dbPath, indexPath];
-    const deletionErrors: string[] = [];
-
-    for (const p of candidates) {
-      try {
-        // ISSUE #2 FIX: Use synchronous unlink like CLI does
-        // This ensures file is deleted before we proceed
-        if (existsSync(p)) {
-          unlinkSync(p);
-          console.log(`✓ Deleted: ${p}`);
-        }
-      } catch (e: any) {
-        // ISSUE #4 FIX: Fail loudly on deletion errors for critical files (db and index)
-        // Only silently skip if file doesn't exist
-        if (e?.code === 'ENOENT') {
-          // File doesn't exist - that's fine
-          continue;
-        }
-        
-        const errorMsg = `Could not remove file (${p}): ${e?.message || String(e)}`;
-        console.error(`❌ ${errorMsg}`);
-        
-        // For database and index files, this is a critical error
-        if (p === dbPath || p === indexPath) {
-          deletionErrors.push(errorMsg);
-        } else {
-          // For WAL/SHM files, warn but don't fail
-          console.warn(`⚠️ ${errorMsg}`);
-        }
-      }
+    // Before reset, close any cached search engines
+    // This ensures the SearchService doesn't hold stale connections
+    try {
+      await SearchService.reset(dbPath, indexPath);
+      console.log('✓ Search engine cache cleared');
+    } catch (error) {
+      console.warn('⚠️  Error while resetting search engine:', error);
     }
 
-    // ISSUE #4: If we couldn't delete critical files, throw an error
-    if (deletionErrors.length > 0) {
+    // Use KnowledgeBaseManager for coordinated reset
+    // This handles:
+    // - Closing managed connections
+    // - Clearing database tables (documents, chunks, content_metadata)
+    // - Reinitializing the vector index
+    // - Running VACUUM to reclaim space
+    try {
+      const result = await KnowledgeBaseManager.reset(dbPath, indexPath, {
+        preserveSystemInfo: false,  // Clear mode/model config for fresh start
+        runVacuum: true
+      });
+
+      console.log('✓ Knowledge base reset complete:');
+      console.log(`  Documents cleared: ${result.database.documentsDeleted}`);
+      console.log(`  Chunks cleared: ${result.database.chunksDeleted}`);
+      console.log(`  Vectors cleared: ${result.index.vectorsCleared}`);
+      console.log(`  Total time: ${result.totalTimeMs}ms`);
+
+      if (result.warnings.length > 0) {
+        console.warn('⚠️  Warnings during reset:');
+        result.warnings.forEach(w => console.warn(`  • ${w}`));
+      }
+    } catch (error: any) {
       const errorMessage = [
-        '❌ Force rebuild failed: Could not delete existing database/index files.',
+        '❌ Knowledge base reset failed.',
         '',
-        'Errors:',
-        ...deletionErrors.map(e => `  • ${e}`),
+        `Error: ${error?.message || String(error)}`,
         '',
         '🛠️ How to fix this:',
         '  1. Close any other applications using the database',
         '  2. Stop any running search operations in this UI',
         '  3. Wait a few seconds and try again',
-        '  4. On Windows, check Task Manager for processes locking the files',
         '',
-        '💡 Tip: The database may be locked by:',
-        '  • Active search queries',
-        '  • Another browser tab with this UI open',
-        '  • Background processes'
+        '💡 If the problem persists, try manually deleting:',
+        `  • ${dbPath}`,
+        `  • ${indexPath}`
       ].join('\n');
       
       throw new Error(errorMessage);
     }
-
-    console.log('✓ Database and index files deleted successfully');
   }
 
   /**
@@ -375,7 +352,7 @@ export class IngestService {
           
           // --forceRebuild (CLI parity): wipe DB+index BEFORE creating pipeline
           // ISSUES #2, #3, #4 FIX: Proper deletion with connection cleanup
-          await this.wipeDbAndIndex();
+          await this.resetKnowledgeBase();
         }
 
         const factoryOptions: any = {
@@ -743,7 +720,7 @@ export class IngestService {
         
         // --forceRebuild (CLI parity): wipe DB+index BEFORE creating pipeline
         // ISSUES #2, #3, #4 FIX: Proper deletion with connection cleanup
-        await this.wipeDbAndIndex();
+        await this.resetKnowledgeBase();
       }
 
       const factoryOptions: any = {
