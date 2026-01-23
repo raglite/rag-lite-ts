@@ -1,6 +1,10 @@
 import { SearchFactory } from '../../../../src/index.js';
 import path from 'path';
 import fs from 'fs/promises';
+import { createEmbedder } from '../../../../src/core/embedder-factory.js';
+import { supportsImages } from '../../../../src/core/universal-embedder.js';
+import { ModeDetectionService } from '../../../../src/core/mode-detection-service.js';
+import { DatabaseConnectionManager } from '../../../../src/core/database-connection-manager.js';
 
 export class SearchService {
   private static instance: any = null;
@@ -167,5 +171,76 @@ export class SearchService {
         mode: stats.mode
       }
     };
+  }
+
+  static async searchImage(imageFile: Express.Multer.File, options: any = {}) {
+    const { dbPath, indexPath } = options;
+    const resolvedDbPath = this.resolvePath(dbPath, this.getDefaultDbPath());
+    const resolvedIndexPath = this.resolvePath(indexPath, this.getDefaultIndexPath());
+    
+    // Validate paths
+    await this.validatePaths(resolvedDbPath, resolvedIndexPath);
+    
+    // Get system info to determine model
+    const db = await DatabaseConnectionManager.getConnection(resolvedDbPath);
+    const modeService = new ModeDetectionService(resolvedDbPath);
+    const systemInfo = await modeService.detectMode(db);
+    
+    // Check if model supports images
+    const embedder = await createEmbedder(systemInfo.modelName);
+    if (!supportsImages(embedder)) {
+      throw new Error(
+        `Image search requires a multimodal model (CLIP). ` +
+        `Current model: ${systemInfo.modelName} does not support image embedding. ` +
+        `Please re-run ingestion with a CLIP model (e.g., Xenova/clip-vit-base-patch32).`
+      );
+    }
+    
+    // Save uploaded image to temporary file
+    const tempDir = path.join(process.cwd(), '.raglite-temp');
+    await fs.mkdir(tempDir, { recursive: true }).catch(() => {});
+    const tempImagePath = path.join(tempDir, `search-${Date.now()}-${imageFile.originalname}`);
+    
+    try {
+      // Write image buffer to temp file
+      await fs.writeFile(tempImagePath, imageFile.buffer);
+      
+      // Embed the image
+      console.log(`Embedding image: ${imageFile.originalname}...`);
+      const imageEmbedding = await embedder.embedImage!(tempImagePath);
+      
+      // Get search engine
+      const engine = await this.getSearchEngine(dbPath, indexPath);
+      
+      // Search with the image embedding vector
+      // Disable reranking for image-to-image search (as per CLI behavior)
+      const searchOptions = {
+        top_k: options.topK || 10,
+        rerank: false, // Disabled for image search to preserve visual similarity
+        contentType: options.contentType || 'all'
+      };
+      
+      console.log('Searching with image embedding...');
+      const results = await engine.searchWithVector(imageEmbedding.vector, searchOptions);
+      
+      const stats = await engine.getStats();
+      
+      return {
+        results,
+        stats: {
+          totalChunks: stats.totalChunks,
+          rerankingEnabled: false, // Always false for image search
+          mode: stats.mode
+        }
+      };
+    } finally {
+      // Clean up temp file
+      try {
+        await fs.unlink(tempImagePath);
+      } catch (err) {
+        // Ignore cleanup errors
+        console.warn(`Failed to clean up temp image file: ${tempImagePath}`, err);
+      }
+    }
   }
 }

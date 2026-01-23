@@ -80,7 +80,7 @@ export class IndexManager {
       }
 
       this.isInitialized = true;
-      const vectorCount = this.vectorIndex.getCurrentCount();
+      const vectorCount = await this.vectorIndex.getCurrentCount();
       console.log(`Index manager initialized with ${vectorCount} vectors${this.textIndex && this.imageIndex ? ' (multi-graph mode)' : ''}`);
     } catch (error) {
       throw new Error(`Failed to initialize index manager: ${error}`);
@@ -171,19 +171,20 @@ export class IndexManager {
       }));
 
       // Check if we need to resize the index before adding
-      const currentCount = this.vectorIndex.getCurrentCount();
-      const newCount = currentCount + vectors.length;
+      const initialCount = await this.vectorIndex.getCurrentCount();
+      const newCount = initialCount + vectors.length;
       const currentCapacity = 100000; // This should match the initial capacity
 
       if (newCount > currentCapacity * 0.9) {
         const newCapacity = Math.ceil(newCount * 1.5);
         console.log(`Resizing index from ${currentCapacity} to ${newCapacity} to accommodate new vectors`);
-        this.vectorIndex.resizeIndex(newCapacity);
+        await this.vectorIndex.resizeIndex(newCapacity);
       }
 
       // Add vectors incrementally (this is the key requirement - no rebuild needed)
-      this.vectorIndex.addVectors(vectors);
-      console.log(`Incrementally added ${embeddings.length} vectors to index (total: ${this.vectorIndex.getCurrentCount()})`);
+      await this.vectorIndex.addVectors(vectors);
+      const finalCount = await this.vectorIndex.getCurrentCount();
+      console.log(`Incrementally added ${embeddings.length} vectors to index (total: ${finalCount})`);
 
       // Save the updated index
       await this.saveIndex();
@@ -268,7 +269,7 @@ export class IndexManager {
       const currentCapacity = 100000; // Default capacity
       if (chunkData.length > currentCapacity * 0.8) {
         const newCapacity = Math.ceil(chunkData.length * 1.5);
-        this.vectorIndex.resizeIndex(newCapacity);
+        await this.vectorIndex.resizeIndex(newCapacity);
         console.log(`Resized index capacity to ${newCapacity} for ${chunkData.length} chunks`);
       }
 
@@ -337,7 +338,7 @@ export class IndexManager {
       const currentCapacity = 100000;
       if (chunkData.length > currentCapacity * 0.8) {
         const newCapacity = Math.ceil(chunkData.length * 1.5);
-        this.vectorIndex.resizeIndex(newCapacity);
+        await this.vectorIndex.resizeIndex(newCapacity);
         console.log(`Resized index capacity to ${newCapacity}`);
       }
 
@@ -356,7 +357,7 @@ export class IndexManager {
         vector: embedding.vector
       }));
 
-      this.vectorIndex.addVectors(vectors);
+      await this.vectorIndex.addVectors(vectors);
       console.log(`Added ${vectors.length} vectors to rebuilt index`);
 
       // Update model version
@@ -493,13 +494,13 @@ export class IndexManager {
           // Create text-only index
           this.textIndex = new VectorIndex(`${this.indexPath}.text`, this.vectorIndexOptions);
           await this.textIndex.initialize();
-          this.textIndex.addVectors(indexData.textVectors);
+          await this.textIndex.addVectors(indexData.textVectors);
           console.log(`✓ Text index created with ${indexData.textVectors.length} vectors`);
 
           // Create image-only index
           this.imageIndex = new VectorIndex(`${this.indexPath}.image`, this.vectorIndexOptions);
           await this.imageIndex.initialize();
-          this.imageIndex.addVectors(indexData.imageVectors);
+          await this.imageIndex.addVectors(indexData.imageVectors);
           console.log(`✓ Image index created with ${indexData.imageVectors.length} vectors`);
 
           console.log('✓ Specialized indexes ready for content type filtering');
@@ -564,8 +565,9 @@ export class IndexManager {
 
   /**
    * Search for similar vectors
+   * Now async due to worker-based VectorIndex implementation
    */
-  search(queryVector: Float32Array, k: number = 5, contentType?: 'text' | 'image' | 'combined'): { embeddingIds: string[]; distances: number[] } {
+  async search(queryVector: Float32Array, k: number = 5, contentType?: 'text' | 'image' | 'combined'): Promise<{ embeddingIds: string[]; distances: number[] }> {
     if (!this.isInitialized) {
       throw new Error('Index manager not initialized');
     }
@@ -588,7 +590,7 @@ export class IndexManager {
       targetIndex = this.vectorIndex;
     }
 
-    const results = targetIndex.search(queryVector, k);
+    const results = await targetIndex.search(queryVector, k);
 
     // Convert numeric IDs back to embedding IDs
     const embeddingIds = results.neighbors.map(id => this.unhashEmbeddingId(id));
@@ -607,7 +609,7 @@ export class IndexManager {
       throw new Error('Database not initialized');
     }
 
-    const totalVectors = this.vectorIndex.getCurrentCount();
+    const totalVectors = await this.vectorIndex.getCurrentCount();
 
     try {
       const systemInfo = await getSystemInfo(this.db);
@@ -691,12 +693,25 @@ export class IndexManager {
   }
 
   /**
-   * Close database connection
+   * Close database connection and cleanup vector index worker
    */
   async close(): Promise<void> {
     if (this.db) {
       await this.db.close();
       this.db = null;
+    }
+    
+    // Clean up vector index worker to free WebAssembly memory
+    if (this.vectorIndex && typeof this.vectorIndex.cleanup === 'function') {
+      await this.vectorIndex.cleanup();
+    }
+    
+    // Also clean up specialized indexes
+    if (this.textIndex && typeof this.textIndex.cleanup === 'function') {
+      await this.textIndex.cleanup();
+    }
+    if (this.imageIndex && typeof this.imageIndex.cleanup === 'function') {
+      await this.imageIndex.cleanup();
     }
   }
 
@@ -719,7 +734,7 @@ export class IndexManager {
 
     try {
       // Clear in-memory mappings
-      const previousVectorCount = this.vectorIndex.getCurrentCount();
+      const previousVectorCount = await this.vectorIndex.getCurrentCount();
       this.hashToEmbeddingId.clear();
       this.embeddingIdToHash.clear();
       
@@ -743,9 +758,10 @@ export class IndexManager {
       await this.vectorIndex.saveIndex();
 
       const resetTimeMs = Date.now() - startTime;
+      const currentCount = await this.vectorIndex.getCurrentCount();
       console.log(`✓ Index reset complete in ${resetTimeMs}ms`);
       console.log(`  Vectors cleared: ${previousVectorCount}`);
-      console.log(`  Current vector count: ${this.vectorIndex.getCurrentCount()}`);
+      console.log(`  Current vector count: ${currentCount}`);
     } catch (error) {
       const resetTimeMs = Date.now() - startTime;
       console.error(`❌ Index reset failed after ${resetTimeMs}ms:`, error);
@@ -756,8 +772,10 @@ export class IndexManager {
   /**
    * Check if the index has any vectors
    * @returns true if the index contains vectors, false if empty
+   * Now async due to worker-based VectorIndex implementation
    */
-  hasVectors(): boolean {
-    return this.vectorIndex.getCurrentCount() > 0;
+  async hasVectors(): Promise<boolean> {
+    const count = await this.vectorIndex.getCurrentCount();
+    return count > 0;
   }
 }

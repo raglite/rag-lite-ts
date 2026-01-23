@@ -34,6 +34,7 @@ export function FileUploader() {
     progress, isIngesting, mode, model, setIngesting, setProgress, reset,
     chunkSize, chunkOverlap, pathStorageStrategy, baseDirectory,
     forceRebuild,
+    rerankingStrategy,
     mdxProcessing, mermaidExtraction
   } = useIngestStore();
   const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -142,6 +143,7 @@ export function FileUploader() {
     formData.append('pathStorageStrategy', pathStorageStrategy);
     if (baseDirectory) formData.append('baseDirectory', baseDirectory);
     formData.append('forceRebuild', forceRebuild.toString());
+    formData.append('rerankingStrategy', rerankingStrategy);
     formData.append('mdxProcessing', mdxProcessing.toString());
     formData.append('mermaidExtraction', mermaidExtraction.toString());
 

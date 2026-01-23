@@ -157,7 +157,7 @@ export class SearchEngine {
       let searchResult;
       try {
         const contentType = options.contentType as 'text' | 'image' | 'combined' | undefined;
-        searchResult = this.indexManager.search(queryVector, topK, contentType);
+        searchResult = await this.indexManager.search(queryVector, topK, contentType);
       } catch (error) {
         if (error instanceof Error && error.message.includes('No embedding ID found for hash')) {
           console.warn(`Hash mapping issue detected: ${error.message}`);

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Search, Loader2, SlidersHorizontal, Database, Folder } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Search, Loader2, SlidersHorizontal, Database, Folder, Image as ImageIcon, X, Type } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -8,42 +8,108 @@ import { Switch } from '@/components/ui/switch';
 
 export function SearchBox() {
   const { 
-    query, setQuery, 
+    query, setQuery,
+    imageFile, setImageFile,
+    searchMode, setSearchMode,
     setResults, setLoading, 
     setError, isLoading,
-    topK, rerank, contentType,
+    topK, rerank, setRerank,
+    rerankingAvailable, setRerankingAvailable,
+    contentType,
     dbPath, indexPath, setDbPath, setIndexPath
   } = useSearchStore();
   const [showOptions, setShowOptions] = useState(false);
   const [showPaths, setShowPaths] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate image file
+      if (!file.type.startsWith('image/')) {
+        setError('Please select a valid image file');
+        return;
+      }
+      setImageFile(file);
+      setSearchMode('image');
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    setSearchMode('text');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!query.trim()) return;
+    
+    if (searchMode === 'text' && !query.trim()) return;
+    if (searchMode === 'image' && !imageFile) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch('/api/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          query, 
-          topK, 
-          rerank, 
-          contentType,
-          dbPath: dbPath || undefined,
-          indexPath: indexPath || undefined
-        }),
-      });
+      let response: Response;
+      
+      if (searchMode === 'image' && imageFile) {
+        // Image search: send as multipart/form-data
+        const formData = new FormData();
+        formData.append('image', imageFile);
+        formData.append('topK', topK.toString());
+        formData.append('rerank', rerank.toString());
+        formData.append('contentType', contentType);
+        if (dbPath) formData.append('dbPath', dbPath);
+        if (indexPath) formData.append('indexPath', indexPath);
+
+        response = await fetch('/api/search', {
+          method: 'POST',
+          body: formData,
+        });
+      } else {
+        // Text search: send as JSON
+        response = await fetch('/api/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            query, 
+            topK, 
+            rerank, 
+            contentType,
+            dbPath: dbPath || undefined,
+            indexPath: indexPath || undefined
+          }),
+        });
+      }
 
       if (!response.ok) {
-        throw new Error('Search failed. Make sure the backend is running.');
+        const errorData = await response.json().catch(() => ({ message: 'Search failed' }));
+        throw new Error(errorData.message || 'Search failed. Make sure the backend is running.');
       }
 
       const data = await response.json();
       setResults(data.results);
+      
+      // Update reranking availability from search results
+      if (data.stats) {
+        setRerankingAvailable(data.stats.rerankingEnabled || false);
+        
+        // Show warning if user enabled reranking but it's not available
+        if (rerank && !data.stats.rerankingEnabled && searchMode === 'text') {
+          setError('Reranking was enabled but is not available. It may have been disabled during ingestion.');
+        }
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -53,21 +119,101 @@ export function SearchBox() {
 
   return (
     <div className="w-full space-y-4">
+      {/* Search Mode Toggle */}
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant={searchMode === 'text' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => {
+            setSearchMode('text');
+            setImageFile(null);
+            setImagePreview(null);
+            if (fileInputRef.current) {
+              fileInputRef.current.value = '';
+            }
+          }}
+          className="flex items-center gap-2"
+        >
+          <Type className="h-4 w-4" />
+          Text Search
+        </Button>
+        <Button
+          type="button"
+          variant={searchMode === 'image' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => {
+            setSearchMode('image');
+            setQuery('');
+            fileInputRef.current?.click();
+          }}
+          className="flex items-center gap-2"
+        >
+          <ImageIcon className="h-4 w-4" />
+          Image Search
+        </Button>
+      </div>
+
       <form onSubmit={handleSearch} className="relative flex gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search your documents semantically..."
-            className="pl-10 h-12 text-lg shadow-sm"
-          />
-        </div>
+        {searchMode === 'text' ? (
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search your documents semantically..."
+              className="pl-10 h-12 text-lg shadow-sm"
+            />
+          </div>
+        ) : (
+          <div className="relative flex-1 border-2 border-dashed rounded-lg p-4 min-h-[120px] flex items-center justify-center">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageSelect}
+              className="hidden"
+            />
+            {imagePreview ? (
+              <div className="relative w-full h-full flex items-center justify-center">
+                <img 
+                  src={imagePreview} 
+                  alt="Preview" 
+                  className="max-h-32 max-w-full object-contain rounded"
+                />
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="icon"
+                  className="absolute top-2 right-2 h-6 w-6"
+                  onClick={handleRemoveImage}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <div className="text-center">
+                <ImageIcon className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground mb-2">
+                  Click to select an image
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  Choose Image
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
         <Button 
           type="submit" 
           size="lg" 
           className="h-12 px-8"
-          disabled={isLoading || !query.trim()}
+          disabled={isLoading || (searchMode === 'text' && !query.trim()) || (searchMode === 'image' && !imageFile)}
         >
           {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
         </Button>
@@ -165,13 +311,34 @@ export function SearchBox() {
           {/* Search Options */}
           <div className="p-4 border rounded-lg bg-card/50 grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
+              <div className="space-y-0.5 flex-1">
                 <label className="text-sm font-medium">Reranking</label>
-                <p className="text-xs text-muted-foreground">Improve search quality</p>
+                <p className="text-xs text-muted-foreground">
+                  {searchMode === 'image' 
+                    ? 'Disabled for image search' 
+                    : rerankingAvailable === false 
+                      ? 'Not available (disabled during ingestion)'
+                      : 'Improve search quality'}
+                </p>
+                {searchMode === 'image' && (
+                  <p className="text-[10px] text-amber-500/80 mt-0.5">
+                    Image search uses CLIP embeddings for direct visual matching
+                  </p>
+                )}
+                {searchMode === 'text' && rerankingAvailable === false && rerank && (
+                  <p className="text-[10px] text-amber-500/80 mt-0.5">
+                    Reranking was disabled during ingestion. Re-ingest with reranking enabled to use this feature.
+                  </p>
+                )}
               </div>
               <Switch 
-                checked={rerank}
-                onCheckedChange={(checked) => useSearchStore.getState().setRerank(checked)}
+                checked={rerank && searchMode === 'text'}
+                onCheckedChange={(checked) => {
+                  if (searchMode === 'text') {
+                    setRerank(checked);
+                  }
+                }}
+                disabled={searchMode === 'image' || rerankingAvailable === false}
               />
             </div>
             

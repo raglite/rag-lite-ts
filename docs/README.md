@@ -16,6 +16,14 @@ New to RAG-lite TS? Start with the [CLI Reference](cli-reference.md) for install
   - MCP server integration
   - **NEW**: Multimodal mode support with `--mode` and automatic reranking parameters
 
+- **[UI Guide](ui-guide.md)** - Web-based interface documentation 🆕
+  - Visual document ingestion and search
+  - Drag & drop file upload
+  - Image search with upload interface
+  - Real-time progress tracking
+  - Knowledge base statistics and management
+  - **NEW**: Complete guide for the web interface
+
 - **[API Reference](api-reference.md)** - Comprehensive programmatic API documentation
   - Simple constructors and factory patterns
   - Core classes and methods
@@ -102,8 +110,9 @@ New to RAG-lite TS? Start with the [CLI Reference](cli-reference.md) for install
 
 **New Users:**
 1. [CLI Reference](cli-reference.md) - Quick start and installation
-2. [Configuration Guide](configuration.md) - Setup options
-3. [API Reference](api-reference.md) - Programmatic usage
+2. [UI Guide](ui-guide.md) - Web interface (visual alternative) 🆕
+3. [Configuration Guide](configuration.md) - Setup options
+4. [API Reference](api-reference.md) - Programmatic usage
 
 **Developers:**
 1. [API Reference](api-reference.md) - Programmatic usage
@@ -120,6 +129,7 @@ New to RAG-lite TS? Start with the [CLI Reference](cli-reference.md) for install
 
 **Basic Document Search:**
 - [CLI Reference](cli-reference.md) → [Configuration Guide](configuration.md)
+- [UI Guide](ui-guide.md) → Visual interface alternative 🆕
 
 **MCP Integration & Memory Ingestion:**
 - [Unified Content System](unified-content-system.md) → [API Reference](api-reference.md)
@@ -143,11 +153,14 @@ New to RAG-lite TS? Start with the [CLI Reference](cli-reference.md) for install
 | Task | Primary Guide | Supporting Guides |
 |------|---------------|-------------------|
 | Install and setup | [CLI Reference](cli-reference.md) | [Configuration Guide](configuration.md) |
+| Use web interface | [UI Guide](ui-guide.md) 🆕 | [CLI Reference](cli-reference.md) |
 | Ingest documents | [CLI Reference](cli-reference.md) | [Preprocessing](preprocessing.md) |
+| Ingest via UI | [UI Guide](ui-guide.md) 🆕 | [CLI Reference](cli-reference.md) |
 | Memory ingestion (MCP) | [Unified Content System](unified-content-system.md) | [API Reference](api-reference.md) |
 | Content retrieval | [Unified Content System](unified-content-system.md) | [Unified Content Troubleshooting](unified-content-troubleshooting.md) |
 | Migrate to unified system | [Migration Guide](unified-content-migration-guide.md) | [Unified Content System](unified-content-system.md) |
 | Search documents | [CLI Reference](cli-reference.md) | [Model Guide](model-guide.md) |
+| Search via UI | [UI Guide](ui-guide.md) 🆕 | [CLI Reference](cli-reference.md) |
 | Choose embedding model | [Model Guide](model-guide.md) | [Configuration](configuration.md) |
 | Configure for production | [Configuration Guide](configuration.md) | [Path Strategies](path-strategies.md) |
 | Handle different file types | [Preprocessing Guide](preprocessing.md) | [Troubleshooting](troubleshooting.md) |

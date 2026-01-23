@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.3.0] - 2026-01-23
+
+### Features
+- **Web Interface (UI)**: Added visual web-based interface for document ingestion and search
+  - Launch with `raglite ui` command
+  - Drag & drop file upload with real-time progress tracking
+  - Interactive search with text and image query support
+  - Knowledge base statistics and management
+  - Full feature parity with CLI including multimodal support
+
 ## [2.2.0] - 2026-01-01
 
 ### Features

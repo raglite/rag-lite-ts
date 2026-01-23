@@ -10,6 +10,7 @@ Complete reference for all RAG-lite TS command-line interface commands with **Ch
   - [raglite ingest](#raglite-ingest)
   - [raglite search](#raglite-search)
   - [raglite rebuild](#raglite-rebuild)
+  - [raglite ui](#raglite-ui)
   - [raglite help](#raglite-help)
 - [Examples](#examples)
 
@@ -260,6 +261,101 @@ raglite rebuild --db work.sqlite --index work-index.bin
 ```
 
 ⚠️ **Note**: Rebuilding preserves your documents but regenerates all embeddings, which can take time for large collections.
+
+### `raglite ui`
+
+Launch the web-based user interface for visual document management and search.
+
+#### Syntax
+```bash
+raglite ui [options]
+```
+
+#### Options
+- `--port <number>`: Frontend server port (default: `3000`)
+- `--backend-port <number>`: Backend API server port (default: `3001`)
+
+#### Description
+
+The UI provides a modern web interface for:
+- **Visual ingestion**: Drag & drop file upload with real-time progress tracking
+- **Interactive search**: Text and image search with visual results
+- **Knowledge base management**: View statistics and manage your data
+- **Configuration**: Visual interface for all ingestion and search options
+
+The UI consists of two components that run locally:
+- **Frontend**: React-based web interface (default: `http://localhost:3000`)
+- **Backend**: Express API server (default: `http://localhost:3001`)
+
+Both components start automatically when you run `raglite ui`.
+
+#### Working Directory
+
+The UI uses the **current working directory** where you run `raglite ui` as the base for:
+- Database file: `db.sqlite` (or `RAG_DB_FILE` environment variable)
+- Index file: `vector-index.bin` (or `RAG_INDEX_FILE` environment variable)
+
+**Tip:** Run `raglite ui` from the directory where you want your knowledge base files.
+
+#### Examples
+
+```bash
+# Launch UI with default ports
+raglite ui
+
+# Launch UI with custom ports
+raglite ui --port 8080 --backend-port 8081
+
+# Launch UI from specific directory
+cd /path/to/my/documents
+raglite ui
+```
+
+#### UI Features
+
+**Ingestion Tab:**
+- Drag & drop file upload
+- Folder selection and upload
+- Real-time progress tracking
+- Configuration options (mode, model, chunking, reranking)
+- Directory path ingestion
+- Force rebuild option
+
+**Search Tab:**
+- Text search with query input
+- Image search with file upload
+- Search options (reranking, topK, content type filter)
+- Knowledge base statistics
+- Custom database/index paths
+
+#### Browser Access
+
+After starting the UI:
+1. Open your browser to `http://localhost:3000` (or the port shown)
+2. The UI will automatically connect to the backend API
+3. Start ingesting documents or searching your knowledge base
+
+#### Stopping the UI
+
+Press `Ctrl+C` in the terminal to stop both frontend and backend servers.
+
+#### Troubleshooting
+
+**Port conflicts:**
+- If ports 3000 or 3001 are in use, specify different ports with `--port` and `--backend-port`
+- Check for other applications using these ports
+
+**Browser won't connect:**
+- Wait a few seconds for servers to fully start
+- Check terminal output for errors
+- Verify firewall isn't blocking localhost connections
+
+**Files won't upload:**
+- Check file size (max 100MB per file)
+- Verify file type is supported
+- Check browser console for errors
+
+→ **[Complete UI Guide](ui-guide.md)** for detailed documentation
 
 ### `raglite help`
 

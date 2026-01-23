@@ -46,6 +46,7 @@ export const ingestController = {
         chunkSize, chunkOverlap,
         pathStorageStrategy, baseDirectory,
         forceRebuild,
+        rerankingStrategy,
         mdxProcessing, mermaidExtraction
       } = req.body;
 
@@ -101,6 +102,7 @@ export const ingestController = {
         pathStorageStrategy: pathStorageStrategy || 'relative',
         baseDirectory: baseDirectory || undefined,
         forceRebuild: forceRebuild === 'true' || forceRebuild === true,
+        rerankingStrategy: rerankingStrategy || undefined, // Use default if not provided
         mdxProcessing: mdxProcessing !== 'false' && mdxProcessing !== false, // Default to true
         mermaidExtraction: mermaidExtraction !== 'false' && mermaidExtraction !== false // Default to true
       });
@@ -150,6 +152,7 @@ export const ingestController = {
         chunkSize, chunkOverlap,
         pathStorageStrategy, baseDirectory,
         forceRebuild,
+        rerankingStrategy,
         mdxProcessing, mermaidExtraction
       } = req.body;
 
@@ -173,6 +176,7 @@ export const ingestController = {
         pathStorageStrategy: pathStorageStrategy || 'relative',
         baseDirectory: baseDirectory || undefined,
         forceRebuild: forceRebuild === 'true' || forceRebuild === true,
+        rerankingStrategy: rerankingStrategy || undefined, // Use default if not provided
         mdxProcessing: mdxProcessing !== 'false' && mdxProcessing !== false, // Default to true
         mermaidExtraction: mermaidExtraction !== 'false' && mermaidExtraction !== false // Default to true
       });

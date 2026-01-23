@@ -190,7 +190,7 @@ export class KnowledgeBaseManager {
           await indexManager.initialize(true, false);
           
           // Get current vector count before reset
-          previousVectorCount = indexManager.hasVectors() ? 
+          previousVectorCount = (await indexManager.hasVectors()) ? 
             (await indexManager.getStats()).totalVectors : 0;
           
           // Perform the reset

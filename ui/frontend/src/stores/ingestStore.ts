@@ -46,6 +46,9 @@ interface IngestState {
   // Index management
   forceRebuild: boolean;
   
+  // Reranking strategy
+  rerankingStrategy: 'cross-encoder' | 'text-derived' | 'disabled';
+  
   // Preprocessing options
   mdxProcessing: boolean;
   mermaidExtraction: boolean;
@@ -59,6 +62,7 @@ interface IngestState {
   setPathStorageStrategy: (strategy: 'relative' | 'absolute') => void;
   setBaseDirectory: (dir: string) => void;
   setForceRebuild: (rebuild: boolean) => void;
+  setRerankingStrategy: (strategy: 'cross-encoder' | 'text-derived' | 'disabled') => void;
   setMdxProcessing: (enabled: boolean) => void;
   setMermaidExtraction: (enabled: boolean) => void;
   reset: () => void;
@@ -94,6 +98,9 @@ export const useIngestStore = create<IngestState>((set) => ({
   // Index management defaults
   forceRebuild: false,
   
+  // Reranking strategy default (text mode default)
+  rerankingStrategy: 'cross-encoder',
+  
   // Preprocessing defaults
   mdxProcessing: true,
   mermaidExtraction: true,
@@ -109,7 +116,15 @@ export const useIngestStore = create<IngestState>((set) => ({
       ? 'sentence-transformers/all-MiniLM-L6-v2' 
       : 'Xenova/clip-vit-base-patch32';
     const chunks = getModelChunkDefaults(defaultModelForMode);
-    set({ mode, model: defaultModelForMode, chunkSize: chunks.chunkSize, chunkOverlap: chunks.chunkOverlap });
+    // Set default reranking strategy for the mode
+    const defaultRerankingStrategy = mode === 'text' ? 'cross-encoder' : 'text-derived';
+    set({ 
+      mode, 
+      model: defaultModelForMode, 
+      chunkSize: chunks.chunkSize, 
+      chunkOverlap: chunks.chunkOverlap,
+      rerankingStrategy: defaultRerankingStrategy
+    });
   },
   setModel: (model) => {
     // Update chunk configuration based on model
@@ -126,6 +141,7 @@ export const useIngestStore = create<IngestState>((set) => ({
   setPathStorageStrategy: (pathStorageStrategy) => set({ pathStorageStrategy }),
   setBaseDirectory: (baseDirectory) => set({ baseDirectory }),
   setForceRebuild: (forceRebuild) => set({ forceRebuild }),
+  setRerankingStrategy: (rerankingStrategy) => set({ rerankingStrategy }),
   setMdxProcessing: (mdxProcessing) => set({ mdxProcessing }),
   setMermaidExtraction: (mermaidExtraction) => set({ mermaidExtraction }),
   reset: () => set((state) => ({ 

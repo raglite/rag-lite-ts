@@ -11,6 +11,7 @@ export function DirectoryIngest() {
     isIngesting, mode, model, setIngesting, setProgress,
     chunkSize, chunkOverlap, pathStorageStrategy, baseDirectory,
     forceRebuild,
+    rerankingStrategy,
     mdxProcessing, mermaidExtraction
   } = useIngestStore();
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -83,6 +84,7 @@ export function DirectoryIngest() {
           pathStorageStrategy,
           baseDirectory,
           forceRebuild,
+          rerankingStrategy,
           mdxProcessing,
           mermaidExtraction
         }),

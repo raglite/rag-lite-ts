@@ -159,7 +159,7 @@ export class SearchPipelineCoordinator implements SearchPipelineInterface {
     }
 
     try {
-      return this.indexManager.search(queryVector, topK);
+      return await this.indexManager.search(queryVector, topK);
     } catch (error) {
       if (error instanceof Error && error.message.includes('No embedding ID found for hash')) {
         console.warn(`Hash mapping issue detected: ${error.message}`);

@@ -364,6 +364,11 @@ export class IngestService {
         if (options.chunkSize) factoryOptions.chunkSize = options.chunkSize;
         if (options.chunkOverlap) factoryOptions.chunkOverlap = options.chunkOverlap;
 
+        // Reranking strategy
+        if (options.rerankingStrategy) {
+          factoryOptions.rerankingStrategy = options.rerankingStrategy;
+        }
+
         // Index management
         if (options.forceRebuild) factoryOptions.forceRebuild = true;
 
@@ -731,6 +736,11 @@ export class IngestService {
       // Chunk configuration
       if (options.chunkSize) factoryOptions.chunkSize = options.chunkSize;
       if (options.chunkOverlap) factoryOptions.chunkOverlap = options.chunkOverlap;
+
+      // Reranking strategy
+      if (options.rerankingStrategy) {
+        factoryOptions.rerankingStrategy = options.rerankingStrategy;
+      }
 
       // Index management
       if (options.forceRebuild) factoryOptions.forceRebuild = true;

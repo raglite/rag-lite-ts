@@ -22,7 +22,9 @@ const sidebars: SidebarsConfig = {
       items: [
         'README',
         'cli-reference',
+        'ui-guide',
         'api-reference',
+        'preprocessing',
         'configuration',
       ],
     },
@@ -34,7 +36,6 @@ const sidebars: SidebarsConfig = {
         'multimodal-tutorial',
         'multimodal-configuration',
         'model-guide',
-        'preprocessing',
         'multimodal-troubleshooting',
       ],
     },

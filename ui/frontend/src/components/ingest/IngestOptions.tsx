@@ -82,6 +82,7 @@ export function IngestOptions() {
     chunkSize, chunkOverlap, setChunkSize, setChunkOverlap,
     pathStorageStrategy, baseDirectory, setPathStorageStrategy, setBaseDirectory,
     forceRebuild, setForceRebuild,
+    rerankingStrategy, setRerankingStrategy,
     mdxProcessing, mermaidExtraction, setMdxProcessing, setMermaidExtraction
   } = useIngestStore();
 
@@ -290,6 +291,63 @@ export function IngestOptions() {
                 </p>
               </div>
             )}
+          </div>
+        </ConfigSection>
+
+        {/* Reranking Strategy */}
+        <ConfigSection title="Reranking Strategy" icon={Sparkles}>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="reranking-strategy" className="text-xs font-medium">
+                Reranking Strategy
+              </Label>
+              <Select
+                value={rerankingStrategy}
+                onValueChange={(value: 'cross-encoder' | 'text-derived' | 'disabled') => setRerankingStrategy(value)}
+                disabled={isIngesting}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {mode === 'text' ? (
+                    <>
+                      <SelectItem value="cross-encoder">Cross-Encoder (Default)</SelectItem>
+                      <SelectItem value="disabled">Disabled</SelectItem>
+                    </>
+                  ) : (
+                    <>
+                      <SelectItem value="text-derived">Text-Derived (Default)</SelectItem>
+                      <SelectItem value="disabled">Disabled</SelectItem>
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+              <div className="p-3 rounded-xl bg-muted/30 border text-[10px] space-y-1">
+                {mode === 'text' ? (
+                  <>
+                    <p className="text-muted-foreground">
+                      <span className="font-semibold">Cross-Encoder:</span> Uses transformer models for improved text relevance scoring.
+                    </p>
+                    <p className="text-muted-foreground">
+                      <span className="font-semibold">Disabled:</span> No reranking, results ordered by vector similarity only.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-muted-foreground">
+                      <span className="font-semibold">Text-Derived:</span> Converts images to text descriptions, then applies cross-encoder reranking. Best for mixed content.
+                    </p>
+                    <p className="text-muted-foreground">
+                      <span className="font-semibold">Disabled:</span> No reranking, results ordered by vector similarity only. Faster but less accurate.
+                    </p>
+                  </>
+                )}
+                <p className="mt-2 text-[9px] leading-relaxed text-amber-500/80 italic">
+                  Note: Reranking cannot be enabled at search time if disabled during ingestion.
+                </p>
+              </div>
+            </div>
           </div>
         </ConfigSection>
 

@@ -11,7 +11,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg?style=flat-square)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg?style=flat-square)](https://nodejs.org/)
 
-[Quick Start](#quick-start) • [Features](#features) • [Documentation](#documentation) • [Examples](#examples) • [MCP Integration](#mcp-server-integration)
+[Quick Start](#quick-start) • [Features](#features) • [Documentation](#documentation) • [Examples](#examples) • [UI](#web-interface-ui) • [MCP Integration](#mcp-server-integration)
 
 </div>
 
@@ -101,6 +101,7 @@ See [CHANGELOG.md](CHANGELOG.md) for complete details.
 - [How It Works](#-how-it-works)
 - [Supported Models](#-supported-models)
 - [Documentation](#-documentation)
+- [Web Interface (UI)](#-web-interface-ui)
 - [MCP Server Integration](#-mcp-server-integration)
 - [Development](#-development)
 - [Contributing](#-contributing)
@@ -114,7 +115,7 @@ See [CHANGELOG.md](CHANGELOG.md) for complete details.
 npm install -g rag-lite-ts
 ```
 
-### Basic Usage
+### Basic Usage (CLI)
 
 ```bash
 # Ingest documents
@@ -126,6 +127,24 @@ raglite search "machine learning concepts"
 # Get more results with reranking (use --rerank for better quality)
 raglite search "API documentation" --top-k 10 --rerank
 ```
+
+### Web Interface (UI)
+
+Launch the visual web interface for interactive document management:
+
+```bash
+# Start the UI (opens in browser)
+raglite ui
+
+# UI provides:
+# - Drag & drop file upload
+# - Real-time ingestion progress
+# - Visual search interface
+# - Image search with upload
+# - Knowledge base statistics
+```
+
+→ **[Complete UI Guide](docs/ui-guide.md)**
 
 ### Using Different Models
 
@@ -446,6 +465,27 @@ Now Claude can search your docs directly! Works with any MCP-compatible AI tool.
 
 </td>
 </tr>
+<tr>
+<td width="50%">
+
+### 🎨 Web Interface (UI)
+- **Visual ingestion** - Drag & drop file upload
+- **Real-time progress** - Live ingestion tracking
+- **Image search** - Upload images to find similar content
+- **Interactive search** - Visual results with previews
+- **Knowledge base stats** - Overview of your data
+
+</td>
+<td width="50%">
+
+### 📚 Documentation
+- **Comprehensive guides** - CLI, API, multimodal tutorials
+- **Quick start guides** - Get running in minutes
+- **Troubleshooting** - Solutions for common issues
+- **Examples** - Real-world use cases
+
+</td>
+</tr>
 </table>
 
 ### 📁 Supported File Formats
@@ -582,6 +622,7 @@ Choose the right model for your use case:
 
 ### 🚀 Getting Started
 - [CLI Reference](docs/cli-reference.md)
+- [UI Guide](docs/ui-guide.md) 🆕
 - [API Reference](docs/api-reference.md)
 - [Multimodal Tutorial](docs/multimodal-tutorial.md)
 - [Unified Content System](docs/unified-content-system.md)
@@ -613,6 +654,7 @@ Choose the right model for your use case:
 | I want to... | Start here |
 |--------------|------------|
 | 🆕 Try it out | [CLI Reference](docs/cli-reference.md) → `npm i -g rag-lite-ts` |
+| 🎨 Use visual interface | [UI Guide](docs/ui-guide.md) → `raglite ui` |
 | 🖼️ Search images | [Multimodal Tutorial](docs/multimodal-tutorial.md) → `--mode multimodal` |
 | 💻 Build an app | [API Reference](docs/api-reference.md) → `new SearchEngine()` |
 | 🤖 Integrate with AI | [MCP Guide](docs/mcp-server-multimodal-guide.md) → `raglite-mcp` |
@@ -620,6 +662,44 @@ Choose the right model for your use case:
 | 🐛 Fix an issue | [Troubleshooting](docs/troubleshooting.md) → Common solutions |
 
 **📖 [Complete Documentation Hub](docs/README.md)**
+
+## 🎨 Web Interface (UI)
+
+RAG-lite TS includes a modern web-based interface for visual document management and search.
+
+### Quick Start
+
+```bash
+# Launch the UI (starts both frontend and backend)
+raglite ui
+
+# Opens in browser at http://localhost:3000
+```
+
+### Features
+
+- **📤 Visual Ingestion**: Drag & drop file upload with real-time progress
+- **🔍 Interactive Search**: Text and image search with visual results
+- **📊 Knowledge Base Stats**: Overview of documents, chunks, and model information
+- **⚙️ Configuration**: Visual interface for all ingestion options
+- **🖼️ Image Search**: Upload images to find similar content
+- **📁 Folder Support**: Upload entire directory structures
+
+### UI vs CLI
+
+| Feature | UI | CLI |
+|---------|----|----|
+| File upload | ✅ Drag & drop | ✅ Command-line |
+| Progress tracking | ✅ Visual bars | ✅ Console output |
+| Image search | ✅ Upload interface | ✅ File path |
+| Configuration | ✅ Visual options | ✅ Command flags |
+| Batch processing | ✅ | ✅ |
+| Scripting | ❌ | ✅ |
+
+**Use UI for:** Interactive exploration, visual feedback, learning the system  
+**Use CLI for:** Automation, scripting, headless environments
+
+→ **[Complete UI Guide](docs/ui-guide.md)**
 
 ## 🔌 MCP Server Integration
 
