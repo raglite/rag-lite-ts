@@ -144,7 +144,7 @@ export const useIngestStore = create<IngestState>((set) => ({
   setRerankingStrategy: (rerankingStrategy) => set({ rerankingStrategy }),
   setMdxProcessing: (mdxProcessing) => set({ mdxProcessing }),
   setMermaidExtraction: (mermaidExtraction) => set({ mermaidExtraction }),
-  reset: () => set((state) => ({ 
+  reset: () => set(() => ({ 
     progress: initialProgress, 
     isIngesting: false 
   })),

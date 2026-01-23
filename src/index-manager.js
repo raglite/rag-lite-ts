@@ -595,12 +595,10 @@ export class IndexManager {
             await this.db.close();
             this.db = null;
         }
-        
         // Clean up vector index worker to free WebAssembly memory
         if (this.vectorIndex && typeof this.vectorIndex.cleanup === 'function') {
             await this.vectorIndex.cleanup();
         }
-        
         // Also clean up specialized indexes
         if (this.textIndex && typeof this.textIndex.cleanup === 'function') {
             await this.textIndex.cleanup();
@@ -638,9 +636,9 @@ export class IndexManager {
             if (this.imageIndex) {
                 this.imageIndex = undefined;
             }
-            // Reinitialize the main vector index (this creates a fresh empty HNSW graph)
-            console.log('  Reinitializing HNSW index...');
-            await this.vectorIndex.initialize();
+            // Reset the vector index (clears all vectors and reinitializes empty HNSW graph)
+            console.log('  Resetting HNSW index...');
+            await this.vectorIndex.reset();
             // Save the empty index to disk (this overwrites the existing file)
             console.log('  Saving empty index to disk...');
             await this.vectorIndex.saveIndex();

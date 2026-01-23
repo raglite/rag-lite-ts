@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Database, FileText, Scissors, Brain, Calendar, AlertCircle, Loader2, RefreshCw, Folder } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';

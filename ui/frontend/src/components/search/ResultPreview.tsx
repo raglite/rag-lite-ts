@@ -7,7 +7,7 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { HighlightedText } from './HighlightedText';
-import { FileText, Copy, Check, ExternalLink, Calendar, HardDrive } from 'lucide-react';
+import { FileText, Copy, Check, Calendar, HardDrive } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 

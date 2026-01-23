@@ -76,3 +76,6 @@ ui/backend/dist/
 # Paper directory - research paper drafts and documentation
 paper/
 evaluation/
+
+#temporary test folder
+test/

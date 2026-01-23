@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { spawn } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
 import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -32,34 +32,47 @@ export async function runUI(options: any = {}): Promise<void> {
 
   // Resolve UI paths from project root
   const projectRoot = getProjectRoot();
-  const backendPath = join(projectRoot, 'ui', 'backend', 'src', 'index.ts');
-  const frontendPath = join(projectRoot, 'ui', 'frontend');
+  const backendBuiltPath = join(projectRoot, 'ui', 'backend', 'dist', 'index.js');
+  const backendSourcePath = join(projectRoot, 'ui', 'backend', 'src', 'index.ts');
+  const frontendBuiltPath = join(projectRoot, 'ui', 'frontend', 'dist');
+  const frontendSourcePath = join(projectRoot, 'ui', 'frontend');
   
-  if (!fs.existsSync(backendPath)) {
-    console.error(`❌ UI backend not found at: ${backendPath}`);
+  // Check if built files exist
+  const useBuiltBackend = fs.existsSync(backendBuiltPath);
+  const useBuiltFrontend = fs.existsSync(frontendBuiltPath);
+  
+  if (!useBuiltBackend && !fs.existsSync(backendSourcePath)) {
+    console.error(`❌ UI backend not found at: ${backendSourcePath}`);
     console.error('   Make sure the UI is set up in the ui/ directory.');
     process.exit(1);
   }
   
-  if (!fs.existsSync(frontendPath)) {
-    console.error(`❌ UI frontend not found at: ${frontendPath}`);
+  if (!useBuiltFrontend && !fs.existsSync(frontendSourcePath)) {
+    console.error(`❌ UI frontend not found at: ${frontendSourcePath}`);
     console.error('   Make sure the UI is set up in the ui/ directory.');
     process.exit(1);
   }
   
   // Pass the working directory where 'raglite ui' was called to the backend
-  // This ensures the backend uses the correct paths for db.sqlite and vector-index.bin
   const workingDir = process.cwd();
+  // Built mode: single server on port (UI + API). Dev mode: backend on backendPort, frontend on port.
+  const effectiveBackendPort = useBuiltFrontend ? port : backendPort;
   
-  console.log(`📡 Starting backend on port ${backendPort}...`);
+  console.log(`📡 Starting backend on port ${effectiveBackendPort}...`);
   
-  // Start backend server
-  const backendProcess = spawn('npx', ['tsx', backendPath], {
+  // Start backend server - use built version if available
+  const backendCommand = useBuiltBackend ? 'node' : 'npx';
+  const backendArgs = useBuiltBackend 
+    ? [backendBuiltPath]
+    : ['tsx', backendSourcePath];
+  
+  const backendProcess = spawn(backendCommand, backendArgs, {
     stdio: 'pipe',
     env: { 
       ...process.env, 
-      PORT: backendPort.toString(),
-      RAG_WORKING_DIR: workingDir
+      PORT: effectiveBackendPort.toString(),
+      RAG_WORKING_DIR: workingDir,
+      UI_FRONTEND_DIST: useBuiltFrontend ? frontendBuiltPath : undefined
     },
     shell: true
   });
@@ -77,39 +90,50 @@ export async function runUI(options: any = {}): Promise<void> {
     process.stderr.write(`[Backend] ${data}`);
   });
 
-  console.log(`🎨 Starting frontend on port ${port}...`);
+  // Only start frontend dev server if built version doesn't exist
+  let frontendProcess: ChildProcess | null = null;
   
-  // Start frontend dev server
-  const frontendProcess = spawn('npm', ['run', 'dev'], {
-    cwd: frontendPath,
-    stdio: 'pipe',
-    env: {
-      ...process.env,
-      VITE_API_URL: `http://localhost:${backendPort}`
-    },
-    shell: true
-  });
+  if (!useBuiltFrontend) {
+    console.log(`🎨 Starting frontend dev server on port ${port}...`);
+    
+    frontendProcess = spawn('npm', ['run', 'dev'], {
+      cwd: frontendSourcePath,
+      stdio: 'pipe',
+      env: {
+        ...process.env,
+        VITE_API_URL: `http://localhost:${effectiveBackendPort}`
+      },
+      shell: true
+    });
 
-  frontendProcess.on('error', (err) => {
-    console.error('❌ Failed to start frontend process:', err);
-    backendProcess.kill();
-    process.exit(1);
-  });
+    frontendProcess.on('error', (err: Error) => {
+      console.error('❌ Failed to start frontend process:', err);
+      backendProcess.kill();
+      process.exit(1);
+    });
 
-  // Forward frontend output with prefix
-  frontendProcess.stdout?.on('data', (data) => {
-    process.stdout.write(`[Frontend] ${data}`);
-  });
-  frontendProcess.stderr?.on('data', (data) => {
-    process.stderr.write(`[Frontend] ${data}`);
-  });
+    // Forward frontend output with prefix
+    frontendProcess.stdout?.on('data', (data: Buffer) => {
+      process.stdout.write(`[Frontend] ${data}`);
+    });
+    frontendProcess.stderr?.on('data', (data: Buffer) => {
+      process.stderr.write(`[Frontend] ${data}`);
+    });
+  } else {
+    console.log(`🎨 Using built frontend from ${frontendBuiltPath}`);
+    console.log(`   Frontend will be served by backend on port ${effectiveBackendPort}`);
+  }
 
   // Wait a bit for servers to start
   await new Promise(resolve => setTimeout(resolve, 2000));
 
   console.log(`\n✨ UI Access:`);
-  console.log(`   Frontend: http://localhost:${port}`);
-  console.log(`   Backend:  http://localhost:${backendPort}`);
+  if (useBuiltFrontend) {
+    console.log(`   Frontend & Backend: http://localhost:${port}`);
+  } else {
+    console.log(`   Frontend: http://localhost:${port}`);
+    console.log(`   Backend:  http://localhost:${effectiveBackendPort}`);
+  }
   console.log(`\n💡 Press Ctrl+C to stop both servers\n`);
   
   // Keep the process alive and handle cleanup
@@ -117,7 +141,9 @@ export async function runUI(options: any = {}): Promise<void> {
     const cleanup = () => {
       console.log('\n🛑 Shutting down servers...');
       backendProcess.kill();
-      frontendProcess.kill();
+      if (frontendProcess) {
+        frontendProcess.kill();
+      }
       resolve();
     };
     
@@ -128,17 +154,21 @@ export async function runUI(options: any = {}): Promise<void> {
     backendProcess.on('exit', (code) => {
       if (code !== 0 && code !== null) {
         console.error(`\n❌ Backend process exited with code ${code}`);
-        frontendProcess.kill();
+        if (frontendProcess) {
+          frontendProcess.kill();
+        }
         resolve();
       }
     });
     
-    frontendProcess.on('exit', (code) => {
-      if (code !== 0 && code !== null) {
-        console.error(`\n❌ Frontend process exited with code ${code}`);
-        backendProcess.kill();
-        resolve();
-      }
-    });
+    if (frontendProcess) {
+      frontendProcess.on('exit', (code: number | null) => {
+        if (code !== 0 && code !== null) {
+          console.error(`\n❌ Frontend process exited with code ${code}`);
+          backendProcess.kill();
+          resolve();
+        }
+      });
+    }
   });
 }

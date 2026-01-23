@@ -3,6 +3,7 @@ import cors from 'cors';
 import bodyParser from 'body-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 import searchRoutes from './routes/searchRoutes.js';
 import ingestRoutes from './routes/ingestRoutes.js';
@@ -40,6 +41,19 @@ app.get('/api/health', (req, res) => {
 app.use('/api/search', searchRoutes);
 app.use('/api/ingest', ingestRoutes);
 app.use('/api/system', systemRoutes);
+
+// Serve frontend static files if built version exists
+const frontendDistPath = process.env.UI_FRONTEND_DIST || 
+  path.join(__dirname, '../../frontend/dist');
+if (fs.existsSync(frontendDistPath)) {
+  app.use(express.static(frontendDistPath));
+  
+  // SPA fallback: serve index.html for non-API routes not handled by static
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api/')) return next();
+    res.sendFile(path.join(frontendDistPath, 'index.html'));
+  });
+}
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

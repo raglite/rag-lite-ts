@@ -134,14 +134,41 @@ export class KnowledgeBaseManager {
             }
             else {
                 // Create IndexManager and reset
+                // We need to handle dimension mismatch gracefully since the user might be
+                // switching models (e.g., from MPNet 768D to MiniLM 384D)
                 const indexManager = new IndexManager(indexPath, dbPath, modelDefaults.dimensions, modelName);
-                // Initialize (loads existing index)
-                await indexManager.initialize(true, false); // skipModelCheck=true since we're resetting
-                // Get current vector count before reset
-                const previousVectorCount = indexManager.hasVectors() ?
-                    (await indexManager.getStats()).totalVectors : 0;
-                // Perform the reset
-                await indexManager.reset();
+                let previousVectorCount = 0;
+                try {
+                    // Try to initialize with forceRecreate=false first to get the vector count
+                    // skipModelCheck=true since we're resetting anyway
+                    await indexManager.initialize(true, false);
+                    // Get current vector count before reset
+                    previousVectorCount = (await indexManager.hasVectors()) ?
+                        (await indexManager.getStats()).totalVectors : 0;
+                    // Perform the reset
+                    await indexManager.reset();
+                }
+                catch (initError) {
+                    // If initialization failed (e.g., dimension mismatch), force recreate the index
+                    // This handles the case where user is switching models
+                    const errorMessage = initError?.message || String(initError);
+                    if (errorMessage.includes('dimension mismatch') || errorMessage.includes('Vector dimension')) {
+                        console.log('  ⚠️ Dimension mismatch detected - forcing index recreation');
+                        console.log('  (This is expected when switching embedding models)');
+                        // Create a fresh IndexManager and force recreate
+                        const freshIndexManager = new IndexManager(indexPath, dbPath, modelDefaults.dimensions, modelName);
+                        await freshIndexManager.initialize(true, true); // skipModelCheck=true, forceRecreate=true
+                        await freshIndexManager.saveIndex();
+                        await freshIndexManager.close();
+                        // We don't know the previous count since we couldn't load the old index
+                        // But we can estimate it was non-zero since the file existed
+                        previousVectorCount = -1; // Indicate unknown
+                    }
+                    else {
+                        // Re-throw other errors
+                        throw initError;
+                    }
+                }
                 // Close the index manager
                 await indexManager.close();
                 indexResetResult = {
@@ -161,7 +188,7 @@ export class KnowledgeBaseManager {
         console.log(`  Total time: ${totalTimeMs}ms`);
         console.log(`  Documents deleted: ${dbResetResult.documentsDeleted}`);
         console.log(`  Chunks deleted: ${dbResetResult.chunksDeleted}`);
-        console.log(`  Vectors cleared: ${indexResetResult.vectorsCleared}`);
+        console.log(`  Vectors cleared: ${indexResetResult.vectorsCleared === -1 ? '(unknown - index recreated due to model change)' : indexResetResult.vectorsCleared}`);
         if (warnings.length > 0) {
             console.log(`  Warnings: ${warnings.length}`);
         }

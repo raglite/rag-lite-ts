@@ -138,7 +138,7 @@ export class VectorIndex {
     });
 
     // Handle worker errors
-    this.worker.on('error', (error) => {
+    this.worker.on('error', (error: Error) => {
       console.error('VectorIndex worker error:', error);
       // Reject all pending requests
       for (const [id, handler] of this.messageQueue.entries()) {

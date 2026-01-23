@@ -8,6 +8,7 @@ export interface SystemStats {
   indexSize: string;
   dbPath: string;
   indexPath: string;
+  contentTypeDistribution?: Array<{ name: string; value: number }>;
   error?: string;
 }
 

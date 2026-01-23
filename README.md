@@ -27,7 +27,7 @@ raglite ingest ./docs/
 raglite search "your query here"
 ```
 
-**That's it.** No API keys, no cloud services, no configuration hell.
+**That's it.** No API keys, no cloud services, no configuration hell. Prefer a UI? Run `raglite ui` for a visual interface with drag‑and‑drop ingestion and search.
 
 ### 🎬 See It In Action
 

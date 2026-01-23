@@ -3,7 +3,6 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { 
   Select, 
   SelectContent, 
@@ -16,14 +15,12 @@ import {
   Sparkles, 
   Type, 
   Image as ImageIcon, 
-  Settings2, 
   ChevronDown, 
   ChevronUp,
   Scissors,
   FolderTree,
   Database,
-  FileCode,
-  GitBranch
+  FileCode
 } from 'lucide-react';
 import { useState } from 'react';
 

@@ -39,6 +39,10 @@
     "dist/esm/**/*.d.ts",
     "dist/cjs/**/*.d.ts",
     "!dist/**/*.map",
+    "ui/backend/dist/**",
+    "ui/frontend/dist/**",
+    "!ui/**/src/**",
+    "!ui/**/node_modules/**",
     "README.md",
     "LICENSE"
   ],
@@ -47,7 +51,10 @@
     "build:esm": "tsc -p tsconfig.esm.json",
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "build:test": "tsc --project tsconfig.test.json",
-    "clean": "rimraf dist",
+    "build:ui:backend": "cd ui/backend && npm run build",
+    "build:ui:frontend": "cd ui/frontend && npm run build",
+    "build:ui": "npm run build:ui:backend && npm run build:ui:frontend",
+    "clean": "rimraf dist ui/backend/dist ui/frontend/dist",
     "dev": "tsc --watch",
     "test": "npm run build:test && node --expose-gc --test --test-concurrency=1 dist/__tests__/core dist/__tests__/text dist/__tests__/preprocessors dist/__tests__/cli dist/__tests__/factories",
     "test:verbose": "npm run build:test && node --expose-gc --test --test-concurrency=1 --test-reporter=tap dist/__tests__/core dist/__tests__/text dist/__tests__/preprocessors dist/__tests__/cli dist/__tests__/factories",
@@ -63,7 +70,7 @@
     "test:integration:verbose": "npm run build && npm run build:test && node --expose-gc --test --test-concurrency=1 --test-reporter=tap dist/__tests__/integration",
     "test:all": "npm run build:test && node --expose-gc --test --test-concurrency=1 dist/__tests__",
     "test:all:verbose": "npm run build:test && node --expose-gc --test --test-concurrency=1 --test-reporter=tap dist/__tests__",
-    "prepublishOnly": "npm run clean && npm run build"
+    "prepublishOnly": "npm run clean && npm run build && npm run build:ui"
   },
   "keywords": [
     "rag",
