@@ -7,6 +7,7 @@ import { IndexManager } from '../index-manager.js';
 import { DatabaseConnection, getChunksByEmbeddingIds } from './db.js';
 import type { SearchResult, SearchOptions } from './types.js';
 import type { EmbedFunction, RerankFunction } from './interfaces.js';
+import type { GenerateFunction, GenerationResult } from './response-generator.js';
 import { config } from './config.js';
 import { createMissingDependencyError } from './actionable-error-messages.js';
 
@@ -15,8 +16,46 @@ import { createMissingDependencyError } from './actionable-error-messages.js';
  * Implements the core search pipeline: query embedding → vector search → metadata retrieval → optional reranking
  * Uses explicit dependency injection for clean architecture
  */
+/**
+ * Extended search options with generation support
+ * @experimental Generation features are experimental
+ */
+export interface ExtendedSearchOptions extends SearchOptions {
+  /** Enable AI response generation from search results */
+  generateResponse?: boolean;
+  /** Generator model to use (default: SmolLM2-135M-Instruct) */
+  generatorModel?: string;
+  /** Generation options */
+  generationOptions?: {
+    maxTokens?: number;
+    temperature?: number;
+    systemPrompt?: string;
+    /** Maximum chunks to use for context (overrides model default) */
+    maxChunksForContext?: number;
+  };
+}
+
+/**
+ * Search result with optional generated response
+ * @experimental Generation features are experimental
+ */
+export interface SearchResultWithGeneration {
+  /** Search results (chunks) */
+  results: SearchResult[];
+  /** Generated response (if generation was enabled) */
+  generation?: {
+    response: string;
+    modelUsed: string;
+    tokensUsed: number;
+    truncated: boolean;
+    chunksUsedForContext: number;
+    generationTimeMs: number;
+  };
+}
+
 export class SearchEngine {
   private contentResolver?: import('./content-resolver.js').ContentResolver;
+  private generateFn?: GenerateFunction;
 
   /**
    * Creates a new SearchEngine with explicit dependency injection
@@ -77,7 +116,8 @@ export class SearchEngine {
     private indexManager: IndexManager,
     private db: DatabaseConnection,
     private rerankFn?: RerankFunction,
-    contentResolver?: import('./content-resolver.js').ContentResolver
+    contentResolver?: import('./content-resolver.js').ContentResolver,
+    generateFn?: GenerateFunction
   ) {
     // Validate required dependencies
     if (!embedFn || typeof embedFn !== 'function') {
@@ -98,6 +138,94 @@ export class SearchEngine {
     
     // Initialize ContentResolver if provided, or create lazily when needed
     this.contentResolver = contentResolver;
+    
+    // Initialize GenerateFunction if provided (experimental)
+    this.generateFn = generateFn;
+  }
+
+  /**
+   * Set or update the generate function
+   * @experimental This method is experimental and may change
+   */
+  setGenerateFunction(generateFn: GenerateFunction | undefined): void {
+    this.generateFn = generateFn;
+  }
+
+  /**
+   * Check if generation is available
+   * @experimental This method is experimental and may change
+   */
+  hasGenerationCapability(): boolean {
+    return this.generateFn !== undefined;
+  }
+
+  /**
+   * Perform semantic search with optional AI response generation
+   * 
+   * This method extends the standard search with optional response generation.
+   * When generation is enabled, the retrieved chunks are used as context for
+   * an AI model to generate a synthesized response.
+   * 
+   * @param query - Search query string
+   * @param options - Extended search options including generation settings
+   * @returns Promise resolving to search results with optional generated response
+   * 
+   * @example
+   * ```typescript
+   * // Search with generation
+   * const result = await search.searchWithGeneration('How does auth work?', {
+   *   top_k: 5,
+   *   generateResponse: true
+   * });
+   * console.log(result.generation?.response);
+   * ```
+   * 
+   * @experimental This method is experimental and may change in future versions.
+   */
+  async searchWithGeneration(
+    query: string, 
+    options: ExtendedSearchOptions = {}
+  ): Promise<SearchResultWithGeneration> {
+    // Perform standard search
+    const results = await this.search(query, options);
+
+    // If generation not requested or no results, return without generation
+    if (!options.generateResponse || results.length === 0) {
+      return { results };
+    }
+
+    // Check if generation is available
+    if (!this.generateFn) {
+      console.warn('⚠️ [EXPERIMENTAL] Generation requested but no generator configured');
+      return { results };
+    }
+
+    try {
+      console.log('🤖 [EXPERIMENTAL] Generating response from search results...');
+      
+      const generationResult = await this.generateFn(query, results, {
+        maxTokens: options.generationOptions?.maxTokens,
+        temperature: options.generationOptions?.temperature,
+        systemPrompt: options.generationOptions?.systemPrompt,
+        maxChunksForContext: options.generationOptions?.maxChunksForContext
+      });
+
+      return {
+        results,
+        generation: {
+          response: generationResult.response,
+          modelUsed: generationResult.modelName,
+          tokensUsed: generationResult.tokensUsed,
+          truncated: generationResult.truncated,
+          chunksUsedForContext: generationResult.metadata.chunksIncluded,
+          generationTimeMs: generationResult.generationTimeMs
+        }
+      };
+    } catch (error) {
+      console.error('❌ [EXPERIMENTAL] Generation failed:', error instanceof Error ? error.message : 'Unknown error');
+      // Return results without generation on error
+      return { results };
+    }
   }
 
   /**

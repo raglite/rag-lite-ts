@@ -11,6 +11,7 @@ import '../dom-polyfills.js';
 
 import type { UniversalEmbedder } from './universal-embedder.js';
 import type { RerankFunction } from './interfaces.js';
+import type { ResponseGenerator } from './response-generator.js';
 import { handleError, ErrorCategory, ErrorSeverity, createError } from './error-handler.js';
 
 // =============================================================================
@@ -194,6 +195,134 @@ export class LazyEmbedderLoader {
       totalLoaded: loadedModules.length,
       textEmbedders,
       multimodalEmbedders
+    };
+  }
+}
+
+// =============================================================================
+// LAZY GENERATOR LOADING
+// =============================================================================
+
+/**
+ * Lazy loader for response generator implementations
+ * Only loads the specific generator type when needed
+ * 
+ * @experimental This feature is experimental and may change in future versions.
+ */
+export class LazyGeneratorLoader {
+  private static cache = LazyLoadingCache.getInstance();
+
+  /**
+   * Lazily load and create an instruct generator (SmolLM2-Instruct)
+   * Only imports the module when generation is actually requested
+   */
+  static async loadInstructGenerator(
+    modelName: string,
+    options: any = {}
+  ): Promise<ResponseGenerator> {
+    const cacheKey = `generator:instruct:${modelName}`;
+    
+    return this.cache.getOrLoad(cacheKey, async () => {
+      try {
+        console.log(`🔄 [EXPERIMENTAL] Lazy loading instruct generator: ${modelName}`);
+        
+        // Dynamic import - only loaded when generation is requested
+        const { InstructGenerator } = await import('../text/generators/instruct-generator.js');
+        
+        const generator = new InstructGenerator(modelName, options);
+        await generator.loadModel();
+        
+        console.log(`✅ Instruct generator loaded: ${modelName}`);
+        return generator;
+        
+      } catch (error) {
+        const enhancedError = createError.model(
+          `Failed to lazy load instruct generator '${modelName}': ${error instanceof Error ? error.message : 'Unknown error'}`
+        );
+        
+        handleError(enhancedError, 'LazyGeneratorLoader', {
+          severity: ErrorSeverity.ERROR,
+          category: ErrorCategory.MODEL
+        });
+        
+        throw enhancedError;
+      }
+    });
+  }
+
+  /**
+   * Lazily load and create a causal LM generator (DistilGPT2)
+   * Only imports the module when generation is actually requested
+   */
+  static async loadCausalLMGenerator(
+    modelName: string,
+    options: any = {}
+  ): Promise<ResponseGenerator> {
+    const cacheKey = `generator:causal-lm:${modelName}`;
+    
+    return this.cache.getOrLoad(cacheKey, async () => {
+      try {
+        console.log(`🔄 [EXPERIMENTAL] Lazy loading causal LM generator: ${modelName}`);
+        
+        // Dynamic import - only loaded when generation is requested
+        const { CausalLMGenerator } = await import('../text/generators/causal-lm-generator.js');
+        
+        const generator = new CausalLMGenerator(modelName, options);
+        await generator.loadModel();
+        
+        console.log(`✅ Causal LM generator loaded: ${modelName}`);
+        return generator;
+        
+      } catch (error) {
+        const enhancedError = createError.model(
+          `Failed to lazy load causal LM generator '${modelName}': ${error instanceof Error ? error.message : 'Unknown error'}`
+        );
+        
+        handleError(enhancedError, 'LazyGeneratorLoader', {
+          severity: ErrorSeverity.ERROR,
+          category: ErrorCategory.MODEL
+        });
+        
+        throw enhancedError;
+      }
+    });
+  }
+
+  /**
+   * Check if a generator is already loaded in cache
+   */
+  static isGeneratorLoaded(modelName: string, modelType: 'instruct' | 'causal-lm'): boolean {
+    const cacheKey = `generator:${modelType}:${modelName}`;
+    return this.cache.getLoadedModules().includes(cacheKey);
+  }
+
+  /**
+   * Remove a generator from the cache (called when generator is cleaned up)
+   */
+  static removeGeneratorFromCache(modelName: string, modelType: 'instruct' | 'causal-lm'): void {
+    const cacheKey = `generator:${modelType}:${modelName}`;
+    this.cache.remove(cacheKey);
+    console.log(`🧹 Removed generator from cache: ${cacheKey}`);
+  }
+
+  /**
+   * Get statistics about loaded generators
+   */
+  static getLoadingStats(): {
+    loadedGenerators: string[];
+    totalLoaded: number;
+    instructGenerators: number;
+    causalLMGenerators: number;
+  } {
+    const loadedModules = this.cache.getLoadedModules().filter(key => key.startsWith('generator:'));
+    const instructGenerators = loadedModules.filter(key => key.includes(':instruct:')).length;
+    const causalLMGenerators = loadedModules.filter(key => key.includes(':causal-lm:')).length;
+
+    return {
+      loadedGenerators: loadedModules,
+      totalLoaded: loadedModules.length,
+      instructGenerators,
+      causalLMGenerators
     };
   }
 }
@@ -440,6 +569,23 @@ export class LazyMultimodalLoader {
  */
 export class LazyDependencyManager {
   /**
+   * Load response generator based on model type with lazy loading
+   * @experimental This feature is experimental and may change in future versions.
+   */
+  static async loadGenerator(modelName: string, modelType: 'instruct' | 'causal-lm', options: any = {}): Promise<ResponseGenerator> {
+    switch (modelType) {
+      case 'instruct':
+        return LazyGeneratorLoader.loadInstructGenerator(modelName, options);
+      
+      case 'causal-lm':
+        return LazyGeneratorLoader.loadCausalLMGenerator(modelName, options);
+      
+      default:
+        throw createError.validation(`Unsupported generator model type for lazy loading: ${modelType}`);
+    }
+  }
+
+  /**
    * Load embedder based on model type with lazy loading
    */
   static async loadEmbedder(modelName: string, modelType: 'sentence-transformer' | 'clip', options: any = {}): Promise<UniversalEmbedder> {
@@ -481,27 +627,30 @@ export class LazyDependencyManager {
   static getLoadingStatistics(): {
     embedders: ReturnType<typeof LazyEmbedderLoader.getLoadingStats>;
     rerankers: ReturnType<typeof LazyRerankerLoader.getLoadingStats>;
+    generators: ReturnType<typeof LazyGeneratorLoader.getLoadingStats>;
     multimodal: ReturnType<typeof LazyMultimodalLoader.getMultimodalLoadingStatus>;
     totalModulesLoaded: number;
     memoryImpact: 'low' | 'medium' | 'high';
   } {
     const embedderStats = LazyEmbedderLoader.getLoadingStats();
     const rerankerStats = LazyRerankerLoader.getLoadingStats();
+    const generatorStats = LazyGeneratorLoader.getLoadingStats();
     const multimodalStats = LazyMultimodalLoader.getMultimodalLoadingStatus();
     
-    const totalModules = embedderStats.totalLoaded + rerankerStats.totalLoaded + multimodalStats.loadedProcessors.length;
+    const totalModules = embedderStats.totalLoaded + rerankerStats.totalLoaded + generatorStats.totalLoaded + multimodalStats.loadedProcessors.length;
     
     // Estimate memory impact based on loaded modules
     let memoryImpact: 'low' | 'medium' | 'high' = 'low';
     if (embedderStats.multimodalEmbedders > 0 || multimodalStats.imageToTextLoaded) {
       memoryImpact = 'high';
-    } else if (totalModules > 2) {
+    } else if (totalModules > 2 || generatorStats.totalLoaded > 0) {
       memoryImpact = 'medium';
     }
 
     return {
       embedders: embedderStats,
       rerankers: rerankerStats,
+      generators: generatorStats,
       multimodal: multimodalStats,
       totalModulesLoaded: totalModules,
       memoryImpact

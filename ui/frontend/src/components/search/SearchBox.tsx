@@ -1,10 +1,11 @@
 import { useState, useRef } from 'react';
-import { Search, Loader2, SlidersHorizontal, Database, Folder, Image as ImageIcon, X, Type } from 'lucide-react';
+import { Search, Loader2, SlidersHorizontal, Database, Folder, Image as ImageIcon, X, Type, Sparkles, Bot } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { useSearchStore } from '@/stores/searchStore';
+import { useSearchStore, GENERATOR_MODELS } from '@/stores/searchStore';
 import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
 
 export function SearchBox() {
   const { 
@@ -16,7 +17,12 @@ export function SearchBox() {
     topK, rerank, setRerank,
     rerankingAvailable, setRerankingAvailable,
     contentType,
-    dbPath, indexPath, setDbPath, setIndexPath
+    dbPath, indexPath, setDbPath, setIndexPath,
+    // Generation state (experimental)
+    generateResponse, setGenerateResponse,
+    generatorModel, setGeneratorModel,
+    maxChunksForContext, setMaxChunksForContext,
+    setGenerationResult, setIsGenerating
   } = useSearchStore();
   const [showOptions, setShowOptions] = useState(false);
   const [showPaths, setShowPaths] = useState(false);
@@ -33,6 +39,8 @@ export function SearchBox() {
       }
       setImageFile(file);
       setSearchMode('image');
+      // Disable generation for image search
+      setGenerateResponse(false);
       // Create preview
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -59,6 +67,11 @@ export function SearchBox() {
 
     setLoading(true);
     setError(null);
+    setGenerationResult(null);
+    
+    if (generateResponse && searchMode === 'text') {
+      setIsGenerating(true);
+    }
 
     try {
       let response: Response;
@@ -79,17 +92,28 @@ export function SearchBox() {
         });
       } else {
         // Text search: send as JSON
+        const requestBody: any = { 
+          query, 
+          topK, 
+          rerank: generateResponse ? true : rerank,  // Force rerank if generating
+          contentType,
+          dbPath: dbPath || undefined,
+          indexPath: indexPath || undefined
+        };
+
+        // Add generation options if enabled (experimental)
+        if (generateResponse) {
+          requestBody.generateResponse = true;
+          requestBody.generatorModel = generatorModel;
+          if (maxChunksForContext !== null) {
+            requestBody.maxChunksForContext = maxChunksForContext;
+          }
+        }
+
         response = await fetch('/api/search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            query, 
-            topK, 
-            rerank, 
-            contentType,
-            dbPath: dbPath || undefined,
-            indexPath: indexPath || undefined
-          }),
+          body: JSON.stringify(requestBody),
         });
       }
 
@@ -101,12 +125,17 @@ export function SearchBox() {
       const data = await response.json();
       setResults(data.results);
       
+      // Set generation result if available (experimental)
+      if (data.generation) {
+        setGenerationResult(data.generation);
+      }
+      
       // Update reranking availability from search results
       if (data.stats) {
         setRerankingAvailable(data.stats.rerankingEnabled || false);
         
         // Show warning if user enabled reranking but it's not available
-        if (rerank && !data.stats.rerankingEnabled && searchMode === 'text') {
+        if (rerank && !data.stats.rerankingEnabled && searchMode === 'text' && !generateResponse) {
           setError('Reranking was enabled but is not available. It may have been disabled during ingestion.');
         }
       }
@@ -114,8 +143,12 @@ export function SearchBox() {
       setError(err.message);
     } finally {
       setLoading(false);
+      setIsGenerating(false);
     }
   };
+
+  // Get selected model info
+  const selectedModelInfo = GENERATOR_MODELS.find(m => m.value === generatorModel);
 
   return (
     <div className="w-full space-y-4">
@@ -145,6 +178,7 @@ export function SearchBox() {
           onClick={() => {
             setSearchMode('image');
             setQuery('');
+            setGenerateResponse(false); // Disable generation for image search
             fileInputRef.current?.click();
           }}
           className="flex items-center gap-2"
@@ -308,6 +342,90 @@ export function SearchBox() {
             )}
           </div>
 
+          {/* AI Response Generation Section (Experimental) - Text mode only */}
+          {searchMode === 'text' && (
+            <div className="p-4 border rounded-lg bg-gradient-to-br from-primary/5 to-transparent space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  <label className="text-sm font-medium">AI Response Generation</label>
+                  <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/30">
+                    EXPERIMENTAL
+                  </Badge>
+                </div>
+                <Switch 
+                  checked={generateResponse}
+                  onCheckedChange={(checked) => {
+                    setGenerateResponse(checked);
+                    // If enabling generation, enable reranking (required)
+                    if (checked) {
+                      setRerank(true);
+                    }
+                  }}
+                />
+              </div>
+              
+              {generateResponse && (
+                <div className="space-y-4 pt-2 border-t border-primary/10">
+                  <p className="text-xs text-muted-foreground">
+                    Generate an AI response based on search results. Reranking is automatically enabled.
+                  </p>
+                  
+                  {/* Model Selection */}
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Bot className="h-3 w-3" />
+                      Generator Model
+                    </Label>
+                    <div className="grid gap-2">
+                      {GENERATOR_MODELS.map((model) => (
+                        <button
+                          key={model.value}
+                          type="button"
+                          onClick={() => {
+                            setGeneratorModel(model.value);
+                            setMaxChunksForContext(null); // Reset to model default
+                          }}
+                          className={`p-3 rounded-lg border text-left transition-colors ${
+                            generatorModel === model.value 
+                              ? 'border-primary bg-primary/5' 
+                              : 'border-muted hover:border-primary/50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">{model.label}</span>
+                            {model.value === 'HuggingFaceTB/SmolLM2-135M-Instruct' && (
+                              <Badge variant="secondary" className="text-[10px]">Recommended</Badge>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-muted-foreground mt-1">{model.description}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Max Chunks Override */}
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">
+                      Max Chunks for Context: {maxChunksForContext || selectedModelInfo?.defaultChunks || 3}
+                    </Label>
+                    <input 
+                      type="range" 
+                      min="1" 
+                      max="10" 
+                      value={maxChunksForContext || selectedModelInfo?.defaultChunks || 3}
+                      onChange={(e) => setMaxChunksForContext(parseInt(e.target.value))}
+                      className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      Number of top-ranked chunks to include in AI context
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Search Options */}
           <div className="p-4 border rounded-lg bg-card/50 grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="flex items-center justify-between">
@@ -316,29 +434,31 @@ export function SearchBox() {
                 <p className="text-xs text-muted-foreground">
                   {searchMode === 'image' 
                     ? 'Disabled for image search' 
-                    : rerankingAvailable === false 
-                      ? 'Not available (disabled during ingestion)'
-                      : 'Improve search quality'}
+                    : generateResponse
+                      ? 'Enabled (required for generation)'
+                      : rerankingAvailable === false 
+                        ? 'Not available (disabled during ingestion)'
+                        : 'Improve search quality'}
                 </p>
                 {searchMode === 'image' && (
                   <p className="text-[10px] text-amber-500/80 mt-0.5">
                     Image search uses CLIP embeddings for direct visual matching
                   </p>
                 )}
-                {searchMode === 'text' && rerankingAvailable === false && rerank && (
+                {searchMode === 'text' && rerankingAvailable === false && rerank && !generateResponse && (
                   <p className="text-[10px] text-amber-500/80 mt-0.5">
                     Reranking was disabled during ingestion. Re-ingest with reranking enabled to use this feature.
                   </p>
                 )}
               </div>
               <Switch 
-                checked={rerank && searchMode === 'text'}
+                checked={(rerank && searchMode === 'text') || generateResponse}
                 onCheckedChange={(checked) => {
-                  if (searchMode === 'text') {
+                  if (searchMode === 'text' && !generateResponse) {
                     setRerank(checked);
                   }
                 }}
-                disabled={searchMode === 'image' || rerankingAvailable === false}
+                disabled={searchMode === 'image' || rerankingAvailable === false || generateResponse}
               />
             </div>
             

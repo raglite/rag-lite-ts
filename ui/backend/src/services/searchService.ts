@@ -6,9 +6,17 @@ import { supportsImages } from '../../../../src/core/universal-embedder.js';
 import { ModeDetectionService } from '../../../../src/core/mode-detection-service.js';
 import { DatabaseConnectionManager } from '../../../../src/core/database-connection-manager.js';
 
+// Generation imports (experimental)
+import { createGenerateFunctionFromModel, getDefaultGeneratorModel } from '../../../../src/factories/generator-factory.js';
+import { getDefaultMaxChunksForContext } from '../../../../src/core/generator-registry.js';
+import type { GenerateFunction } from '../../../../src/core/response-generator.js';
+
 export class SearchService {
   private static instance: any = null;
   private static instancePaths: { dbPath: string; indexPath: string } | null = null;
+  
+  // Generator cache (experimental)
+  private static generatorCache: Map<string, GenerateFunction> = new Map();
   
   // Get working directory from environment (where 'raglite ui' was called)
   // or fall back to current working directory
@@ -70,11 +78,6 @@ export class SearchService {
    * Reset cached search engine instance.
    * Used by ingestion force-rebuild to ensure no long-lived search
    * connections are holding the SQLite database open.
-   * 
-   * This is critical for the reset approach to work properly:
-   * - Releases the SearchEngine's database connection
-   * - Releases the IndexManager's database connection
-   * - Allows KnowledgeBaseManager.reset() to operate without conflicts
    */
   static async reset(dbPath?: string, indexPath?: string): Promise<void> {
     console.log('🔄 SearchService.reset() called');
@@ -150,21 +153,84 @@ export class SearchService {
     
     return engine;
   }
+
+  /**
+   * Get or create a generator function for the specified model (experimental)
+   */
+  private static async getGenerator(modelName: string): Promise<GenerateFunction> {
+    // Check cache first
+    if (this.generatorCache.has(modelName)) {
+      return this.generatorCache.get(modelName)!;
+    }
+
+    console.log(`🤖 [EXPERIMENTAL] Loading generator model: ${modelName}`);
+    const generateFn = await createGenerateFunctionFromModel(modelName);
+    
+    // Cache for reuse
+    this.generatorCache.set(modelName, generateFn);
+    console.log(`✅ Generator model loaded and cached: ${modelName}`);
+    
+    return generateFn;
+  }
   
   static async search(query: string, options: any = {}) {
     const { dbPath, indexPath } = options;
     const engine = await this.getSearchEngine(dbPath, indexPath);
     
+    // If generation is requested, force reranking (required for generation)
+    const rerank = options.generateResponse ? true : (options.rerank || false);
+    
     const results = await engine.search(query, {
       top_k: options.topK || 10,
-      rerank: options.rerank || false,
+      rerank: rerank,
       contentType: options.contentType || 'all'
     });
 
     const stats = await engine.getStats();
 
+    // Handle generation if requested (experimental, text mode only)
+    let generation = null;
+    if (options.generateResponse && results.length > 0) {
+      try {
+        console.log('🤖 [EXPERIMENTAL] Generating response from search results...');
+        
+        const modelName = options.generatorModel || getDefaultGeneratorModel();
+        const generateFn = await this.getGenerator(modelName);
+        
+        // Set up generator on search engine
+        engine.setGenerateFunction(generateFn);
+        
+        // Get default max chunks for the model
+        const defaultMaxChunks = getDefaultMaxChunksForContext(modelName) || 3;
+        const maxChunksForContext = options.maxChunksForContext || defaultMaxChunks;
+        
+        console.log(`   Model: ${modelName}`);
+        console.log(`   Max chunks for context: ${maxChunksForContext}`);
+        
+        // Generate response
+        const generationResult = await generateFn(query, results, {
+          maxChunksForContext: maxChunksForContext
+        });
+        
+        generation = {
+          response: generationResult.response,
+          modelUsed: generationResult.modelName,
+          tokensUsed: generationResult.tokensUsed,
+          truncated: generationResult.truncated,
+          chunksUsedForContext: generationResult.metadata.chunksIncluded,
+          generationTimeMs: generationResult.generationTimeMs
+        };
+        
+        console.log(`✅ Generation completed in ${generationResult.generationTimeMs}ms`);
+      } catch (error) {
+        console.error('❌ [EXPERIMENTAL] Generation failed:', error);
+        // Don't fail the whole request, just return results without generation
+      }
+    }
+
     return {
       results,
+      generation,
       stats: {
         totalChunks: stats.totalChunks,
         rerankingEnabled: stats.rerankingEnabled,
@@ -227,6 +293,7 @@ export class SearchService {
       
       return {
         results,
+        generation: null, // Generation not supported for image search
         stats: {
           totalChunks: stats.totalChunks,
           rerankingEnabled: false, // Always false for image search

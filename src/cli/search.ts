@@ -4,6 +4,7 @@ import { SearchFactory } from '../factories/search-factory.js';
 import { withCLIDatabaseAccess, setupCLICleanup } from '../core/cli-database-utils.js';
 import { config, EXIT_CODES, ConfigurationError } from '../core/config.js';
 import type { SearchOptions } from '../core/types.js';
+import type { ExtendedSearchOptions } from '../core/search.js';
 
 /**
  * Detect if query is an image file path
@@ -156,8 +157,8 @@ export async function runSearch(query: string, options: Record<string, any> = {}
         }
       }
       
-      // Prepare search options
-      const searchOptions: SearchOptions = {};
+      // Prepare search options (with generation support)
+      const searchOptions: ExtendedSearchOptions = {};
 
       if (options['top-k'] !== undefined) {
         searchOptions.top_k = options['top-k'];
@@ -193,9 +194,64 @@ export async function runSearch(query: string, options: Record<string, any> = {}
       // Track whether reranking will actually be used in this search
       const rerankingUsed = searchOptions.rerank === true;
       
+      // Handle generation options (experimental, text mode only)
+      const generateResponse = options.generate === true;
+      const generatorModel = options.generator;
+      const maxGenerationTokens = options['max-tokens'];
+      const generationTemperature = options.temperature;
+      const maxChunksForContext = options['max-chunks'];
+      
+      // Generation only supported in text mode
+      if (generateResponse && isImage) {
+        console.warn('⚠️  [EXPERIMENTAL] Generation is only supported for text searches.');
+        console.warn('   Image search results will be returned without generation.');
+        console.warn('');
+      }
+      
+      // Generation requires reranking - enable it automatically
+      let rerankingEnabledForGeneration = false;
+      if (generateResponse && !isImage && !searchOptions.rerank) {
+        searchOptions.rerank = true;
+        rerankingEnabledForGeneration = true;
+        console.log('📋 Reranking automatically enabled (required for generation)');
+      }
+      
+      // Set up generator if generation is requested (text mode only)
+      let generateFn;
+      if (generateResponse && !isImage) {
+        try {
+          console.log('🤖 [EXPERIMENTAL] Initializing response generator...');
+          const { createGenerateFunctionFromModel, getDefaultGeneratorModel } = await import('../factories/generator-factory.js');
+          const { getDefaultMaxChunksForContext } = await import('../core/generator-registry.js');
+          const modelToUse = generatorModel || getDefaultGeneratorModel();
+          const defaultChunks = getDefaultMaxChunksForContext(modelToUse) || 3;
+          console.log(`   Model: ${modelToUse}`);
+          console.log(`   Max chunks for context: ${maxChunksForContext || defaultChunks} (default: ${defaultChunks})`);
+          generateFn = await createGenerateFunctionFromModel(modelToUse);
+          searchEngine.setGenerateFunction(generateFn);
+          console.log('✅ Generator initialized');
+          console.log('');
+        } catch (error) {
+          console.error('❌ [EXPERIMENTAL] Failed to initialize generator:', error instanceof Error ? error.message : 'Unknown error');
+          console.error('   Continuing without generation...');
+          console.error('');
+        }
+      }
+      
+      // Set generation options if generator is ready
+      if (generateFn && generateResponse && !isImage) {
+        searchOptions.generateResponse = true;
+        searchOptions.generationOptions = {
+          maxTokens: maxGenerationTokens,
+          temperature: generationTemperature,
+          maxChunksForContext: maxChunksForContext
+        };
+      }
+      
       // Perform search
       const startTime = Date.now();
       let results;
+      let generationResult;
 
       if (isImage && embedder) {
         // Image-based search: embed the image and search with the vector
@@ -203,8 +259,13 @@ export async function runSearch(query: string, options: Record<string, any> = {}
         const imageEmbedding = await embedder.embedImage!(query);
         console.log('Searching with image embedding...');
         results = await searchEngine.searchWithVector(imageEmbedding.vector, searchOptions);
+      } else if (generateResponse && generateFn) {
+        // Text-based search with generation
+        const searchResult = await searchEngine.searchWithGeneration(query, searchOptions);
+        results = searchResult.results;
+        generationResult = searchResult.generation;
       } else {
-        // Text-based search
+        // Standard text-based search
         results = await searchEngine.search(query, searchOptions);
       }
       
@@ -249,6 +310,22 @@ export async function runSearch(query: string, options: Record<string, any> = {}
           console.log('');
         });
         
+        // Display generated response if available (experimental)
+        if (generationResult) {
+          console.log('─'.repeat(50));
+          console.log('🤖 Generated Response [EXPERIMENTAL]');
+          console.log(`Model: ${generationResult.modelUsed}`);
+          console.log('─'.repeat(50));
+          console.log('');
+          console.log(generationResult.response);
+          console.log('');
+          console.log('─'.repeat(50));
+          console.log(`⏱️  Generation: ${(generationResult.generationTimeMs / 1000).toFixed(1)}s | ` +
+            `📊 ${generationResult.tokensUsed} tokens | ` +
+            `📄 ${generationResult.chunksUsedForContext} chunks used` +
+            (generationResult.truncated ? ' (context truncated)' : ''));
+        }
+        
         // Show search statistics
         const stats = await searchEngine.getStats();
         console.log('─'.repeat(50));
@@ -262,6 +339,9 @@ export async function runSearch(query: string, options: Record<string, any> = {}
           console.log('Reranking: available (not used)');
         } else {
           console.log('Reranking: disabled');
+        }
+        if (generationResult) {
+          console.log('Generation: enabled [EXPERIMENTAL]');
         }
       }
       

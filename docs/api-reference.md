@@ -1049,6 +1049,41 @@ interface SearchOptions {
 }
 ```
 
+#### ExtendedSearchOptions ⚗️ EXPERIMENTAL
+
+Extended search options with AI response generation support.
+
+```typescript
+interface ExtendedSearchOptions extends SearchOptions {
+  generateResponse?: boolean;     // Enable AI response generation
+  generatorModel?: string;        // Generator model to use
+  generationOptions?: {
+    maxTokens?: number;           // Max tokens to generate (default: 512)
+    temperature?: number;         // Sampling temperature (default: 0.1)
+    systemPrompt?: string;        // Custom system prompt
+    maxChunksForContext?: number; // Max chunks for context (default: model-specific)
+  };
+}
+```
+
+#### SearchResultWithGeneration ⚗️ EXPERIMENTAL
+
+Search result with optional AI-generated response.
+
+```typescript
+interface SearchResultWithGeneration {
+  results: SearchResult[];        // Standard search results
+  generation?: {
+    response: string;             // AI-generated response
+    modelUsed: string;            // Generator model name
+    tokensUsed: number;           // Total tokens consumed
+    truncated: boolean;           // Whether context was truncated
+    chunksUsedForContext: number; // Chunks included in context
+    generationTimeMs: number;     // Generation time in ms
+  };
+}
+```
+
 #### IngestionResult
 
 ```typescript
@@ -1181,6 +1216,108 @@ type RerankingStrategyType =
   | 'hybrid'           // Combine multiple signals
   | 'disabled';        // No reranking
 ```
+
+## Response Generation ⚗️ EXPERIMENTAL
+
+*AI-powered response synthesis from search results*
+
+RAG-lite TS includes experimental support for generating AI responses from search results using local language models. This feature synthesizes natural language answers based on retrieved context.
+
+### Overview
+
+Response generation uses small, efficient language models (SmolLM2) that run locally via transformers.js. The system:
+1. Performs semantic search with reranking (required)
+2. Uses top-ranked chunks as context
+3. Generates a grounded response using the query and context
+
+### Supported Models
+
+| Model | Parameters | Context Chunks | Speed | Quality |
+|-------|------------|----------------|-------|---------|
+| `HuggingFaceTB/SmolLM2-135M-Instruct` ⭐ | 135M | 3 (default) | ⚡⚡ | ⭐⭐⭐ |
+| `HuggingFaceTB/SmolLM2-360M-Instruct` | 360M | 5 (default) | ⚡ | ⭐⭐⭐⭐ |
+
+### Basic Usage
+
+```typescript
+import { SearchEngine, createGenerateFunctionFromModel } from 'rag-lite-ts';
+
+const search = new SearchEngine('./index.bin', './db.sqlite');
+
+// Set up generator
+const generateFn = await createGenerateFunctionFromModel();
+search.setGenerateFunction(generateFn);
+
+// Search with generation
+const result = await search.searchWithGeneration('How does authentication work?', {
+  generateResponse: true
+});
+
+console.log(result.generation?.response);
+// "Based on the documentation, authentication is handled via JWT tokens..."
+
+console.log(result.generation?.chunksUsedForContext);
+// 3
+
+console.log(result.generation?.generationTimeMs);
+// 1234
+```
+
+### Advanced Configuration
+
+```typescript
+const result = await search.searchWithGeneration('API rate limits', {
+  top_k: 10,
+  generateResponse: true,
+  generatorModel: 'HuggingFaceTB/SmolLM2-360M-Instruct',
+  generationOptions: {
+    maxTokens: 256,
+    temperature: 0.1,
+    maxChunksForContext: 5
+  }
+});
+```
+
+### Standalone Generator Usage
+
+```typescript
+import { createResponseGenerator } from 'rag-lite-ts';
+
+// Create generator directly
+const generator = await createResponseGenerator('HuggingFaceTB/SmolLM2-135M-Instruct');
+
+// Generate response from search results
+const result = await generator.generate({
+  query: 'What are the config options?',
+  chunks: searchResults,
+  maxChunksForContext: 3
+});
+
+console.log(result.response);
+console.log(result.metadata.finishReason); // 'complete' | 'length' | 'stop_sequence'
+
+// Clean up when done
+await generator.cleanup();
+```
+
+### Generator Types
+
+```typescript
+import type {
+  ResponseGenerator,
+  GenerationRequest,
+  GenerationResult,
+  GenerateFunction
+} from 'rag-lite-ts';
+```
+
+### Important Notes
+
+- **Reranking Required**: Generation automatically enables reranking for quality
+- **Text Mode Only**: Currently only supported in text mode (not multimodal)
+- **Local Processing**: Models run locally, no API keys needed
+- **First-Run Download**: Models are downloaded on first use (~300MB-600MB)
+- **Temperature**: Low temperature (0.1) is recommended for factual responses
 
 ## Error Handling
 

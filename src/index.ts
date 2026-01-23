@@ -302,3 +302,80 @@ export {
   CommonErrors,
   handleAPIError
 } from './api-errors.js';
+
+// =============================================================================
+// EXPERIMENTAL: RESPONSE GENERATION
+// =============================================================================
+
+// Generator factory functions
+export {
+  createResponseGenerator,
+  createGenerateFunctionFromModel,
+  getDefaultGeneratorModel,
+  listGeneratorModels,
+  isValidGeneratorModel,
+  getRecommendedGenerator
+} from './factories/generator-factory.js';
+
+// Generator types and interfaces
+export type {
+  ResponseGenerator,
+  GeneratorModelType,
+  GenerationRequest,
+  GenerationResult,
+  GeneratorCapabilities,
+  GeneratorRequirements,
+  GeneratorModelInfo,
+  GeneratorValidationResult,
+  GeneratorCreationOptions,
+  GenerateFunction,
+  CreateGeneratorFunction
+} from './core/response-generator.js';
+
+// Generator errors
+export {
+  GeneratorValidationError,
+  GenerationError,
+  ContextWindowError
+} from './core/response-generator.js';
+
+// Generator utilities
+export {
+  supportsStreaming,
+  isInstructModel,
+  createGenerateFunction
+} from './core/response-generator.js';
+
+// Generator registry
+export {
+  SUPPORTED_GENERATORS,
+  DEFAULT_GENERATOR_MODEL,
+  GeneratorRegistry,
+  getGeneratorType,
+  isInstructionTunedModel,
+  getMaxContextLength,
+  getRecommendedSettings,
+  getDefaultMaxChunksForContext
+} from './core/generator-registry.js';
+
+// Prompt templates
+export {
+  DEFAULT_SYSTEM_PROMPT,
+  formatContextChunks,
+  buildPrompt,
+  estimateTokenCount,
+  type ContextFormattingOptions,
+  type FormattedContext,
+  type PromptBuildOptions,
+  type BuiltPrompt
+} from './core/prompt-templates.js';
+
+// Generator implementations
+export { InstructGenerator } from './text/generators/instruct-generator.js';
+export { CausalLMGenerator } from './text/generators/causal-lm-generator.js';
+
+// Extended search types with generation
+export type {
+  ExtendedSearchOptions,
+  SearchResultWithGeneration
+} from './core/search.js';

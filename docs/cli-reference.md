@@ -159,6 +159,19 @@ raglite search <query> [options]
 - `--db <path>`: Database file path
 - `--index <path>`: Index file path
 
+#### ⚗️ EXPERIMENTAL: AI Response Generation Options (text mode only)
+- `--generate`: Enable AI response generation from search results
+- `--generator <model>`: Generator model to use (default: `SmolLM2-135M-Instruct`)
+- `--max-tokens <number>`: Maximum tokens to generate (default: 512)
+- `--temperature <number>`: Sampling temperature 0-1 (default: 0.1)
+- `--max-chunks <number>`: Max chunks for context (default: 3 for 135M, 5 for 360M)
+
+**Available Generator Models:**
+- `HuggingFaceTB/SmolLM2-135M-Instruct` - Balanced quality and speed (recommended)
+- `HuggingFaceTB/SmolLM2-360M-Instruct` - Higher quality, slower
+
+**Note:** Generation requires reranking, which is automatically enabled when `--generate` is used.
+
 #### Examples
 
 **Basic search:**
@@ -209,6 +222,42 @@ raglite search "project requirements" --db work.sqlite --index work-index.bin
 
 # Search personal documents
 raglite search "recipe ideas" --db personal.sqlite --index personal-index.bin
+```
+
+**⚗️ AI Response Generation (Experimental):**
+```bash
+# Generate AI response from search results
+raglite search "How does authentication work?" --generate
+
+# Use higher quality model (slower)
+raglite search "API rate limits" --generate --generator HuggingFaceTB/SmolLM2-360M-Instruct
+
+# Custom generation settings
+raglite search "configuration options" --generate --max-tokens 256 --max-chunks 4
+
+# Combine with other options
+raglite search "error handling" --generate --top-k 15
+```
+
+**Generation Output:**
+```
+🔍 Searching for: "How does authentication work?"
+
+📄 Found 5 relevant chunks:
+  [1] auth-guide.md (score: 0.892)
+  [2] api-reference.md (score: 0.856)
+  ...
+
+──────────────────────────────────────────────────
+🤖 Generated Response [EXPERIMENTAL]
+Model: HuggingFaceTB/SmolLM2-135M-Instruct
+──────────────────────────────────────────────────
+
+Based on the documentation, authentication works through JWT tokens.
+Users authenticate by sending a POST request to the /auth/login endpoint...
+
+──────────────────────────────────────────────────
+⏱️  Generation: 1.2s | 📊 89 tokens | 📄 3 chunks used
 ```
 
 #### Output Format

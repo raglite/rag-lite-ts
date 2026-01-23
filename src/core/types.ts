@@ -91,3 +91,12 @@ export interface Document {
 // Database types (re-exported from db module)
 export type { DatabaseConnection } from './db.js';
 export type { ContentChunk as ChunkResult } from './db.js';
+
+// Re-export generation types for convenience (experimental)
+export type { 
+  GenerationRequest, 
+  GenerationResult, 
+  GenerateFunction,
+  ResponseGenerator,
+  GeneratorModelInfo
+} from './response-generator.js';

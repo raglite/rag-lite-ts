@@ -14,6 +14,7 @@ export const searchController = {
         
         console.log(`Image Search Request: "${imageFile.originalname}" (topK: ${topK}, rerank: ${rerank}, dbPath: ${dbPath || 'default'}, indexPath: ${indexPath || 'default'})`);
         
+        // Note: Generation is not supported for image search
         const searchResult = await SearchService.searchImage(imageFile, {
           topK: topK ? parseInt(topK.toString()) : 10,
           rerank: rerank === true || rerank === 'true',
@@ -25,7 +26,18 @@ export const searchController = {
         res.json(searchResult);
       } else {
         // Text search: extract from JSON body
-        const { query, topK, rerank, contentType, dbPath, indexPath } = req.body;
+        const { 
+          query, 
+          topK, 
+          rerank, 
+          contentType, 
+          dbPath, 
+          indexPath,
+          // Generation options (experimental)
+          generateResponse,
+          generatorModel,
+          maxChunksForContext
+        } = req.body;
 
         if (!query || typeof query !== 'string') {
           return res.status(400).json({
@@ -34,14 +46,23 @@ export const searchController = {
           });
         }
 
-        console.log(`Text Search Request: "${query}" (topK: ${topK}, rerank: ${rerank}, dbPath: ${dbPath || 'default'}, indexPath: ${indexPath || 'default'})`);
+        // Log generation request if enabled
+        if (generateResponse) {
+          console.log(`[EXPERIMENTAL] Text Search with Generation: "${query}" (model: ${generatorModel || 'default'}, maxChunks: ${maxChunksForContext || 'default'})`);
+        } else {
+          console.log(`Text Search Request: "${query}" (topK: ${topK}, rerank: ${rerank}, dbPath: ${dbPath || 'default'}, indexPath: ${indexPath || 'default'})`);
+        }
         
         const searchResult = await SearchService.search(query, {
           topK: topK ? parseInt(topK.toString()) : 10,
           rerank: rerank === true || rerank === 'true',
           contentType: contentType || 'all',
           dbPath: dbPath || undefined,
-          indexPath: indexPath || undefined
+          indexPath: indexPath || undefined,
+          // Generation options (experimental)
+          generateResponse: generateResponse === true || generateResponse === 'true',
+          generatorModel: generatorModel || undefined,
+          maxChunksForContext: maxChunksForContext ? parseInt(maxChunksForContext.toString()) : undefined
         });
 
         res.json(searchResult);

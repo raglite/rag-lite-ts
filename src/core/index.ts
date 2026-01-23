@@ -141,3 +141,63 @@ export {
 
 // Error handling framework - supports implementation-specific error contexts
 export * from './error-handler.js';
+
+// =============================================================================
+// EXPERIMENTAL: Response Generation
+// =============================================================================
+
+// Response generation types and interfaces (experimental)
+export {
+  type ResponseGenerator,
+  type GeneratorModelType,
+  type GenerationRequest,
+  type GenerationResult,
+  type GeneratorCapabilities,
+  type GeneratorRequirements,
+  type GeneratorModelInfo,
+  type GeneratorValidationResult,
+  type GeneratorCreationOptions,
+  type GenerateFunction,
+  type CreateGeneratorFunction,
+  GeneratorValidationError,
+  GenerationError,
+  ContextWindowError,
+  supportsStreaming,
+  isInstructModel,
+  createGenerateFunction
+} from './response-generator.js';
+
+// Generator registry (experimental)
+export {
+  SUPPORTED_GENERATORS,
+  DEFAULT_GENERATOR_MODEL,
+  GeneratorRegistry,
+  getGeneratorType,
+  isInstructionTunedModel,
+  getMaxContextLength,
+  getRecommendedSettings,
+  getDefaultMaxChunksForContext
+} from './generator-registry.js';
+
+// Prompt templates for generation (experimental)
+export {
+  DEFAULT_SYSTEM_PROMPT,
+  DEFAULT_SYSTEM_PROMPT_WITH_ATTRIBUTION,
+  SMOLLM2_CHAT_TEMPLATE,
+  formatContextChunks,
+  buildPrompt,
+  estimateTokenCount,
+  calculateContextBudget,
+  getDefaultStopSequences,
+  type ContextFormattingOptions,
+  type FormattedContext,
+  type PromptBuildOptions,
+  type BuiltPrompt
+} from './prompt-templates.js';
+
+// Abstract base generator (experimental)
+export {
+  BaseResponseGenerator,
+  createGeneratorOptions,
+  type GeneratorOptions
+} from './abstract-generator.js';

@@ -57,6 +57,7 @@ Examples:
   raglite search "red car" --content-type image  # Search only image results
   raglite search ./photo.jpg       # Search with image (multimodal mode only)
   raglite search ./image.png --top-k 5  # Find similar images
+  raglite search "How does auth work?" --generate  # [EXPERIMENTAL] Generate AI response
   raglite ui                       # Launch web interface
 
   raglite rebuild                  # Rebuild the entire index
@@ -66,6 +67,13 @@ Options for search:
   --rerank              Enable reranking for better results
   --no-rerank           Disable reranking
   --content-type <type> Filter results by content type: 'text', 'image', or 'all' (default: all)
+
+  [EXPERIMENTAL] AI Response Generation (text mode only):
+  --generate            Generate an AI response from search results
+  --generator <model>   Generator model to use (default: SmolLM2-135M-Instruct)
+  --max-tokens <n>      Maximum tokens to generate (default: 512)
+  --temperature <n>     Sampling temperature 0-1 (default: 0.1)
+  --max-chunks <n>      Maximum chunks for context (default: 3 for 135M, 5 for 360M)
 
 Options for ingest:
   --model <name>       Use specific embedding model
@@ -85,6 +93,12 @@ Available models:
 Available reranking strategies (multimodal mode):
   text-derived  Use image-to-text conversion + cross-encoder (default)
   disabled      No reranking, use vector similarity only
+
+[EXPERIMENTAL] Available generator models:
+  HuggingFaceTB/SmolLM2-135M-Instruct  (balanced, recommended default, uses top 3 chunks)
+  HuggingFaceTB/SmolLM2-360M-Instruct  (higher quality, slower, uses top 5 chunks)
+  
+  Note: Generation requires reranking (--rerank is automatically enabled with --generate)
 
 For more information, visit: https://github.com/your-repo/rag-lite-ts
 `);
@@ -136,6 +150,9 @@ function parseArgs(): {
         options.rerank = false;
       } else if (optionName === 'force-rebuild') {
         options.forceRebuild = true;
+      } else if (optionName === 'generate') {
+        // Handle --generate flag for experimental response generation
+        options.generate = true;
       } else if (optionName === 'help') {
         return { command: 'help', args: [], options: {} };
       } else if (optionName === 'version') {
@@ -144,7 +161,14 @@ function parseArgs(): {
         // Handle options with values
         const nextArg = args[i + 1];
         if (nextArg && !nextArg.startsWith('--')) {
-          options[optionName] = nextArg;
+          // Parse numeric values for specific options
+          if (optionName === 'max-tokens' || optionName === 'top-k' || optionName === 'max-chunks') {
+            options[optionName] = parseInt(nextArg, 10);
+          } else if (optionName === 'temperature') {
+            options[optionName] = parseFloat(nextArg);
+          } else {
+            options[optionName] = nextArg;
+          }
           i++; // Skip the next argument as it's the value
         } else {
           options[optionName] = true;

@@ -34,3 +34,17 @@ export type {
   IngestionFactoryOptions,
   ContentSystemConfig
 } from './ingestion-factory.js';
+
+// =============================================================================
+// EXPERIMENTAL: Generator Factory
+// =============================================================================
+
+// Generator factory for creating response generators (experimental)
+export {
+  createResponseGenerator,
+  createGenerateFunctionFromModel,
+  getDefaultGeneratorModel,
+  listGeneratorModels,
+  isValidGeneratorModel,
+  getRecommendedGenerator
+} from './generator-factory.js';

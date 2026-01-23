@@ -5,9 +5,10 @@ import { Badge } from '@/components/ui/badge';
 import { FileText, Image as ImageIcon, Maximize2 } from 'lucide-react';
 import { HighlightedText } from './HighlightedText';
 import { ResultPreview } from './ResultPreview';
+import { GeneratedResponse } from './GeneratedResponse';
 
 export function SearchResults() {
-  const { results, query, isLoading, error } = useSearchStore();
+  const { results, query, isLoading, error, generationResult, isGenerating } = useSearchStore();
   const [selectedResult, setSelectedResult] = useState<any>(null);
 
   if (error) {
@@ -22,6 +23,10 @@ export function SearchResults() {
   if (isLoading) {
     return (
       <div className="space-y-4">
+        {/* Show generation loading state if generating */}
+        {isGenerating && (
+          <GeneratedResponse generation={{} as any} isLoading={true} />
+        )}
         {[1, 2, 3].map((i) => (
           <div key={i} className="h-32 rounded-xl border bg-card animate-pulse" />
         ))}
@@ -35,6 +40,11 @@ export function SearchResults() {
 
   return (
     <div className="space-y-4">
+      {/* Generated Response (Experimental) - Show above results */}
+      {generationResult && (
+        <GeneratedResponse generation={generationResult} />
+      )}
+
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-medium">
           Found {results.length} results
