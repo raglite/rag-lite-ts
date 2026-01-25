@@ -218,6 +218,10 @@ export class BinaryIndexFormat {
     let offset = 0;
     
     // Read basic header (24 bytes, all little-endian)
+    if (buffer.byteLength < 24) {
+      throw new Error(`Index file too small: expected at least 24 bytes, got ${buffer.byteLength}`);
+    }
+    
     const dimensions = view.getUint32(offset, true); offset += 4;
     const maxElements = view.getUint32(offset, true); offset += 4;
     const M = view.getUint32(offset, true); offset += 4;
@@ -225,11 +229,23 @@ export class BinaryIndexFormat {
     const seed = view.getUint32(offset, true); offset += 4;
     const currentSize = view.getUint32(offset, true); offset += 4;
 
-    // Check if this is the extended grouped format (40+ bytes header)
-    const hasGroups = buffer.byteLength >= 40 ? view.getUint32(offset, true) : 0;
+    // Calculate expected size for original format
+    const vectorSize = 4 + (dimensions * 4); // id + vector
+    const expectedOriginalSize = 24 + (currentSize * vectorSize);
+    
+    // Check if this is the extended grouped format (44 bytes header)
+    // Extended header has: 24 bytes basic + 4 bytes hasGroups + 16 bytes for offsets/counts = 44 bytes
+    // Only check for grouped format if file is larger than expected original format size
+    const hasGroups = buffer.byteLength > expectedOriginalSize && buffer.byteLength >= 44 && offset + 4 <= buffer.byteLength 
+      ? view.getUint32(offset, true) 
+      : 0;
 
-    if (hasGroups === 1 && buffer.byteLength >= 40) {
-      // Load grouped format
+    if (hasGroups === 1 && buffer.byteLength >= 44) {
+      // Load grouped format - ensure we have enough bytes for extended header
+      if (offset + 20 > buffer.byteLength) {
+        throw new Error(`Index file too small for grouped format: expected at least ${offset + 20} bytes, got ${buffer.byteLength}`);
+      }
+      
       const textOffset = view.getUint32(offset + 4, true);
       const textCount = view.getUint32(offset + 8, true);
       const imageOffset = view.getUint32(offset + 12, true);
@@ -244,9 +260,20 @@ export class BinaryIndexFormat {
           throw new Error(`Offset ${offset} is not 4-byte aligned`);
         }
 
+        // Check bounds before reading vector ID
+        if (offset + 4 > buffer.byteLength) {
+          throw new Error(`Text vector ID at offset ${offset} is outside the bounds of the DataView (buffer size: ${buffer.byteLength})`);
+        }
+
         // Read vector ID
         const id = view.getUint32(offset, true);
         offset += 4;
+
+        // Check bounds before reading vector data
+        const vectorDataSize = dimensions * 4;
+        if (offset + vectorDataSize > buffer.byteLength) {
+          throw new Error(`Text vector data at offset ${offset} would exceed buffer bounds (buffer size: ${buffer.byteLength}, required: ${offset + vectorDataSize})`);
+        }
 
         // Zero-copy Float32Array view
         const vectorView = new Float32Array(
@@ -257,7 +284,7 @@ export class BinaryIndexFormat {
 
         // Copy to avoid buffer lifecycle issues
         const vector = new Float32Array(vectorView);
-        offset += dimensions * 4;
+        offset += vectorDataSize;
 
         textVectors.push({ id, vector });
       }
@@ -271,9 +298,20 @@ export class BinaryIndexFormat {
           throw new Error(`Offset ${offset} is not 4-byte aligned`);
         }
 
+        // Check bounds before reading vector ID
+        if (offset + 4 > buffer.byteLength) {
+          throw new Error(`Image vector ID at offset ${offset} is outside the bounds of the DataView (buffer size: ${buffer.byteLength})`);
+        }
+
         // Read vector ID
         const id = view.getUint32(offset, true);
         offset += 4;
+
+        // Check bounds before reading vector data
+        const vectorDataSize = dimensions * 4;
+        if (offset + vectorDataSize > buffer.byteLength) {
+          throw new Error(`Image vector data at offset ${offset} would exceed buffer bounds (buffer size: ${buffer.byteLength}, required: ${offset + vectorDataSize})`);
+        }
 
         // Zero-copy Float32Array view
         const vectorView = new Float32Array(
@@ -284,7 +322,7 @@ export class BinaryIndexFormat {
 
         // Copy to avoid buffer lifecycle issues
         const vector = new Float32Array(vectorView);
-        offset += dimensions * 4;
+        offset += vectorDataSize;
 
         imageVectors.push({ id, vector });
       }
@@ -314,9 +352,20 @@ export class BinaryIndexFormat {
           throw new Error(`Offset ${offset} is not 4-byte aligned`);
         }
 
+        // Check bounds before reading vector ID
+        if (offset + 4 > buffer.byteLength) {
+          throw new Error(`Offset ${offset} is outside the bounds of the DataView (buffer size: ${buffer.byteLength})`);
+        }
+
         // Read vector ID
         const id = view.getUint32(offset, true);
         offset += 4;
+
+        // Check bounds before reading vector data
+        const vectorDataSize = dimensions * 4;
+        if (offset + vectorDataSize > buffer.byteLength) {
+          throw new Error(`Vector data at offset ${offset} would exceed buffer bounds (buffer size: ${buffer.byteLength}, required: ${offset + vectorDataSize})`);
+        }
 
         // Zero-copy Float32Array view (fast!)
         const vectorView = new Float32Array(
@@ -327,7 +376,7 @@ export class BinaryIndexFormat {
 
         // Copy to avoid buffer lifecycle issues
         const vector = new Float32Array(vectorView);
-        offset += dimensions * 4;
+        offset += vectorDataSize;
 
         vectors.push({ id, vector });
       }

@@ -8,7 +8,7 @@
 import { Worker } from 'worker_threads';
 import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
 import { handleError, ErrorCategory, ErrorSeverity, createError } from './error-handler.js';
 import {
   createMissingFileError,
@@ -67,23 +67,49 @@ export class VectorIndex {
     const currentDir = dirname(currentFile);
     
     // Always prefer .js (compiled output)
-    const jsPath = join(currentDir, 'vector-index-worker.js');
+    const jsPath = resolve(join(currentDir, 'vector-index-worker.js'));
     
     // Check if .js exists in current directory (compiled)
     if (existsSync(jsPath)) {
       return jsPath;
     }
     
-    // If running from src/ (development), try dist/ paths
-    if (currentDir.includes('src')) {
-      // Find project root (go up from src/core)
-      const projectRoot = currentDir.replace(/[\\/]src[\\/]core.*$/, '');
-      const distEsmPath = join(projectRoot, 'dist', 'esm', 'core', 'vector-index-worker.js');
-      const distCjsPath = join(projectRoot, 'dist', 'cjs', 'core', 'vector-index-worker.js');
+    // Helper function to find project root
+    const findProjectRoot = (): string | null => {
+      let dir = currentDir;
       
+      // Look for dist/ in the path
+      const distMatch = dir.match(/^(.+?)[\\/]dist[\\/]/);
+      if (distMatch) {
+        return distMatch[1];
+      }
+      
+      // If no dist/, try going up from src/core
+      const srcMatch = dir.match(/^(.+?)[\\/]src[\\/]core/);
+      if (srcMatch) {
+        return srcMatch[1];
+      }
+      
+      // If in node_modules, extract package root
+      const nodeModulesMatch = dir.match(/^(.+?)[\\/]node_modules/);
+      if (nodeModulesMatch) {
+        return nodeModulesMatch[1];
+      }
+      
+      return null;
+    };
+    
+    const projectRoot = findProjectRoot();
+    
+    if (projectRoot) {
+      // Try ESM first (preferred for ES modules)
+      const distEsmPath = resolve(join(projectRoot, 'dist', 'esm', 'core', 'vector-index-worker.js'));
       if (existsSync(distEsmPath)) {
         return distEsmPath;
       }
+      
+      // Try CJS as fallback
+      const distCjsPath = resolve(join(projectRoot, 'dist', 'cjs', 'core', 'vector-index-worker.js'));
       if (existsSync(distCjsPath)) {
         return distCjsPath;
       }
@@ -92,8 +118,8 @@ export class VectorIndex {
     // If running from node_modules (installed package), try dist paths
     if (currentDir.includes('node_modules')) {
       const packageRoot = currentDir.split('node_modules')[0];
-      const distEsmPath = join(packageRoot, 'node_modules', 'rag-lite-ts', 'dist', 'esm', 'core', 'vector-index-worker.js');
-      const distCjsPath = join(packageRoot, 'node_modules', 'rag-lite-ts', 'dist', 'cjs', 'core', 'vector-index-worker.js');
+      const distEsmPath = resolve(join(packageRoot, 'node_modules', 'rag-lite-ts', 'dist', 'esm', 'core', 'vector-index-worker.js'));
+      const distCjsPath = resolve(join(packageRoot, 'node_modules', 'rag-lite-ts', 'dist', 'cjs', 'core', 'vector-index-worker.js'));
       
       if (existsSync(distEsmPath)) {
         return distEsmPath;
@@ -108,7 +134,8 @@ export class VectorIndex {
       `Worker file not found. Expected: ${jsPath}\n` +
       'Please run "npm run build" to compile the vector-index-worker.ts file.\n' +
       `Current directory: ${currentDir}\n` +
-      `Checked paths: ${jsPath}, ${currentDir.includes('src') ? join(currentDir.replace(/[\\/]src[\\/]core.*$/, ''), 'dist', 'esm', 'core', 'vector-index-worker.js') : 'N/A'}`
+      `Project root: ${projectRoot || 'not found'}\n` +
+      `Checked paths: ${jsPath}${projectRoot ? `, ${join(projectRoot, 'dist', 'esm', 'core', 'vector-index-worker.js')}, ${join(projectRoot, 'dist', 'cjs', 'core', 'vector-index-worker.js')}` : ''}`
     );
   }
 
@@ -419,18 +446,50 @@ export class VectorIndex {
    */
   async cleanup(): Promise<void> {
     if (this.worker) {
-      try {
-        // Send cleanup message (worker will acknowledge)
-        await this.sendMessage('cleanup');
-      } catch (error) {
-        // Ignore errors during cleanup
-      }
+      const workerToTerminate = this.worker;
       
-      // Terminate worker - this frees ALL WebAssembly memory
-      await this.worker.terminate();
+      // Clear state first to prevent new operations
       this.worker = null;
       this.isInitialized = false;
-      this.messageQueue.clear();
+      
+      try {
+        // Send cleanup message (worker will acknowledge) with timeout
+        // Use the worker directly since we've cleared this.worker
+        const cleanupPromise = new Promise<void>((resolve, reject) => {
+          const id = this.messageId++;
+          const timeout = setTimeout(() => {
+            this.messageQueue.delete(id);
+            reject(new Error('Cleanup timeout'));
+          }, 1000);
+          
+          this.messageQueue.set(id, {
+            resolve: () => {
+              clearTimeout(timeout);
+              resolve();
+            },
+            reject: (error) => {
+              clearTimeout(timeout);
+              reject(error);
+            }
+          });
+          
+          workerToTerminate.postMessage({ id, type: 'cleanup', payload: undefined });
+        });
+        
+        await cleanupPromise;
+      } catch (error) {
+        // Ignore errors during cleanup - worker might already be terminating
+      } finally {
+        // Clear message queue
+        this.messageQueue.clear();
+        
+        // Terminate worker - this frees ALL WebAssembly memory
+        try {
+          await workerToTerminate.terminate();
+        } catch (error) {
+          // Ignore termination errors
+        }
+      }
     }
   }
 }

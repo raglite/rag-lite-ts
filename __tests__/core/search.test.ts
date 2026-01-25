@@ -368,7 +368,7 @@ describe('SearchEngine (Core with Dependency Injection)', () => {
       // Mock the indexManager search to verify top_k parameter
       let searchTopK: number | null = null;
       const originalSearch = indexManager.search.bind(indexManager);
-      indexManager.search = (_vector: Float32Array, k: number) => {
+      indexManager.search = async (_vector: Float32Array, k: number) => {
         searchTopK = k;
         return { embeddingIds: [], distances: [] };
       };
@@ -384,7 +384,7 @@ describe('SearchEngine (Core with Dependency Injection)', () => {
     test('should use custom top_k when specified', async () => {
       let searchTopK: number | null = null;
       const originalSearch = indexManager.search.bind(indexManager);
-      indexManager.search = (_vector: Float32Array, k: number) => {
+      indexManager.search = async (_vector: Float32Array, k: number) => {
         searchTopK = k;
         return { embeddingIds: [], distances: [] };
       };

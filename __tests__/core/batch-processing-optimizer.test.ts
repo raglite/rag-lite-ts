@@ -423,6 +423,7 @@ describe('Batch Processing Optimizer', () => {
 // =============================================================================
 // MANDATORY: Force exit after test completion to prevent hanging
 // ML resources (image-to-text processor) don't clean up gracefully
+// Increased timeout to allow test runner to finish IPC serialization
 // =============================================================================
 setTimeout(() => {
   console.log('🔄 Forcing test exit to prevent hanging from ML resources...');
@@ -435,8 +436,9 @@ setTimeout(() => {
   }
   
   // Force exit after cleanup attempts
+  // Increased delay to allow test runner IPC serialization to complete
   setTimeout(() => {
     console.log('✅ Exiting test process');
     process.exit(0);
-  }, 1000);
-}, 2000);
+  }, 2000);
+}, 10000); // Increased from 2000ms to 10000ms to allow test runner to finish serialization

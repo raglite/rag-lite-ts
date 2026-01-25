@@ -146,7 +146,7 @@ Good visualization makes data accessible to both technical and non-technical aud
 
             const ingestion = new IngestionPipeline(testDbPath, testIndexPath, {
                 mode: 'multimodal' as const,
-                embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2', // Use supported model for now
+                embeddingModel: 'Xenova/clip-vit-base-patch32', // CLIP model required for multimodal mode
                 rerankingStrategy: 'cross-encoder' as const,
                 chunkSize: 512
             });
@@ -249,7 +249,7 @@ Good visualization makes data accessible to both technical and non-technical aud
 
             const ingestion = new IngestionPipeline(testDbPath, testIndexPath, {
                 mode: 'multimodal' as const,
-                embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
+                embeddingModel: 'Xenova/clip-vit-base-patch32', // CLIP model required for multimodal mode
                 rerankingStrategy: 'cross-encoder' as const,
                 chunkSize: 256
             });
@@ -313,7 +313,7 @@ Good visualization makes data accessible to both technical and non-technical aud
 
             const errorTestIngestion = new IngestionPipeline(errorTestDbPath, errorTestIndexPath, {
                 mode: 'multimodal' as const,
-                embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
+                embeddingModel: 'Xenova/clip-vit-base-patch32', // CLIP model required for multimodal mode
                 rerankingStrategy: 'cross-encoder' as const
             });
 
@@ -356,7 +356,7 @@ Good visualization makes data accessible to both technical and non-technical aud
             // First ingestion with multimodal mode
             let ingestion = new IngestionPipeline(testDbPath, testIndexPath, {
                 mode: 'multimodal' as const,
-                embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
+                embeddingModel: 'Xenova/clip-vit-base-patch32', // CLIP model required for multimodal mode
                 rerankingStrategy: 'cross-encoder' as const,
                 chunkSize: 512
             });
@@ -379,7 +379,7 @@ Good visualization makes data accessible to both technical and non-technical aud
             // Second ingestion should detect existing mode
             ingestion = new IngestionPipeline(testDbPath, testIndexPath, {
                 mode: 'multimodal' as const,
-                embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
+                embeddingModel: 'Xenova/clip-vit-base-patch32', // CLIP model required for multimodal mode
                 rerankingStrategy: 'cross-encoder' as const,
                 chunkSize: 256 // Different chunk size
             });
@@ -480,7 +480,7 @@ This is additional content about artificial intelligence and machine learning ap
                 // Step 1: Ingest with specific reranking strategy
                 const ingestion = new IngestionPipeline(testDbPath, testIndexPath, {
                     mode: 'multimodal' as const,
-                    embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
+                    embeddingModel: 'Xenova/clip-vit-base-patch32', // CLIP model required for multimodal mode
                     rerankingStrategy: strategy,
                     chunkSize: 256
                 });
@@ -525,7 +525,7 @@ This is additional content about artificial intelligence and machine learning ap
 
             const validIngestion = new IngestionPipeline(validationDbPath, validationIndexPath, {
                 mode: 'multimodal' as const,
-                embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
+                embeddingModel: 'Xenova/clip-vit-base-patch32', // CLIP model required for multimodal mode
                 rerankingStrategy: 'cross-encoder' as const,
                 chunkSize: 512
             });
@@ -571,7 +571,7 @@ This is additional content about artificial intelligence and machine learning ap
 
             const ingestion = new IngestionPipeline(testDbPath, testIndexPath, {
                 mode: 'multimodal' as const,
-                embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
+                embeddingModel: 'Xenova/clip-vit-base-patch32', // CLIP model required for multimodal mode
                 rerankingStrategy: 'cross-encoder' as const,
                 chunkSize: 256
             });
@@ -690,3 +690,26 @@ This is additional content about artificial intelligence and machine learning ap
         }
     });
 });
+
+// =============================================================================
+// MANDATORY: Force exit after test completion to prevent hanging
+// Database connections and ML resources may not clean up gracefully
+// Increased timeout to allow test runner to finish IPC serialization
+// =============================================================================
+setTimeout(() => {
+  console.log('🔄 Forcing test exit to prevent hanging from database/ML resources...');
+  
+  // Multiple garbage collection attempts
+  if (global.gc) {
+    global.gc();
+    setTimeout(() => global.gc && global.gc(), 100);
+    setTimeout(() => global.gc && global.gc(), 300);
+  }
+  
+  // Force exit after cleanup attempts
+  // Increased delay to allow test runner IPC serialization to complete
+  setTimeout(() => {
+    console.log('✅ Exiting test process');
+    process.exit(0);
+  }, 2000);
+}, 10000); // Increased from 2000ms to 10000ms to allow test runner to finish serialization

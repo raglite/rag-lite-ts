@@ -27,8 +27,9 @@ describe('VectorIndex', () => {
         });
 
         await index.initialize();
-        assert.equal(index.getCurrentCount(), 0);
+        assert.equal(await index.getCurrentCount(), 0);
         
+        await index.cleanup();
         cleanup(TEST_INDEX_PATH);
       });
 
@@ -55,18 +56,18 @@ describe('VectorIndex', () => {
         vector3.fill(-0.5); // Opposite direction
 
         // Add vectors
-        index.addVector(1, vector1);
-        index.addVector(2, vector2);
-        index.addVector(3, vector3);
+        await index.addVector(1, vector1);
+        await index.addVector(2, vector2);
+        await index.addVector(3, vector3);
 
-        assert.equal(index.getCurrentCount(), 3);
+        assert.equal(await index.getCurrentCount(), 3);
 
         // Search for similar vector - should be most similar to vector1
         const queryVector = new Float32Array(model.dimensions);
         queryVector.fill(1.0);
         queryVector[0] = 0.6; // Similar to vector1
         
-        const results = index.search(queryVector, 2);
+        const results = await index.search(queryVector, 2);
 
         assert.equal(results.neighbors.length, 2);
         assert.equal(results.distances.length, 2);
@@ -74,6 +75,7 @@ describe('VectorIndex', () => {
         // Vector1 should be closest to query based on cosine similarity
         assert.equal(results.neighbors[0], 1);
         
+        await index.cleanup();
         cleanup(TEST_INDEX_PATH);
       });
 
@@ -95,8 +97,8 @@ describe('VectorIndex', () => {
         const vector2 = new Float32Array(model.dimensions);
         vector2.fill(-0.5); // Opposite direction
         
-        index1.addVector(1, vector1);
-        index1.addVector(2, vector2);
+        await index1.addVector(1, vector1);
+        await index1.addVector(2, vector2);
         
         // Save index
         await index1.saveIndex();
@@ -109,18 +111,20 @@ describe('VectorIndex', () => {
         });
 
         await index2.loadIndex();
-        assert.equal(index2.getCurrentCount(), 2);
+        assert.equal(await index2.getCurrentCount(), 2);
 
         // Test search works after loading - query similar to vector1
         const queryVector = new Float32Array(model.dimensions);
         queryVector.fill(1.0);
         queryVector[0] = 0.6; // Similar to vector1
         
-        const results = index2.search(queryVector, 1);
+        const results = await index2.search(queryVector, 1);
         
         assert.equal(results.neighbors.length, 1);
         assert.equal(results.neighbors[0], 1);
         
+        await index1.cleanup();
+        await index2.cleanup();
         cleanup(TEST_INDEX_PATH);
       });
 
@@ -141,17 +145,18 @@ describe('VectorIndex', () => {
           { id: 3, vector: new Float32Array(model.dimensions).fill(0.3) }
         ];
 
-        index.addVectors(vectors);
-        assert.equal(index.getCurrentCount(), 3);
+        await index.addVectors(vectors);
+        assert.equal(await index.getCurrentCount(), 3);
 
         // Test search
         const queryVector = new Float32Array(model.dimensions).fill(0.25);
-        const results = index.search(queryVector, 2);
+        const results = await index.search(queryVector, 2);
         
         assert.equal(results.neighbors.length, 2);
         // Should find vectors 2 and 3 as closest to 0.25
         assert.ok(results.neighbors.includes(2));
         
+        await index.cleanup();
         cleanup(TEST_INDEX_PATH);
       });
 
@@ -169,15 +174,16 @@ describe('VectorIndex', () => {
         const wrongDimensions = model.dimensions === 384 ? 768 : 384;
         const wrongVector = new Float32Array(wrongDimensions).fill(0.1);
         
-        assert.throws(() => {
-          index.addVector(1, wrongVector);
+        await assert.rejects(async () => {
+          await index.addVector(1, wrongVector);
         }, /Vector dimension mismatch/);
 
         // Try to search with wrong dimensions
-        assert.throws(() => {
-          index.search(wrongVector, 1);
+        await assert.rejects(async () => {
+          await index.search(wrongVector, 1);
         }, /Vector dimension mismatch in vector search/);
         
+        await index.cleanup();
         cleanup(TEST_INDEX_PATH);
       });
 
@@ -192,11 +198,12 @@ describe('VectorIndex', () => {
         await index.initialize();
 
         const queryVector = new Float32Array(model.dimensions).fill(0.1);
-        const results = index.search(queryVector, 5);
+        const results = await index.search(queryVector, 5);
         
         assert.equal(results.neighbors.length, 0);
         assert.equal(results.distances.length, 0);
         
+        await index.cleanup();
         cleanup(TEST_INDEX_PATH);
       });
     });

@@ -311,6 +311,18 @@ function handleIndexExists(payload: IndexExistsPayload): boolean {
   return existsSync(payload.indexPath);
 }
 
+// Handle unhandled promise rejections to prevent worker crashes
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Worker unhandled rejection:', reason);
+  // Don't exit - just log the error
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Worker uncaught exception:', error);
+  // Don't exit - just log the error
+});
+
 // Main message handler
 parentPort!.on('message', async (request: VectorIndexRequest) => {
   try {

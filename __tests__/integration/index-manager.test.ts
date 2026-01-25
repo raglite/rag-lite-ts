@@ -82,7 +82,7 @@ for (const model of TEST_MODELS.filter(m => m.dimensions === 384)) {
       
       // Test search with correct dimensions
       const queryVector = new Float32Array(model.dimensions).fill(0.15);
-      const results = manager.search(queryVector, 2);
+      const results = await manager.search(queryVector, 2);
       
       assert.equal(results.embeddingIds.length, 2);
       assert.equal(results.distances.length, 2);
@@ -151,7 +151,7 @@ for (const model of TEST_MODELS.filter(m => m.dimensions === 384)) {
       
       // Test search works with correct dimensions
       const queryVector = new Float32Array(model.dimensions).fill(0.1);
-      const results = manager2.search(queryVector, 1);
+      const results = await manager2.search(queryVector, 1);
       assert.equal(results.embeddingIds.length, 1);
       
       await manager2.close();
@@ -166,7 +166,7 @@ for (const model of TEST_MODELS.filter(m => m.dimensions === 384)) {
       await manager.initialize();
       
       const queryVector = new Float32Array(model.dimensions).fill(0.1);
-      const results = manager.search(queryVector, 5);
+      const results = await manager.search(queryVector, 5);
       
       assert.equal(results.embeddingIds.length, 0);
       assert.equal(results.distances.length, 0);

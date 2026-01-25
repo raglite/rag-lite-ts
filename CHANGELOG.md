@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.1] - 2026-01-25
+
+### Features
+- **Experimental LLM-enabled response generation**: Generate responses from retrieved search chunks using an LLM
+  - Uses chunks returned from semantic search as context for LLM-based answer generation
+- **CLI and UI support**: CLI and web UI updated to support the new response generation feature
+
 ## [2.3.0] - 2026-01-23
 
 ### Features

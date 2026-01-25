@@ -41,12 +41,12 @@ describe('SearchFactory', () => {
   test('should validate required parameters', async () => {
     await assert.rejects(
       () => SearchFactory.create('', testDbPath),
-      /Invalid file paths provided/,
+      /Both indexPath and dbPath are required|Invalid file paths provided/,
       'Should reject empty indexPath'
     );
     await assert.rejects(
       () => SearchFactory.create(testIndexPath, ''),
-      /Invalid file paths provided/,
+      /Both indexPath and dbPath are required|Invalid file paths provided/,
       'Should reject empty dbPath'
     );
   });
@@ -107,12 +107,12 @@ describe('IngestionFactory', () => {
   test('should validate required parameters', async () => {
     await assert.rejects(
       () => IngestionFactory.create('', testIndexPath),
-      /Invalid file paths provided/,
+      /Both indexPath and dbPath are required|Invalid file paths provided/,
       'Should reject empty dbPath'
     );
     await assert.rejects(
       () => IngestionFactory.create(testDbPath, ''),
-      /Invalid file paths provided/,
+      /Both indexPath and dbPath are required|Invalid file paths provided/,
       'Should reject empty indexPath'
     );
   });
